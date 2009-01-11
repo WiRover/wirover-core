@@ -97,7 +97,8 @@ int destroyScanThread()
     //{
         sprintf(local_buf, "Destroying scanning thread (%d second delay) . . . ", SCAN_INTERVAL);
         DEBUG_MSG(local_buf);
-		if ( pthread_join(scan_thread, NULL) != 0 )
+		if ( pthread_cancel(scan_thread) != 0 )
+		//if ( pthread_join(scan_thread, NULL) != 0 )
 		{
 			ERROR_MSG("main(): pthread_join(scan_thread) failed");
 			return FAILURE;
@@ -252,7 +253,7 @@ int scanInterfacesInit()
 
         // Jump to next interface
         if(priority < 0) {
-            //continue;
+            continue;
             ;
         }
 

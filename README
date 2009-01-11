@@ -28,7 +28,7 @@ provide service to many gateways.
 The source code is divided into three directories.  The wigateway and
 wicontroller subdirectories are specific to their respective components.
 The common subdirectory contains some shared code and header files.
-Dependencies: libssl-dev libnl-dev libpcap-dev
+Dependencies: libssl-dev libnl-dev libpcap-dev libmysqlclient-dev
 
 ===================
 3   Installation
