@@ -14,7 +14,6 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR} ${WIROVER_SOURCE_DIR}/common)
 # Set the location of common source files
 set(COMMON ${WIROVER_SOURCE_DIR}/common)
 
-add_subdirectory(${WIROVER_SOURCE_DIR}/wiroot)
 add_subdirectory(${WIROVER_SOURCE_DIR}/wigateway)
 add_subdirectory(${WIROVER_SOURCE_DIR}/wicontroller)
 
