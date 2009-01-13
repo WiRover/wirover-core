@@ -1,0 +1,87 @@
+#ifndef _CONFIG_H_
+#define _CONFIG_H_
+
+#define WIROVER_VERSION_MAJOR @WIROVER_VERSION_MAJOR@
+#define WIROVER_VERSION_MINOR @WIROVER_VERSION_MINOR@
+#define WIROVER_VERSION_REVISION @WIROVER_VERSION_REVISION@
+
+#define NODE_HASH_SIZE 40
+
+#define SPECIAL_SEQ_NO 0xFFFFFFFF
+
+#define DEFAULT_DATA_PORT           8080
+#define DEFAULT_PING_INTERVAL       10
+
+#define DEFAULT_BANDWIDTH_PORT          8082
+#define DEFAULT_BANDWIDTH_START_TIMEOUT 10
+#define DEFAULT_BANDWIDTH_DATA_TIMEOUT  30
+#define DEFAULT_BANDWIDTH_MAX_SESSIONS  10
+
+// Enables cooperation with the virt module.  If this is not defined, only
+// user-level code is used.
+#define WITH_KERNEL 1
+
+// Enable logging of data to database.
+#define WITH_DATABASE
+
+/* Default timeouts for removing a remote node. */
+#define DEFAULT_NODE_TIMEOUT 300
+
+/* The network name is a descriptive name for an interface such as "verizon" or
+ * "sprint" as opposed to interface names such as "ppp0" or "ppp1".  The
+ * network name is used for data collection.  Each file under this path should
+ * take the name of an interface and have only the network name as its content.
+ * No new lines please. */
+#define NETWORK_NAME_PATH    "/var/lib/wirover/networks"
+
+/* Compile in the GPS code. libgps has frequent API changes that break the code */
+#define COMPILE_GPS
+/* Invalidate GPS data after 5 seconds */
+#define GPS_DATA_TIMEOUT 5
+
+#define MTU             1500
+#define DEFAULT_MTU     1400
+
+#define ACTIVE_BW_BYTES     14480
+#define ACTIVE_BW_INTERVAL  30000000 //in microseconds
+#define ACTIVE_BW_TIMEOUT   5000000 //in microseconds
+#define ACTIVE_BW_DELAY     100000 //extra 100ms delay between testing interfaces
+
+// Bandwidth server will simply ignore any requests to send a stream larger
+// than this.
+#define MAX_BW_BYTES 1000000
+
+// Used for bandwidth calculations
+#define DEFAULT_IP_H_SIZE 20
+#define DEFAULT_TCP_H_SIZE 32
+
+#define BW_TYPE BW_UDP
+#define BW_UDP_PKTS 20
+#define BW_UDP_SLEEP 1000 //in micro secs
+
+#define RTT_EWMA_WEIGHT  0.2
+#define BW_EWMA_WEIGHT   0.2
+
+// Use the bonding driver enlave and release ioctls instead of custom ones.
+#define USE_BOND_ENSLAVE 1
+
+// Path to file containing cryptographic node ID.
+#define NODE_ID_PATH "/etc/wirover.d/node_id"
+
+// Maximum length of node ID hexadecimal string (128 is sufficient for up to SHA-512).
+#define NODE_ID_MAX_HEX_LEN 128
+#define NODE_ID_MAX_BIN_LEN 64
+
+#define MIN_LEASE_RETRY_DELAY 4
+#define MAX_LEASE_RETRY_DELAY 64
+#define RENEW_BEFORE_EXPIRATION   600
+
+// Determines the rate at which the value of a recent bandwidth decays, must be
+// negative.
+#define BANDWIDTH_MEASUREMENT_DECAY (-0.016666666667)
+
+// Limit ping error responses to 5 per second to prevent flooding.
+#define ERROR_RESPONSE_LIMIT 5
+
+#endif //_CONFIG_H_
+
