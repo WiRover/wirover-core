@@ -12,26 +12,27 @@
 
 #include "arguments.h"
 #include "bandwidth.h"
-#include "config.h"
 #include "configuration.h"
 #include "contchan.h"
 #include "constants.h"
+#include "datapath.h"
 #include "debug.h"
 #include "gps_handler.h"
 #include "netlink.h"
 #include "pathperf.h"
 #include "ping.h"
 #include "rootchan.h"
-#include "kernel.h"
 #include "callback.h"
 #include "sockets.h"
 #include "timing.h"
+#include "tunnelInterface.h"
+#include "util.h"
 
 // The virtual interface will use this IP address if we are unable to obtain a
 // private IP from the root server.
-#define DEFAULT_VIRT_ADDRESS    "172.31.25.1"
-#define DEFAULT_NETMASK         "255.255.255.0"
-#define VIRT_DEVICE             "virt0"
+#define DEFAULT_TUN_ADDRESS    "172.31.25.1"
+#define DEFAULT_NETMASK         "255.255.0.0"
+#define TUN_DEVICE             "tun0"
 #define RETRY_DELAY             5
 #define NODE_ID_FILE            "/var/lib/wirover/node_id"
 
@@ -90,7 +91,7 @@ int main(int argc, char* argv[])
     start_path_perf_thread();
 
     uint32_t private_ip = 0;
-    inet_pton(AF_INET, DEFAULT_VIRT_ADDRESS, &private_ip);
+    inet_pton(AF_INET, DEFAULT_TUN_ADDRESS, &private_ip);
 
     uint32_t private_netmask = 0;
     inet_pton(AF_INET, DEFAULT_NETMASK, &private_netmask);
@@ -141,36 +142,38 @@ int main(int argc, char* argv[])
                 lease_renewal_time = time(NULL) + lease.time_limit -
                     RENEW_BEFORE_EXPIRATION;
                 
-                if(ARGS.with_kernel) {
-                    result = setup_virtual_interface(private_ip, 
-                            private_netmask, get_mtu());
-                    if(result == -1) {
-                        DEBUG_MSG("Failed to bring up virtual interface");
-                        exit(1);
-                    }
+                //TODO: Tunnel setup instead
+                result = tunnel_create(private_ip, 
+                        private_netmask, get_mtu());
+                if(result == FAILURE) {
+                    DEBUG_MSG("Failed to bring up tunnel interface");
+                    exit(1);
                 }
+                
 
                 char cont_ip[INET6_ADDRSTRLEN];
                 ipaddr_to_string(&lease.cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
                 DEBUG_MSG("First controller is at: %s", cont_ip);
 
-                if(ARGS.with_kernel) {
-                    uint32_t priv_ip;
-                    uint32_t pub_ip;
-
-                    ipaddr_to_ipv4(&lease.cinfo[0].priv_ip, &priv_ip);
-                    ipaddr_to_ipv4(&lease.cinfo[0].pub_ip, &pub_ip);
-
-                    virt_add_remote_node((struct in_addr *)&priv_ip);
-                    virt_add_remote_link((struct in_addr *)&priv_ip, 
-                        (struct in_addr *)&pub_ip, lease.cinfo[0].data_port);
                 
-                    // Add a default vroute that directs all traffic to the controller
-                    virt_add_vroute(0, 0, priv_ip);
-                }
+                uint32_t priv_ip;
+                uint32_t pub_ip;
+
+                ipaddr_to_ipv4(&lease.cinfo[0].priv_ip, &priv_ip);
+                ipaddr_to_ipv4(&lease.cinfo[0].pub_ip, &pub_ip);
+
+                //TODO
+                //virt_add_remote_node((struct in_addr *)&priv_ip);
+                //virt_add_remote_link((struct in_addr *)&priv_ip, 
+                //    (struct in_addr *)&pub_ip, lease.cinfo[0].data_port);
+                
 
                 if(start_ping_thread() == FAILURE) {
                     DEBUG_MSG("Failed to start ping thread");
+                    exit(1);
+                }
+                if(start_data_thread() == FAILURE) {
+                    DEBUG_MSG("Failed to start data thread");
                     exit(1);
                 }
                 
@@ -193,15 +196,13 @@ int main(int argc, char* argv[])
         }
 
         if(state == GATEWAY_LEASE_OBTAINED) {
+            result = add_route(0, 0, 0, TUN_DEVICE);
             if(find_active_interface(interface_list)) {
-                if(ARGS.with_kernel) {
-                    result = add_route(0, 0, 0, VIRT_DEVICE);
 
-                    // EEXIST means the route was already present -> not a failure
-                    if(result < 0 && result != -EEXIST) {
-                        DEBUG_MSG("add_route failed");
-                        exit(1);
-                    }
+                // EEXIST means the route was already present -> not a failure
+                if(result < 0 && result != -EEXIST) {
+                    DEBUG_MSG("add_route failed");
+                    exit(1);
                 }
                 
                 state = GATEWAY_PING_SUCCEEDED;
@@ -312,18 +313,17 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
             DEBUG_MSG("Obtained lease of %s/%hhu", 
                     my_ip, new_lease->priv_subnet_size);
 
-            if(ARGS.with_kernel) {
-                uint32_t private_ip;
-                ipaddr_to_ipv4(&new_lease->priv_ip, &private_ip);
+            uint32_t private_ip;
+            ipaddr_to_ipv4(&new_lease->priv_ip, &private_ip);
                 
-                uint32_t private_netmask = htonl(slash_to_netmask(new_lease->priv_subnet_size));
+            uint32_t private_netmask = htonl(slash_to_netmask(new_lease->priv_subnet_size));
             
-                result = setup_virtual_interface(private_ip, private_netmask, get_mtu());
-                if(result == -1) {
-                    DEBUG_MSG("Failed to bring up virtual interface");
-                    exit(1);
-                }
+            result = tunnel_create(private_ip, private_netmask, get_mtu());
+            if(result == -1) {
+                DEBUG_MSG("Failed to bring up virtual interface");
+                exit(1);
             }
+            
         } else {
             DEBUG_MSG("Renewed lease of %s/%hhu", 
                     my_ip, new_lease->priv_subnet_size);
@@ -363,8 +363,6 @@ static void update_bandwidth(struct bw_client_info *client, struct interface *if
         ife->meas_bw = bps;
         ife->meas_bw_time = time(NULL);
 
-        if(ARGS.with_kernel)
-            virt_local_bandwidth_hint(stats->link_id, bps);
     }
 }
 

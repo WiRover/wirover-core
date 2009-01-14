@@ -21,7 +21,6 @@
 #include "rootchan.h"
 #include "rwlock.h"
 #include "utlist.h"
-#include "kernel.h"
 
 #ifdef GATEWAY
 static void* netlink_thread_func(void* arg);
@@ -330,7 +329,6 @@ int handle_netlink_message(const char* msg, int msg_len)
 
                         memcpy(&ife->gateway_ip, &gwaddr, 
                                 sizeof(ife->gateway_ip));
-                        virt_set_gateway_ip(ife->name, &gwaddr);
 
                         ping_interface(ife);
                     }
@@ -417,58 +415,47 @@ int change_interface_state(struct interface *ife, enum if_state state)
 {
     if(ife->state == state)
         return 0;
+    DEBUG_MSG("Changing interface %s state from %d to %d", ife->name, ife->state, state);
+    //TODO: Notify interface selection about these changes
+    //switch(state) {
+    //    case INACTIVE:
+    //        if(virt_set_notx_flag(ife->name) == FAILURE) {
+    //            DEBUG_MSG("Failed to set notx flag on device %s", ife->name);
+    //            return FAILURE;
+    //        }
+    //        break;
 
-#ifdef WITH_KERNEL
-    /* Enslave the device if we are going from DEAD or INIT_INACTIVE to ACTIVE
-     * or INACTIVE. */
-    if((ife->state == DEAD || ife->state == INIT_INACTIVE) &&
-            (state == ACTIVE || state == INACTIVE)) {
-        if(kernel_enslave_device(ife->name) == FAILURE) {
-            DEBUG_MSG("Failed to enslave device %s", ife->name);
-            return FAILURE;
-        }
-    }
+    //    case ACTIVE:
+    //        if(ife->gateway_ip.s_addr) {
+    //            if(virt_set_gateway_ip(ife->name, &ife->gateway_ip) < 0) {
+    //                DEBUG_MSG("Failed to set gateway IP for device %s", ife->name);
+    //                return FAILURE;
+    //            }
+    //        }
 
-    switch(state) {
-        case INACTIVE:
-            if(virt_set_notx_flag(ife->name) == FAILURE) {
-                DEBUG_MSG("Failed to set notx flag on device %s", ife->name);
-                return FAILURE;
-            }
-            break;
+    //        if(ife->priority) {
+    //            if(virt_local_prio(ife->index, ife->priority) < 0) {
+    //                DEBUG_MSG("Failed to set priority for device %s", ife->name);
+    //                return FAILURE;
+    //            }
+    //        }
+    //        
+    //        if(virt_clear_notx_flag(ife->name) == FAILURE) {
+    //            DEBUG_MSG("Failed to clear notx flag on device %s", ife->name);
+    //            return FAILURE;
+    //        }
+    //        break;
 
-        case ACTIVE:
-            if(ife->gateway_ip.s_addr) {
-                if(virt_set_gateway_ip(ife->name, &ife->gateway_ip) < 0) {
-                    DEBUG_MSG("Failed to set gateway IP for device %s", ife->name);
-                    return FAILURE;
-                }
-            }
+    //    case DEAD:
+    //        if(kernel_release_device(ife->name) == FAILURE) {
+    //            DEBUG_MSG("Failed to release device");
+    //            return FAILURE;
+    //        }
+    //        break;
 
-            if(ife->priority) {
-                if(virt_local_prio(ife->index, ife->priority) < 0) {
-                    DEBUG_MSG("Failed to set priority for device %s", ife->name);
-                    return FAILURE;
-                }
-            }
-            
-            if(virt_clear_notx_flag(ife->name) == FAILURE) {
-                DEBUG_MSG("Failed to clear notx flag on device %s", ife->name);
-                return FAILURE;
-            }
-            break;
-
-        case DEAD:
-            if(kernel_release_device(ife->name) == FAILURE) {
-                DEBUG_MSG("Failed to release device");
-                return FAILURE;
-            }
-            break;
-
-        default:
-            break;
-    }
-#endif
+    //    default:
+    //        break;
+    //}
 
     ife->state = state;
     return 0;

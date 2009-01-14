@@ -254,21 +254,23 @@ void* ping_thread_func(void* arg)
 	unsigned ping_spacing = ping_interval * USEC_PER_SEC;
 	unsigned next_timeout;
 
-	while(1) {
-		if(curr_iface_pos >= num_ifaces) {
-			obtain_read_lock(&interface_list_lock);
-			num_ifaces = count_all_interfaces(interface_list);
-			release_read_lock(&interface_list_lock);
-            
-			curr_iface_pos = 0;
+	struct timeval now;
 
-			if(num_ifaces > 0)
-				ping_spacing = ping_interval * USEC_PER_SEC / num_ifaces;
-			else
-				ping_spacing = ping_interval * USEC_PER_SEC;
+	while(1) {
+		obtain_read_lock(&interface_list_lock);
+		num_ifaces = count_all_interfaces(interface_list);
+	    release_read_lock(&interface_list_lock);
+
+		if(curr_iface_pos >= num_ifaces) {
+			curr_iface_pos = 0;
 		}
 
-		struct timeval now;
+        if(num_ifaces > 0)
+			ping_spacing = ping_interval * USEC_PER_SEC / num_ifaces;
+		else
+			ping_spacing = ping_interval * USEC_PER_SEC;
+
+
 		gettimeofday(&now, 0);
 
 		long time_diff = timeval_diff(&now, &last_ping_time);
@@ -504,17 +506,12 @@ static void mark_inactive_interfaces(int ping_timeout)
                 // Increment failures and ping interface
                 curr_ife->num_ping_failures++;
 
-                /* One outstanding ping is accounted for. */
-                if(curr_ife->pings_outstanding > 0)
-                    curr_ife->pings_outstanding--;
-                
-                ping_interface(curr_ife);
-
                 // If interface has failed too many times, mark inactive
                 if (curr_ife->num_ping_failures >= MAX_PING_FAILURES) {
                     change_interface_state(curr_ife, INACTIVE);
                     notif_needed = 1;
                 }
+
             } else if(curr_ife->pings_outstanding > MAX_PING_FAILURES) {
                 /* This is a fail-safe condition.  If timeout <= interval, then
                  * we may never explicitly record a timeout because the next

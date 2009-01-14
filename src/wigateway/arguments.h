@@ -2,7 +2,6 @@
 #define ARGUMENTS_H
 
 struct arguments {
-    int with_kernel;
     int debug_on;
 };
 

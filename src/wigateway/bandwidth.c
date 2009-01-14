@@ -30,7 +30,6 @@
 #include "contchan.h"
 #include "debug.h"
 #include "interface.h"
-#include "kernel.h"
 #include "netlink.h"
 #include "rootchan.h"
 #include "rwlock.h"

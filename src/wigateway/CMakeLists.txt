@@ -4,12 +4,15 @@ add_executable(wigateway
     wigateway.c
     bandwidth.c
     contchan.c
+	datapath.c
     gps_handler.c
     ping.c
     arguments.c
     ${COMMON}/bandwidth.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
+	${COMMON}/flowTable.c
+	${COMMON}/headerParse.c
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
     ${COMMON}/netlink.c
@@ -18,11 +21,15 @@ add_executable(wigateway
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
     ${COMMON}/timing.c
-    ${COMMON}/kernel.c
+	${COMMON}/packetBuffer
+    ${COMMON}/tunnelInterface.c
     ${COMMON}/callback.c
     ${COMMON}/format.c
     ${COMMON}/version.c
     ${COMMON}/pathperf.c
+	${COMMON}/util.c
+	${POLICY}/policyTypes.h
+	${POLICY}/policyRet.c
 )
 
 target_link_libraries(wigateway pthread config gps ssl crypto m)

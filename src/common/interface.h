@@ -48,6 +48,10 @@ struct interface {
     uint32_t    next_ping_seq_no;
     uint32_t    last_ping_seq_no;
 
+    unsigned int        packets;
+    unsigned int        packets_lost;
+    unsigned int        out_of_order_packets;
+
     double avg_rtt;
     double avg_downlink_bw;
     double avg_uplink_bw;

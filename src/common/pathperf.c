@@ -9,7 +9,6 @@
 #include "debug.h"
 #include "interface.h"
 #include "ipaddr.h"
-#include "kernel.h"
 #include "netlink.h"
 #include "rootchan.h"
 #include "rwlock.h"
@@ -319,16 +318,6 @@ static int update_path_bandwidths()
     obtain_read_lock(&interface_list_lock);
     DL_FOREACH(interface_list, ife) {
         long hint = calc_bw_hint(ife);
-
-        if(ARGS.with_kernel) {
-            if(ife->state == ACTIVE) {
-                virt_local_bandwidth_hint(ife->index, hint);
-            }
-        } else {
-            DEBUG_MSG("bandwidth hint for %s (%s): %ld",
-                    ife->name, ife->network, hint);
-        }
-
         count++;
     }
     release_read_lock(&interface_list_lock);

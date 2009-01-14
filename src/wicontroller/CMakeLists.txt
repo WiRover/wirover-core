@@ -19,7 +19,6 @@ add_executable(wicontroller
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
     ${COMMON}/timing.c
-    ${COMMON}/kernel.c
     ${COMMON}/format.c
     ${COMMON}/pathperf.c
 )

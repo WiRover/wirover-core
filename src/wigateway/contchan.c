@@ -10,7 +10,6 @@
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
-#include "kernel.h"
 
 /* The secret word is randomly generated and sent with each notification
  * and ping packet.  The controller uses it to verify the origin of ping
