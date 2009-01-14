@@ -21,6 +21,7 @@ set(POLICY ${WIROVER_SOURCE_DIR}/policy)
 add_subdirectory(${WIROVER_SOURCE_DIR}/wiroot)
 add_subdirectory(${WIROVER_SOURCE_DIR}/wigateway)
 add_subdirectory(${WIROVER_SOURCE_DIR}/wicontroller)
+add_subdirectory(${WIROVER_SOURCE_DIR}/policy)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 #configure_file(${CMAKE_CURRENT_SOURCE_DIR}/wigateway/wigateway.conf ${CMAKE_CURRENT_BINARY_DIR}/wigateway.conf COPYONLY)

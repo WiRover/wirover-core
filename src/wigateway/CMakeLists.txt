@@ -12,7 +12,6 @@ add_executable(wigateway
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
 	${COMMON}/flowTable.c
-	${COMMON}/headerParse.c
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
     ${COMMON}/netlink.c
@@ -28,8 +27,7 @@ add_executable(wigateway
     ${COMMON}/version.c
     ${COMMON}/pathperf.c
 	${COMMON}/util.c
-	${POLICY}/policyTypes.h
-	${POLICY}/policyRet.c
+	${POLICY}/policyTable.c
 )
 
 target_link_libraries(wigateway pthread config gps ssl crypto m)

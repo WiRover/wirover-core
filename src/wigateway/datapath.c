@@ -7,9 +7,8 @@
 #include "configuration.h"
 #include "debug.h"
 #include "flowTable.h"
-#include "headerParse.h"
 #include "interface.h"
-#include "policyTypes.h"
+#include "policyTable.h"
 #include "packetBuffer.h"
 #include "netlink.h"
 #include "rwlock.h"
@@ -123,7 +122,6 @@ int handlePackets()
         // and be handled
         int rtn = pselect(FD_SETSIZE, &read_set, NULL, NULL, NULL, &orig_set);
         //DEBUG_MSG("pselect() main.c returned\n");
-        
         // Make sure select didn't fail
         if( rtn < 0 && errno == EINTR) 
         {
@@ -146,7 +144,6 @@ int handlePackets()
         // If packet is going to controller (tunnel is virtual device)
         if( FD_ISSET(tun->tunnelfd, &read_set) ) 
         {
-            DEBUG_MSG("Saw a packet!");
             //printf("tunfd is set\n");
             if ( handleOutboundPacket(tun->tunnelfd, tun) < 0 ) 
             {
@@ -260,22 +257,14 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         // Policy and Flow table
         fill_flow_tuple(ip_hdr, tcp_hdr, ft);
 
-        struct flow_table_data *ftd = get_flow_data(ft);
-
+        struct flow_entry *ftd = get_flow_entry(ft);
         if(ftd == NULL) {
-            struct policy_data *pd = malloc(sizeof(struct policy_data));
-            getMatch(ft, pd, OUT_DIR);
-            update_flow_table(ft,pd);
+            struct policy_entry *pd = malloc(sizeof(struct policy_entry));
+            getMatch(ft, pd, EGRESS);
+            update_flow_table(ft,pd->action, pd->type, pd->alg_name);
             free(pd);
-            ftd = get_flow_data(ft);
+            ftd = get_flow_entry(ft);
         }
-        else {
-            update_flow_table(ft, NULL);
-        }
-
-        #ifdef DEBUG_PRINT
-        record_data_to_file("outData.dat", ft, ftd);
-        #endif
 
         free(ft);
 
