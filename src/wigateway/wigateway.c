@@ -172,7 +172,7 @@ int main(int argc, char* argv[])
                     DEBUG_MSG("Failed to start ping thread");
                     exit(1);
                 }
-                if(start_data_thread() == FAILURE) {
+                if(start_data_thread(pub_ip, lease.cinfo[0].data_port) == FAILURE) {
                     DEBUG_MSG("Failed to start data thread");
                     exit(1);
                 }

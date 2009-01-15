@@ -1,3 +1,4 @@
+#include <arpa/inet.h>
 #include <errno.h>
 #include <linux/if_ether.h>
 #include <sys/ioctl.h>
@@ -12,13 +13,13 @@
 #include "packetBuffer.h"
 #include "netlink.h"
 #include "rwlock.h"
+#include "selectInterface.h"
 #include "sockets.h"
 #include "tunnelInterface.h"
 
 #ifndef SIOCGSTAMP
 # define SIOCGSTAMP 0x8906
 #endif
-#define TUNTAP_OFFSET 4
 
 
 static struct buffer_storage *packet_buffer[PACKET_BUFFER_SIZE];
@@ -28,17 +29,23 @@ int handleOutboundPacket(int tunfd, struct tunnel *tun);
 int handleNoControllerPacket(int tunfd, fd_set readSet);
 int handlePackets();
 
-static int              running = 0;
-static pthread_t        data_thread;
-static int              data_socket = -1;
+static int                  running = 0;
+static pthread_t            data_thread;
+static int                  data_socket = -1;
+static struct sockaddr_in   *cont_addr;
 
-int start_data_thread()
+int start_data_thread(uint32_t cont_ip, uint16_t cont_port)
 {
+    cont_addr = (struct sockaddr_in*) malloc (sizeof(struct sockaddr_in));
+    memset(cont_addr, 0, sizeof(cont_addr));
+    cont_addr->sin_family = AF_INET;
+    cont_addr->sin_port   = htons((unsigned short)cont_port);
+    cont_addr->sin_addr.s_addr = cont_ip;
     if(running) {
         DEBUG_MSG("Data thread already running");
         return 0;
     }
- 
+
     data_socket = udp_bind_open(get_data_port(), 0);
     if(data_socket == FAILURE) {
         DEBUG_MSG("Data thread cannot start due to failure");
@@ -75,7 +82,7 @@ int handlePackets()
     initPacketBuffer(packet_buffer);
 
     int incoming_sockfd = -1;
-    
+
     // Set up the general traffic listening socket
     if( (incoming_sockfd = udp_bind_open(get_data_port(), NULL)) == FAILURE )
     {
@@ -83,24 +90,10 @@ int handlePackets()
         return FAILURE;
     }
 
-    //Clear outData file
-    FILE *ofp;
-    ofp = fopen("outData.dat", "w");
-    if (ofp == NULL) {
-        ERROR_MSG("fopen() Failed");
-        return FAILURE;
-    }
-    fclose(ofp);
-
     while( 1 )
     {
-        // Zero out the file descriptor set
         FD_ZERO(&read_set);
-
-        // Add the read file descriptor to the set ( for listening with a controller )
         FD_SET(incoming_sockfd, &read_set);
-
-        // Add the tunnel device to the set of file descriptor set ( with or without using the controller )
         FD_SET(tun->tunnelfd, &read_set);
 
         // Pselect should return
@@ -108,20 +101,8 @@ int handlePackets()
         sigemptyset(&orig_set);
         sigaddset(&orig_set, SIGALRM);
 
-        // Add raw sockets to file descriptor set (for listening with no controller ) 
-        //struct link *ife;
-
-        // Open up raw sockets for specified outgoing devices ( list should already be built )
-        //TODO: Handle these in netlink
-        /*for ( ife = head_link__ ; ife ; ife = ife->next  )
-        {
-            FD_SET(ife->sockfd, &read_set);
-        }*/
-
-        // We must use pselect, since we want SIGINT/SIGTERM to interrupt
-        // and be handled
         int rtn = pselect(FD_SETSIZE, &read_set, NULL, NULL, NULL, &orig_set);
-        //DEBUG_MSG("pselect() main.c returned\n");
+
         // Make sure select didn't fail
         if( rtn < 0 && errno == EINTR) 
         {
@@ -129,27 +110,14 @@ int handlePackets()
             continue;
         }
 
-        // This is how we receive packets from the controller
         if( FD_ISSET(incoming_sockfd, &read_set) ) 
         {
-            //printf("incoming_sockfd %d is set.\n", incoming_sockfd);
-            //fflush(stdout);
-
-            if ( handleInboundPacket(tun->tunnelfd, incoming_sockfd) < 0 ) 
-            {
-                continue;
-            }
+            handleInboundPacket(tun->tunnelfd, incoming_sockfd);
         }
 
-        // If packet is going to controller (tunnel is virtual device)
         if( FD_ISSET(tun->tunnelfd, &read_set) ) 
         {
-            //printf("tunfd is set\n");
-            if ( handleOutboundPacket(tun->tunnelfd, tun) < 0 ) 
-            {
-                // If -1 is returned, we couldn't find an interface to send out of
-                continue;
-            }
+            handleOutboundPacket(tun->tunnelfd, tun);
         }
 
     } // while( 1 )
@@ -167,7 +135,7 @@ int handleInboundPacket(int tunfd, int incoming_sockfd)
     unsigned    fromlen = sizeof(from);
 
     bufSize = recvfrom(incoming_sockfd, buffer, sizeof(buffer), 0, 
-            (struct sockaddr *)&from, &fromlen);
+        (struct sockaddr *)&from, &fromlen);
     if(bufSize < 0) {
         ERROR_MSG("recvfrom() failed");
         return FAILURE;
@@ -185,7 +153,7 @@ int handleInboundPacket(int tunfd, int incoming_sockfd)
 
     // Copy temporary to host format
     unsigned int h_seq_no = ntohl(n_tun_hdr.seq);
-    
+
     if(addSeqNum(packet_buffer, h_seq_no) == NOT_ADDED) {
         return SUCCESS;
     }
@@ -198,7 +166,7 @@ int handleInboundPacket(int tunfd, int incoming_sockfd)
     if(ife) {
 
         //unsigned short h_local_seq_no = ntohs(n_tun_hdr.local_seq_no);
-    
+
         //unsigned short lost = h_local_seq_no - ife->local_seq_no_in;
         //if(lost > MAX_PACKET_LOSS) {
         //    ife->out_of_order_packets++;
@@ -224,11 +192,11 @@ int handleInboundPacket(int tunfd, int incoming_sockfd)
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
 
     memcpy(&buffer[sizeof(struct tunhdr) - TUNTAP_OFFSET], tun_info, TUNTAP_OFFSET);
-    
+
 
     DEBUG_MSG("Writing data");
     if( write(tunfd, &buffer[sizeof(struct tunhdr)-TUNTAP_OFFSET], 
-                    (bufSize-sizeof(struct tunhdr)+TUNTAP_OFFSET)) < 0) 
+        (bufSize-sizeof(struct tunhdr)+TUNTAP_OFFSET)) < 0) 
     {
         ERROR_MSG("write() failed");
         return FAILURE;
@@ -281,31 +249,39 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
 
         // Select interface and send
         int rtn = 0;
+        struct interface *ife;
+        obtain_read_lock(&interface_list_lock);
+
+        ife = interface_list;
+        sendPacket(buffer, bufSize, ife, cont_addr, 0);
+        release_read_lock(&interface_list_lock);
+        //ife = selectInterface(algo, port, size - offset, packet + offset);
+
         /*if(strcmp(ftd->alg_name, "rr_conn") == 0) {
-            rtn = stripePacket(buffer, bufSize, RR_CONN);
+        rtn = stripePacket(buffer, bufSize, RR_CONN);
         }
         else if(strcmp(ftd->alg_name, "rr_pkt") == 0) {
-            rtn = stripePacket(buffer, bufSize, RR_PKT);
+        rtn = stripePacket(buffer, bufSize, RR_PKT);
         }
         else if(strcmp(ftd->alg_name, "wrr_conn") == 0) {
-            rtn = stripePacket(buffer, bufSize, WRR_CONN);
+        rtn = stripePacket(buffer, bufSize, WRR_CONN);
         }
         else if(strcmp(ftd->alg_name, "wrr_pkt") == 0) {
-            rtn = stripePacket(buffer, bufSize, WRR_PKT);
+        rtn = stripePacket(buffer, bufSize, WRR_PKT);
         }
         else if(strcmp(ftd->alg_name, "wrr_pktv1") == 0) {
-            rtn = stripePacket(buffer, bufSize, WRR_PKT_v1);
+        rtn = stripePacket(buffer, bufSize, WRR_PKT_v1);
         }
         else if(strcmp(ftd->alg_name, "wdrr_pkt") == 0) {
-            rtn = stripePacket(buffer, bufSize, WDRR_PKT);
+        rtn = stripePacket(buffer, bufSize, WDRR_PKT);
         }
         else if(strcmp(ftd->alg_name, "spf") == 0) {
-            rtn = stripePacket(buffer, bufSize, SPF);
+        rtn = stripePacket(buffer, bufSize, SPF);
         }
         else*/ {
             //rtn = stripePacket(buffer, bufSize, getRoutingAlgorithm());
         }
-        
+
         if(rtn < 0) {
             ERROR_MSG("stripePacket() failed");
         }

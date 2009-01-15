@@ -187,7 +187,6 @@ void interfacePrint(struct link *head)
 int interfaceBind(struct link *ife, int bind_port)
 {
     struct sockaddr_in myAddr;
-    // struct ifreq ifr;
     int sockfd;
 
     if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) 
@@ -195,7 +194,6 @@ int interfaceBind(struct link *ife, int bind_port)
         ERROR_MSG("creating socket failed");
         return FAILURE;
     }
-    //printf("ife->name: %s\tife->sockfd: %d\n", ife->name, sockfd);
 
     memset(&myAddr, 0, sizeof(struct sockaddr_in));
     myAddr.sin_family      = AF_INET;
@@ -219,27 +217,12 @@ int interfaceBind(struct link *ife, int bind_port)
     }
     */
 
-    // memset(&ifr, 0, sizeof(struct ifreq));
     if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, ife->ifname, IFNAMSIZ) < 0) 
     {
         ERROR_MSG("setsockopt SO_BINDTODEVICE failed");
         close(sockfd);
         return FAILURE;
     }
-
-    // SO_DONTROUTE indicates that outgoing messages should bypass the 
-    // standard routing facilities.  Instead, messages are directed to 
-    // the appropriate network interface according to the network portion 
-    // of the destination address. 
-
-    /* Use SO_DONTROUTE to bypass the routing table
-    if(setsockopt(sockfd, SOL_SOCKET, SO_DONTROUTE, ife->name, IFNAMSIZ) < 0)
-    {
-        ERROR_MSG("setsockopt SO_DONTROUTE failed");
-        close(sockfd);
-        return FAILURE;
-    }
-    */
 
     ife->sockfd = sockfd;
 

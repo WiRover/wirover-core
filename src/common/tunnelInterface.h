@@ -12,6 +12,8 @@
 
 #define SEC_TO_USEC 1000000
 
+#define TUNTAP_OFFSET 4
+
 struct tunnel {
     char name[IFNAMSIZ];
     __be32 n_private_ip;
