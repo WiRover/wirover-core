@@ -28,7 +28,6 @@ struct interface {
     enum if_state     state;
     int               priority;
 	int               num_ping_failures;
-    int               sockfd;
 
     int     flags;
 
@@ -56,6 +55,7 @@ struct interface {
     double avg_rtt;
     double avg_downlink_bw;
     double avg_uplink_bw;
+    int               sockfd;
 
 
     // default gateway for routing if needed
