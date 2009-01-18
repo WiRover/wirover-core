@@ -172,7 +172,7 @@ int main(int argc, char* argv[])
                     DEBUG_MSG("Failed to start ping thread");
                     exit(1);
                 }
-                if(start_data_thread(pub_ip, lease.cinfo[0].data_port) == FAILURE) {
+                if(start_data_thread(getTunnel(), pub_ip, lease.cinfo[0].data_port) == FAILURE) {
                     DEBUG_MSG("Failed to start data thread");
                     exit(1);
                 }
@@ -207,6 +207,7 @@ int main(int argc, char* argv[])
                 
                 state = GATEWAY_PING_SUCCEEDED;
             }
+            send_notification(1);
         }
 
         if(state == GATEWAY_PING_SUCCEEDED) {

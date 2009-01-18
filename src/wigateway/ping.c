@@ -324,6 +324,7 @@ void* ping_thread_func(void* arg)
  */
 static int handle_incoming(int sockfd, int timeout)
 {
+    DEBUG_MSG("Handling incomming ping");
     int bytes;
     struct sockaddr_storage addr;
     socklen_t addr_len = sizeof(addr);
@@ -444,7 +445,7 @@ static int send_second_response(const struct interface *ife,
         const char *buffer, int len, const struct sockaddr *to, socklen_t to_len)
 {
     assert(len >= MIN_PING_PACKET_SIZE);
-    
+    DEBUG_MSG("Sending response");
     int sockfd = udp_bind_open(get_data_port(), ife->name);
     if(sockfd < 0) {
         return -1;

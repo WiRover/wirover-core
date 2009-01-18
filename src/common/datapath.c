@@ -88,14 +88,23 @@ int handlePackets()
         FD_ZERO(&read_set);
         FD_SET(data_socket, &read_set);
         FD_SET(tun->tunnelfd, &read_set);
-
+        
+	    obtain_read_lock(&interface_list_lock);
+	    struct interface* curr_ife = interface_list;
+        while (curr_ife) {
+            DEBUG_MSG("Sockfd: %d",curr_ife->sockfd);
+            if(curr_ife->sockfd > 0){
+                FD_SET(curr_ife->sockfd, &read_set);
+            }
+            curr_ife = curr_ife->next;
+        }
+	    release_read_lock(&interface_list_lock);
         // Pselect should return
         // when SIGINT, or SIGTERM is delivered, but block SIGALRM
         sigemptyset(&orig_set);
         sigaddset(&orig_set, SIGALRM);
-
+        
         int rtn = pselect(FD_SETSIZE, &read_set, NULL, NULL, NULL, &orig_set);
-
         // Make sure select didn't fail
         if( rtn < 0 && errno == EINTR) 
         {
@@ -107,6 +116,17 @@ int handlePackets()
         {
             handleInboundPacket(tun->tunnelfd, data_socket);
         }
+
+        obtain_read_lock(&interface_list_lock);
+	    curr_ife = interface_list;
+        while (curr_ife) {
+            if( FD_ISSET(curr_ife->sockfd, &read_set) ) 
+            {
+                handleInboundPacket(tun->tunnelfd, curr_ife->sockfd);
+            }
+            curr_ife = curr_ife->next;
+        }
+	    release_read_lock(&interface_list_lock);
 
         if( FD_ISSET(tun->tunnelfd, &read_set) ) 
         {
@@ -161,7 +181,6 @@ int handleInboundPacket(int tunfd, int data_socket)
     // case IP): http://www.mjmwired.net/kernel/Documentation/networking/tuntap.txt
 
     const struct iphdr *ip_hdr = (const struct iphdr *)(buffer + sizeof(struct tunhdr));
-
     unsigned short tun_info[2];
     tun_info[0] = 0; //flags
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
@@ -170,8 +189,10 @@ int handleInboundPacket(int tunfd, int data_socket)
 
 
     DEBUG_MSG("Writing data");
-    if( write(tunfd, &buffer[sizeof(struct tunhdr)-TUNTAP_OFFSET], 
-        (bufSize-sizeof(struct tunhdr)+TUNTAP_OFFSET)) < 0) 
+    if( write(tunfd, buffer, 
+        (bufSize)) < 0) 
+    /*if( write(tunfd, &buffer[sizeof(struct tunhdr)-TUNTAP_OFFSET], 
+        (bufSize-sizeof(struct tunhdr)+TUNTAP_OFFSET)) < 0) */
     {
         ERROR_MSG("write() failed");
         return FAILURE;

@@ -37,6 +37,7 @@ int send_notification(int max_tries)
         obtain_read_lock(&interface_list_lock);
         struct interface_copy *active_list = NULL;
         int num_active = copy_active_interfaces(interface_list, &active_list);
+        dump_interfaces(interface_list, "   ");
         release_read_lock(&interface_list_lock);
 
         if(num_active <= 0) {
