@@ -139,7 +139,7 @@ int getMatch(struct flow_tuple *ft, struct policy_entry *pd, int dir) {
 
 DEFAULT:
     pd->type = 0;
-    pd->action = 0;
+    pd->action = POLICY_ACT_ENCAP;
     strcpy(pd->alg_name, "def");
     return NO_MATCH;
 }

@@ -27,7 +27,7 @@
 #include "configuration.h"
 #include "debug.h"
 #include "interface.h"
-#include "tunnelInterface.h"
+#include "tunnel.h"
 
 static struct tunnel *tun = NULL;
     
@@ -38,7 +38,7 @@ static struct tunnel *tun = NULL;
  */
 void dumpTunHdr(struct tunhdr *tun_hdr)
 {
-    printf("TUN_HDR\n");
+    DEBUG_MSG("TUN_HDR");
     //printf("\tseq_no:       %u\n", ntohl(tun_hdr->seq_no));
     //printf("\tsend_ts:      %u\n", ntohl(tun_hdr->send_ts));
     //printf("\trecv_ts:      %u\n", ntohl(tun_hdr->recv_ts));
@@ -47,7 +47,6 @@ void dumpTunHdr(struct tunhdr *tun_hdr)
     //printf("\tnode_id:      %u\n", ntohs(tun_hdr->node_id));
     //printf("\tlink_id:      %u\n", ntohs(tun_hdr->link_id));
     //printf("\tlocal_seq_no: %u\n\n", ntohs(tun_hdr->local_seq_no));
-    fflush(stdout);
 } // End function void dumpTunHdr()
 
 /*

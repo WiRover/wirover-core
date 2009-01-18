@@ -19,7 +19,7 @@
 #include "utlist.h"
 #include "config.h"
 #include "timing.h"
-#include "tunnelInterface.h"
+#include "tunnel.h"
 
 const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_idle_clients()
 const unsigned int  CLIENT_TIMEOUT = 5;

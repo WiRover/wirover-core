@@ -25,7 +25,7 @@
 #include "callback.h"
 #include "sockets.h"
 #include "timing.h"
-#include "tunnelInterface.h"
+#include "tunnel.h"
 #include "util.h"
 
 // The virtual interface will use this IP address if we are unable to obtain a
@@ -172,7 +172,11 @@ int main(int argc, char* argv[])
                     DEBUG_MSG("Failed to start ping thread");
                     exit(1);
                 }
-                if(start_data_thread(getTunnel(), pub_ip, lease.cinfo[0].data_port) == FAILURE) {
+                if(set_cont_dst(pub_ip, lease.cinfo[0].data_port) == FAILURE){
+                    DEBUG_MSG("Failed to set controller destination");
+                    exit(1);
+                }
+                if(start_data_thread(getTunnel()) == FAILURE) {
                     DEBUG_MSG("Failed to start data thread");
                     exit(1);
                 }

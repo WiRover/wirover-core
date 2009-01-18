@@ -21,7 +21,7 @@ add_executable(wicontroller
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
     ${COMMON}/timing.c
-	${COMMON}/tunnelInterface.c
+	${COMMON}/tunnel.c
 	${COMMON}/selectInterface.c
     ${COMMON}/format.c
     ${COMMON}/pathperf.c

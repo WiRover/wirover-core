@@ -15,7 +15,7 @@
 #include "rwlock.h"
 #include "selectInterface.h"
 #include "sockets.h"
-#include "tunnelInterface.h"
+#include "tunnel.h"
 
 #ifndef SIOCGSTAMP
 # define SIOCGSTAMP 0x8906
@@ -26,26 +26,43 @@ static struct buffer_storage *packet_buffer[PACKET_BUFFER_SIZE];
 
 int handleInboundPacket(int tunfd, int data_socket);
 int handleOutboundPacket(int tunfd, struct tunnel *tun);
-int handleNoControllerPacket(int tunfd, fd_set readSet);
 int handlePackets();
 
 static int                  running = 0;
 static pthread_t            data_thread;
 static int                  data_socket = -1;
-static struct sockaddr_in   *cont_addr;
 struct tunnel *tun;
 
-int start_data_thread(struct tunnel *tun_in, uint32_t cont_ip, uint16_t cont_port)
+#ifdef GATEWAY
+static struct sockaddr_in   *cont_addr;
+
+int set_cont_dst(uint32_t cont_ip, uint16_t cont_port)
 {
-    tun = tun_in;
     cont_addr = (struct sockaddr_in*) malloc (sizeof(struct sockaddr_in));
+    if(cont_addr == NULL){
+        DEBUG_MSG("Couldn't malloc cont_addr");
+        return FAILURE;
+    }
     memset(cont_addr, 0, sizeof(cont_addr));
     cont_addr->sin_family = AF_INET;
     cont_addr->sin_port   = htons((unsigned short)cont_port);
     cont_addr->sin_addr.s_addr = cont_ip;
+    return SUCCESS;
+}
+#endif
+
+int start_data_thread(struct tunnel *tun_in)
+{
+#ifdef GATEWAY
+    if(cont_addr == NULL){
+        DEBUG_MSG("Controller destination not set before data thread started");
+        return FAILURE;
+    }
+#endif
+    tun = tun_in;
     if(running) {
         DEBUG_MSG("Data thread already running");
-        return 0;
+        return SUCCESS;
     }
 
     data_socket = udp_bind_open(get_data_port(), 0);
@@ -60,7 +77,7 @@ int start_data_thread(struct tunnel *tun_in, uint32_t cont_ip, uint16_t cont_por
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-    int result = pthread_create(&data_thread, &attr, handlePackets, 0);
+    int result = pthread_create(&data_thread, &attr, (void *(*)(void *))handlePackets, NULL);
     if(result != 0) {
         ERROR_MSG("Creating thread failed");
         close(data_socket);
@@ -92,7 +109,6 @@ int handlePackets()
 	    obtain_read_lock(&interface_list_lock);
 	    struct interface* curr_ife = interface_list;
         while (curr_ife) {
-            DEBUG_MSG("Sockfd: %d",curr_ife->sockfd);
             if(curr_ife->sockfd > 0){
                 FD_SET(curr_ife->sockfd, &read_set);
             }
@@ -204,10 +220,14 @@ int handleInboundPacket(int tunfd, int data_socket)
 
 int handleOutboundPacket(int tunfd, struct tunnel * tun) 
 {
-    int bufSize;
-    char buffer[get_mtu()];
+    int orig_size;
+    char orig_packet[get_mtu()];
 
-    if( (bufSize = read(tunfd, buffer, get_mtu())) < 0) 
+    struct tunhdr *tunhdr;
+    int new_size;
+    char new_packet[get_mtu()+sizeof(struct tunhdr)];
+
+    if( (orig_size = read(tunfd, orig_packet, get_mtu())) < 0) 
     {
         ERROR_MSG("read packet failed");
     } 
@@ -215,8 +235,8 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
     {
 
         struct flow_tuple *ft = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
-        struct iphdr    *ip_hdr = (struct iphdr *)(buffer + TUNTAP_OFFSET);
-        struct tcphdr   *tcp_hdr = (struct tcphdr *)(buffer + TUNTAP_OFFSET + (ip_hdr->ihl * 4));
+        struct iphdr    *ip_hdr = (struct iphdr *)(orig_packet + TUNTAP_OFFSET);
+        struct tcphdr   *tcp_hdr = (struct tcphdr *)(orig_packet + TUNTAP_OFFSET + (ip_hdr->ihl * 4));
 
         // Policy and Flow table
         fill_flow_tuple(ip_hdr, tcp_hdr, ft);
@@ -233,54 +253,66 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         free(ft);
 
         // Check for drop
-        if((ftd->action & POLICY_ACT_DROP) != 0) {
+        if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
             return SUCCESS;
         }
 
         // Send on all interfaces
         if((ftd->action & POLICY_OP_DUPLICATE) != 0) {
-            //sendAllInterfaces(buffer, bufSize);
+            //sendAllInterfaces(orig_packet, orig_size);
             return SUCCESS;
         }
+        //Add a tunnel header to the packet
+        if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
+            DEBUG_MSG("Encapping packet");
+            tunhdr = (struct tunhdr *) malloc(sizeof(struct tunhdr));
+            //Fill in the tunnel header
 
-        // Select interface and send
-        int rtn = 0;
+            
+            memcpy(new_packet, tunhdr, sizeof(struct tunhdr));
+            //Copy the original packet behind the tunnel header
+            memcpy(&new_packet[sizeof(struct tunhdr)], orig_packet, orig_size);
+            new_size = orig_size + sizeof(struct tunhdr);
 #ifdef CONTROLLER
 #endif
 #ifdef GATEWAY
-        struct interface *ife;
-        obtain_read_lock(&interface_list_lock);
+            struct interface *ife;
+            obtain_read_lock(&interface_list_lock);
 
-        ife = interface_list;
-        sendPacket(buffer, bufSize, ife, cont_addr, 0);
-        release_read_lock(&interface_list_lock);
+            ife = interface_list;
+            sendPacket(new_packet, new_size, ife, cont_addr, 0);
+            release_read_lock(&interface_list_lock);
 #endif
+        }
+        // Select interface and send
+        int rtn = 0;
+
 
         //ife = selectInterface(algo, port, size - offset, packet + offset);
 
         /*if(strcmp(ftd->alg_name, "rr_conn") == 0) {
-        rtn = stripePacket(buffer, bufSize, RR_CONN);
+        rtn = stripePacket(orig_packet, orig_size, RR_CONN);
         }
         else if(strcmp(ftd->alg_name, "rr_pkt") == 0) {
-        rtn = stripePacket(buffer, bufSize, RR_PKT);
+        rtn = stripePacket(orig_packet, orig_size, RR_PKT);
         }
         else if(strcmp(ftd->alg_name, "wrr_conn") == 0) {
-        rtn = stripePacket(buffer, bufSize, WRR_CONN);
+        rtn = stripePacket(orig_packet, orig_size, WRR_CONN);
         }
         else if(strcmp(ftd->alg_name, "wrr_pkt") == 0) {
-        rtn = stripePacket(buffer, bufSize, WRR_PKT);
+        rtn = stripePacket(orig_packet, orig_size, WRR_PKT);
         }
         else if(strcmp(ftd->alg_name, "wrr_pktv1") == 0) {
-        rtn = stripePacket(buffer, bufSize, WRR_PKT_v1);
+        rtn = stripePacket(orig_packet, orig_size, WRR_PKT_v1);
         }
         else if(strcmp(ftd->alg_name, "wdrr_pkt") == 0) {
-        rtn = stripePacket(buffer, bufSize, WDRR_PKT);
+        rtn = stripePacket(orig_packet, orig_size, WDRR_PKT);
         }
         else if(strcmp(ftd->alg_name, "spf") == 0) {
-        rtn = stripePacket(buffer, bufSize, SPF);
+        rtn = stripePacket(orig_packet, orig_size, SPF);
         }
         else*/ {
-            //rtn = stripePacket(buffer, bufSize, getRoutingAlgorithm());
+            //rtn = stripePacket(orig_packet, orig_size, getRoutingAlgorithm());
         }
 
         if(rtn < 0) {

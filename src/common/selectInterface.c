@@ -1,10 +1,9 @@
 #include <arpa/inet.h>
 
 #include "interface.h"
-#include "tunnelInterface.h"
 #include "debug.h"
 #include "sockets.h"
-#include "tunnelInterface.h"
+#include "tunnel.h"
 
 struct interface *selectInterface(int algo, unsigned short port, int size, char *packet)
 {

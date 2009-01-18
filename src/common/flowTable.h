@@ -50,7 +50,7 @@ int record_data_to_file(char *, struct flow_tuple *, struct flow_entry *);
 
 int record_message_to_file(char *, char *);
 
-int print_keys(char *);
+int print_keys();
 
 #endif //FLOW_TABLE_H
 

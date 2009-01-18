@@ -33,7 +33,7 @@ int fill_flow_tuple(struct iphdr* ip_hdr, struct tcphdr* tcp_hdr, struct flow_tu
     return 0;
 }
 
-int add_entry(struct flow_tuple* entry, struct flow_entry *ftd) {
+struct flow_entry *add_entry(struct flow_tuple* entry) {
     struct flow_entry *fe;
 
     struct flow_tuple *newKey = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
@@ -47,11 +47,11 @@ int add_entry(struct flow_tuple* entry, struct flow_entry *ftd) {
         fe->last_visit_time = time(NULL);
 
         HASH_ADD_KEYPTR(hh, flow_table, newKey, sizeof(struct flow_tuple), fe);
-        return SUCCESS;
+        return fe;
     }
 
     free(newKey);
-    return DUPLICATE_ENTRY;
+    return NULL;
 }
 
 struct flow_entry *get_flow_entry(struct flow_tuple *entry) {
@@ -80,21 +80,18 @@ void expiration_time_check() {
 int update_flow_table(struct flow_tuple *tuple, uint32_t action, int32_t type, char *alg_name) {
     struct flow_entry *ftd = get_flow_entry(tuple);
     if(ftd == NULL) {
-        ftd = (struct flow_entry *) malloc(sizeof(struct flow_entry));
-        ftd->count = 0;
-        memset(ftd, 0, sizeof(struct flow_entry));
-        int rc = add_entry(tuple, ftd);
-        if(rc == DUPLICATE_ENTRY) {
-            DEBUG_MSG("Duplicate File error");
+        ftd = add_entry(tuple);
+        if(ftd == NULL) {
+            DEBUG_MSG("Error adding flow tuple entry");
             return FAILURE;
         }
     }
+
     ftd->count++;
 
     ftd->action = action;
     ftd->type = type;
     strcpy(ftd->alg_name, alg_name);
-    
 
     if(last_expiration_check == 0) {
         last_expiration_check = time(NULL);
@@ -117,28 +114,17 @@ int set_flow_table_timeout(int value) {
 
 
 //All methods below here are for debugging purposes
-int print_keys(char * file_name) {
+int print_keys() {
     struct flow_entry *current_key, *tmp;
 
-    record_message_to_file(file_name, "-----STARTING KEY PRINT-----");
-
-    FILE *ofp;
-    ofp = fopen(file_name, "a");
-    if (ofp == NULL) {
-        ERROR_MSG("fopen() Failed");
-        return FILE_ERROR;
-    }
-
     HASH_ITER(hh, flow_table, current_key, tmp) {
-            fprintf(ofp,
-              "FROM: %" PRIu32 " TO: %" PRIu32 " PORTFROM: %" PRIu16 " PORTTO: %" PRIu16 ", NETPROTO: %" PRIu8 ", PROTO: %" PRIu8 "\n",
+            DEBUG_MSG(
+              "FROM: %" PRIu32 " TO: %" PRIu32 " PORTFROM: %" PRIu16 " PORTTO: %" PRIu16 ", NETPROTO: %" PRIu8 ", PROTO: %" PRIu8 ", ACTION: %" PRIu32 "\n",
               current_key->id->sAddr, current_key->id->dAddr, current_key->id->sPort,
-              current_key->id->dPort, current_key->id->net_proto, current_key->id->proto
+              current_key->id->dPort, current_key->id->net_proto, current_key->id->proto,
+              current_key->action
             );
     }
-
-    fclose(ofp);
-    record_message_to_file(file_name, "-----ENDING   KEY PRINT-----");
 
     return 0;
 }

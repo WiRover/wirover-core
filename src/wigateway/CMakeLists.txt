@@ -21,7 +21,7 @@ add_executable(wigateway
     ${COMMON}/sockets.c
     ${COMMON}/timing.c
 	${COMMON}/packetBuffer
-    ${COMMON}/tunnelInterface.c
+    ${COMMON}/tunnel.c
 	${COMMON}/selectInterface.c
     ${COMMON}/callback.c
     ${COMMON}/format.c
