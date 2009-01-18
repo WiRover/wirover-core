@@ -45,7 +45,7 @@ int set_cont_dst(uint32_t cont_ip, uint16_t cont_port)
     }
     memset(cont_addr, 0, sizeof(cont_addr));
     cont_addr->sin_family = AF_INET;
-    cont_addr->sin_port   = htons((unsigned short)cont_port);
+    cont_addr->sin_port   = cont_port;//htons((unsigned short)cont_port);
     cont_addr->sin_addr.s_addr = cont_ip;
     return SUCCESS;
 }
@@ -223,10 +223,6 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
     int orig_size;
     char orig_packet[get_mtu()];
 
-    struct tunhdr *tunhdr;
-    int new_size;
-    char new_packet[get_mtu()+sizeof(struct tunhdr)];
-
     if( (orig_size = read(tunfd, orig_packet, get_mtu())) < 0) 
     {
         ERROR_MSG("read packet failed");
@@ -265,14 +261,6 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         //Add a tunnel header to the packet
         if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
             DEBUG_MSG("Encapping packet");
-            tunhdr = (struct tunhdr *) malloc(sizeof(struct tunhdr));
-            //Fill in the tunnel header
-
-            
-            memcpy(new_packet, tunhdr, sizeof(struct tunhdr));
-            //Copy the original packet behind the tunnel header
-            memcpy(&new_packet[sizeof(struct tunhdr)], orig_packet, orig_size);
-            new_size = orig_size + sizeof(struct tunhdr);
 #ifdef CONTROLLER
 #endif
 #ifdef GATEWAY
@@ -280,7 +268,7 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
             obtain_read_lock(&interface_list_lock);
 
             ife = interface_list;
-            sendPacket(new_packet, new_size, ife, cont_addr, 0);
+            sendPacket(orig_packet, orig_size, ife, cont_addr, 0);
             release_read_lock(&interface_list_lock);
 #endif
         }

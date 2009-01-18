@@ -111,7 +111,7 @@ int sendPacket(char *packet, int size, struct interface *ife, struct sockaddr_in
     /*if(*pseq_num == -1) {
         *pseq_num = getSeqNo();
     }*/
-
+    tun_hdr.flags = TUNFLAG_DATA;
     tun_hdr.seq = 0;//htonl(*pseq_num);
     //tun_hdr.client_id = 0; // TODO: Add a client ID.
     //tun_hdr.node_id = htons(getNodeID());
