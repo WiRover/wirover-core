@@ -172,7 +172,11 @@ int main(int argc, char* argv[])
                     DEBUG_MSG("Failed to start ping thread");
                     exit(1);
                 }
-                if(set_cont_dst(pub_ip, lease.cinfo[0].data_port) == FAILURE){
+                struct interface *cont_ife = (struct interface *)malloc(sizeof(struct interface));
+                //memcpy(cont_ife, 0, sizeof(struct interface));
+                cont_ife->public_ip.s_addr = pub_ip;
+                cont_ife->data_port = lease.cinfo[0].data_port;
+                if(set_cont_dst(cont_ife) == FAILURE){
                     DEBUG_MSG("Failed to set controller destination");
                     exit(1);
                 }

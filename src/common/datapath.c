@@ -34,19 +34,11 @@ static int                  data_socket = -1;
 struct tunnel *tun;
 
 #ifdef GATEWAY
-static struct sockaddr_in   *cont_addr;
+static struct interface   *cont_ife;
 
-int set_cont_dst(uint32_t cont_ip, uint16_t cont_port)
+int set_cont_dst(struct interface *cont_dst_ife)
 {
-    cont_addr = (struct sockaddr_in*) malloc (sizeof(struct sockaddr_in));
-    if(cont_addr == NULL){
-        DEBUG_MSG("Couldn't malloc cont_addr");
-        return FAILURE;
-    }
-    memset(cont_addr, 0, sizeof(cont_addr));
-    cont_addr->sin_family = AF_INET;
-    cont_addr->sin_port   = cont_port;//htons((unsigned short)cont_port);
-    cont_addr->sin_addr.s_addr = cont_ip;
+    cont_ife = cont_dst_ife;
     return SUCCESS;
 }
 #endif
@@ -54,7 +46,7 @@ int set_cont_dst(uint32_t cont_ip, uint16_t cont_port)
 int start_data_thread(struct tunnel *tun_in)
 {
 #ifdef GATEWAY
-    if(cont_addr == NULL){
+    if(cont_ife == NULL){
         DEBUG_MSG("Controller destination not set before data thread started");
         return FAILURE;
     }
@@ -270,7 +262,7 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
             obtain_read_lock(&interface_list_lock);
 
             ife = interface_list;
-            sendPacket(orig_packet, orig_size, ife, cont_addr, 0);
+            sendPacket(orig_packet, orig_size, 123, ife, cont_ife, 0);
             release_read_lock(&interface_list_lock);
 #endif
         }

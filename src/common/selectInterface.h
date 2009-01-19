@@ -3,6 +3,6 @@
 
 #include "interface.h"
 
-int sendPacket(char *packet, int size, struct interface *ife, struct sockaddr_in *dst, uint32_t *pseq_num);
+int sendPacket(char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife, uint32_t *pseq_num);
 
 #endif /* SELECTINTERFACE_H */
