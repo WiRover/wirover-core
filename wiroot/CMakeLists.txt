@@ -1,6 +1,7 @@
 add_executable(wiroot
     wiroot.c
     lease.c
+    controllers.c
     ${COMMON}/debug.c
     ${COMMON}/sockets.c
 )

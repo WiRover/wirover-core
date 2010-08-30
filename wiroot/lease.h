@@ -23,6 +23,7 @@ struct lease {
 
 int read_lease_config(const config_t* config);
 const struct lease* grant_lease(const uint8_t* hw_addr, unsigned int hw_addr_len);
+void remove_stale_leases();
 
 #endif //_LEASE_H_
 

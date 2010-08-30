@@ -1,7 +1,9 @@
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>
 
 #include "contchan.h"
@@ -11,9 +13,9 @@
 const char* WIROOT_ADDRESS = "127.0.0.1";
 const unsigned short WIROOT_PORT = 8082;
 
-int mac = 0;
+static char msg_buffer[1000];
 
-void request_lease()
+void request_lease(int is_controller, const char* hw_addr)
 {
     int sock;
     int bytes;
@@ -24,33 +26,87 @@ void request_lease()
         exit(1);
     }
 
-    struct contchan_lease_request request;
+    struct cchan_request request;
     memset(&request, 0, sizeof(request));
-    request.type = CONTCHAN_LEASE_REQUEST;
-    *(int*)request.hw_addr = mac++;
+    request.type = is_controller ? CCHAN_CONTROLLER_CONFIG : CCHAN_GATEWAY_CONFIG;
+    memcpy(request.hw_addr, hw_addr, ETH_ALEN);
 
     bytes = send(sock, &request, sizeof(request), 0);
     if(bytes < 0) {
         ERROR_MSG("error sending request");
     }
-    shutdown(sock, SHUT_WR);
 
-    struct contchan_lease_response response;
-    bytes = recv(sock, &response, sizeof(response), 0);
-    if(bytes < sizeof(response)) {
+    char pkt_buff[1500];
+    bytes = recv(sock, pkt_buff, sizeof(pkt_buff), 0);
+    if(bytes <= 0) {
         ERROR_MSG("error receiving response");
     }
 
     close(sock);
+
+    struct cchan_response* response = (struct cchan_response*)pkt_buff;
+
+    char p_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &response->priv_ip, p_ip, sizeof(p_ip));
+
+    snprintf(msg_buffer, sizeof(msg_buffer), "Received lease of %s", p_ip);
+    DEBUG_MSG(msg_buffer);
+
+    struct cchan_controller_info* cinfo = 
+            (struct cchan_controller_info*)(pkt_buff + sizeof(struct cchan_response));
+
+    int i;
+    for(i = 0; i < response->controllers; i++) {
+        char priv_ip[INET_ADDRSTRLEN];
+        char pub_ip[INET_ADDRSTRLEN];
+
+        inet_ntop(AF_INET, &cinfo->priv_ip, priv_ip, sizeof(priv_ip));
+        inet_ntop(AF_INET, &cinfo->pub_ip, pub_ip, sizeof(pub_ip));
+
+        snprintf(msg_buffer, sizeof(msg_buffer), "Controller %d: %s / %s", i, priv_ip, pub_ip);
+        DEBUG_MSG(msg_buffer);
+
+        cinfo++;
+    }
 }
 
 
 int main(int argc, char* argv[])
 {
+    int is_controller = 0;
+    char hw_addr[ETH_ALEN];
     int i;
-    for(i = 0; i < 1000; i++) {
-        request_lease();
+
+    memset(hw_addr, 0, sizeof(hw_addr));
+
+    const char* opt_string = "gcm:h";
+
+    int opt = getopt(argc, argv, opt_string);
+    while(opt != -1) {
+        switch(opt) {
+            case 'g':
+                is_controller = 0;
+                break;
+            case 'c':
+                is_controller = 1;
+                break;
+            case 'm':
+                for(i = 0; i < ETH_ALEN; i++) {
+                    hw_addr[i] = atoi(optarg);
+                }
+                break;
+            case 'h':
+            default:
+                printf("Usage: %s [-g|-c] [-m mac]\n", argv[0]);
+                exit(1);
+                break;
+        }
+
+        opt = getopt(argc, argv, opt_string);
     }
+
+    DEBUG_MSG("Beginning lease request.");
+    request_lease(is_controller, hw_addr);
 
     return 0;
 }

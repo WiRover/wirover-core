@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <libconfig.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -9,13 +10,16 @@
 #include <sys/socket.h>
 
 #include "contchan.h"
+#include "controllers.h"
 #include "debug.h"
 #include "lease.h"
 #include "sockets.h"
 #include "utlist.h"
 
-const unsigned int   MTU = 1500;
-const char*          CONFIG_FILENAME = "wiroot.conf";
+const unsigned int  MTU = 1500;
+const char*         CONFIG_FILENAME = "wiroot.conf";
+const int           MAX_CONTROLLERS = 3;
+const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_stale_leases()
 
 /*
  * STRUCT CLIENT
@@ -45,7 +49,8 @@ static char           msg_buffer[1024];
 static int  configure_wiroot(const char* filename);
 static void handle_connection(int server_sock);
 static void handle_incoming(struct client* client);
-static void handle_lease_request(struct client* client, const char* packet, int length);
+static void handle_gateway_config(struct client* client, const char* packet, int length);
+static void handle_controller_config(struct client* client, const char* packet, int length);
 static void handle_disconnection(struct client* client);
 static void fdset_add_clients(fd_set* set, int* max_fd);
 static int  find_config_file(char* filename, int length);
@@ -72,18 +77,24 @@ int main(int argc, char* argv[])
         FD_ZERO(&read_set);
         FD_SET(server_sock, &read_set);
 
+        struct timeval timeout;
+        timeout.tv_sec = CLEANUP_INTERVAL;
+        timeout.tv_usec = 0;
+
         int max_fd = server_sock;
         fdset_add_clients(&read_set, &max_fd);
 
-        result = select(max_fd+1, &read_set, 0, 0, 0);
+        result = select(max_fd+1, &read_set, 0, 0, &timeout);
         if(result == -1) {
             if(errno != EINTR) {
                 ERROR_MSG("select failed");
                 return 1;
             }
-        }
-
-        if(result > 0) {
+        } else if(result == 0) {
+            // If select timed out, we must be idle, so it is a good time for
+            // cleanup.
+            remove_stale_leases();
+        } else {
             if(FD_ISSET(server_sock, &read_set)) {
                 handle_connection(server_sock);
             }
@@ -199,54 +210,92 @@ static void handle_incoming(struct client* client)
     } else if(bytes == 0) {
         handle_disconnection(client);
         return;
+    } else if(bytes < MIN_REQUEST_LEN) {
+        DEBUG_MSG("Client packet was too small to be a valid request.");
+        return;
     }
 
-    // After we receive one request, we no longer accept packets from the same client.
-    shutdown(client->fd, SHUT_RD);
-
-    // In all control channel packets, the type is specified in the first byte.
-    int type = packet[0];
-
+    uint8_t type = packet[0];
     switch(type) {
-        case CONTCHAN_LEASE_REQUEST:
-            handle_lease_request(client, packet, bytes);
+        case CCHAN_GATEWAY_CONFIG:
+            handle_gateway_config(client, packet, bytes);
+            break;
+        case CCHAN_CONTROLLER_CONFIG:
+            handle_controller_config(client, packet, bytes);
             break;
     }
 }
 
 /*
- * HANDLE LEASE REQUEST
+ * HANDLE GATEWAY CONFIG
  *
- * Processes a packet of type CONTCHAN_LEASE_REQUEST and sends a response.
+ * Processes a request from a gateway and sends a response.
  */
-static void handle_lease_request(struct client* client, const char* packet, int length) {
-    if(length < sizeof(struct contchan_lease_request)) {
-        DEBUG_MSG("Client packet was too small to be a lease request");
-        return;
-    }
-
-    struct contchan_lease_request* request = (struct contchan_lease_request*)packet;
+static void handle_gateway_config(struct client* client, const char* packet, int length) {
+    struct cchan_request* request = (struct cchan_request*)packet;
 
     const struct lease* lease;
     lease = grant_lease(request->hw_addr, sizeof(request->hw_addr));
     
-    struct contchan_lease_response response;
-    memset(&response, 0, sizeof(response));
-    response.type = CONTCHAN_LEASE_RESPONSE;
+    char response_buffer[MTU];
+    struct cchan_response* response = (struct cchan_response*)response_buffer;
+    response->type = request->type;
 
-    // If a lease was not granted, we still send a response but with IP=0.
+    // Any controller IPs will be added to the packet after this structure.
+    int response_index = sizeof(struct cchan_response);
+
     if(lease) {
-        response.priv_ip = lease->ip;
-        response.lease_time = (lease->end - lease->start);
+        struct node* node_list[MAX_CONTROLLERS];
+        response->controllers = assign_controllers(node_list, MAX_CONTROLLERS, 
+                request->latitude, request->longitude);
+
+        int i;
+        for(i = 0; i < response->controllers; i++) {
+            struct cchan_controller_info* cinfo =
+                    (struct cchan_controller_info*)&response_buffer[response_index];
+            cinfo->priv_ip = node_list[i]->priv_ip;
+            cinfo->pub_ip = node_list[i]->pub_ip;
+            response_index += sizeof(struct cchan_controller_info);
+        }
+
+        response->priv_ip = lease->ip;
+        response->lease_time = (lease->end - lease->start);
     }
 
-    int bytes = send(client->fd, &response, sizeof(response), 0);
+    int bytes = send(client->fd, response, response_index, 0);
     if(bytes < sizeof(response)) {
         DEBUG_MSG("Failed to send lease response");
     }
+}
 
-    // Terminate the connection after the response is sent.
-    handle_disconnection(client);
+/*
+ * HANDLE CONTROLLER CONFIG
+ *
+ * Processes a request from a controller and sends a response.
+ */
+static void handle_controller_config(struct client* client, const char* packet, int length) {
+    struct cchan_request* request = (struct cchan_request*)packet;
+
+    const struct lease* lease;
+    lease = grant_lease(request->hw_addr, sizeof(request->hw_addr));
+    
+    char response_buffer[MTU];
+    struct cchan_response* response = (struct cchan_response*)response_buffer;
+    response->type = request->type;
+
+    if(lease) {
+        uint32_t pub_ip = client->addr.sin_addr.s_addr;
+        add_controller(lease->ip, pub_ip, request->latitude, request->longitude);
+
+        response->priv_ip = lease->ip;
+        response->lease_time = (lease->end - lease->start);
+        response->controllers = 0;
+    }
+
+    int bytes = send(client->fd, response, sizeof(struct cchan_response), 0);
+    if(bytes < sizeof(response)) {
+        DEBUG_MSG("Failed to send lease response");
+    }
 }
 
 /*

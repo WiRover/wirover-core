@@ -107,6 +107,36 @@ const struct lease* grant_lease(const uint8_t* hw_addr, unsigned int hw_addr_len
 }
 
 /*
+ * REMOVE STALE LEASES
+ */
+void remove_stale_leases()
+{
+    time_t now = time(0);
+
+    struct lease* lease;
+    struct lease* tmp;
+    DL_FOREACH_SAFE(leases_head, lease, tmp) {
+        if(now >= lease->end) {
+            DL_DELETE(leases_head, lease);
+            HASH_DELETE(hh_ip, leases_ip_hash, lease);
+            HASH_DELETE(hh_hw, leases_hw_hash, lease);
+
+            char p_ip[INET_ADDRSTRLEN];
+            char p_hw_addr[100];
+            inet_ntop(AF_INET, &lease->ip, p_ip, sizeof(p_ip));
+            to_hex_string((const char*)lease->hw_addr, sizeof(lease->hw_addr), p_hw_addr, sizeof(p_hw_addr));
+
+            snprintf(msg_buffer, sizeof(msg_buffer),
+                     "Expiring lease of %s for hw_addr %s",
+                     p_ip, p_hw_addr);
+            DEBUG_MSG(msg_buffer);
+
+            free(lease);
+        }
+    }
+}
+
+/*
  * RENEW LEASE
  *
  * Renews a lease by updated its start and end times.
