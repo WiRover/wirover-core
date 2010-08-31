@@ -31,6 +31,7 @@ struct client {
     int                 fd;
     struct sockaddr_in  addr;
     socklen_t           addr_len;
+    time_t              last_active;
 
     //only to be modified by utlist
     struct client*      next;
@@ -38,7 +39,8 @@ struct client {
 };
 
 // This default value will be writted during configuration.
-static unsigned short WIROOT_PORT = 8082;
+static unsigned short WIROOT_PORT = 8088;
+static int            CLIENT_TIMEOUT = 5;
 
 // Doubly-linked list of connected clients
 static struct client* clients_head = 0;
@@ -54,6 +56,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
 static void handle_disconnection(struct client* client);
 static void fdset_add_clients(fd_set* set, int* max_fd);
 static int  find_config_file(char* filename, int length);
+static void remove_idle_clients();
 
 int main(int argc, char* argv[])
 {
@@ -94,6 +97,7 @@ int main(int argc, char* argv[])
             // If select timed out, we must be idle, so it is a good time for
             // cleanup.
             remove_stale_leases();
+            remove_idle_clients();
         } else {
             if(FD_ISSET(server_sock, &read_set)) {
                 handle_connection(server_sock);
@@ -154,6 +158,16 @@ static int configure_wiroot(const char* filename)
     } else {
         WIROOT_PORT = (unsigned short)port;
     }
+    
+    int timeout;
+    result = config_lookup_int(&config, "server.client-timeout", &timeout);
+    if(result == CONFIG_FALSE) {
+        DEBUG_MSG("Error reading server.client-timeout from config file");
+    } else if(timeout < 0) {
+        DEBUG_MSG("server.client-timeout in config file is out of range");
+    } else {
+        CLIENT_TIMEOUT = timeout;
+    }
 
     result = read_lease_config(&config);
     if(result == -1) {
@@ -187,6 +201,8 @@ static void handle_connection(int server_sock)
     // single thread, and we cannot have one evil client hold up the rest.
     set_nonblock(client->fd, 1);
 
+    client->last_active = time(0);
+
     DL_APPEND(clients_head, client);
 }
 
@@ -202,6 +218,7 @@ static void handle_incoming(struct client* client)
     char packet[MTU];
 
     assert(client);
+    client->last_active = time(0);
 
     bytes = recv(client->fd, packet, sizeof(packet), 0);
     if(bytes == -1) {
@@ -361,5 +378,24 @@ static int find_config_file(char* filename, int length)
     }
 
     return 0;
+}
+
+/*
+ * REMOVE IDLE CLIENTS
+ *
+ * Drops connections that are idle.
+ */
+void remove_idle_clients()
+{
+    time_t cutoff = time(0) - CLIENT_TIMEOUT;
+
+    struct client* client;
+    struct client* tmp;
+
+    DL_FOREACH_SAFE(clients_head, client, tmp) {
+        if(client->last_active <= cutoff) {
+            handle_disconnection(client);           
+        }
+    }
 }
 
