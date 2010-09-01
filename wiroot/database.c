@@ -1,0 +1,128 @@
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <mysql/mysql.h>
+//#include <mysql/my_global.h>
+
+#include "database.h"
+#include "debug.h"
+
+static MYSQL* database = 0;
+static char msg_buffer[1024];
+
+int db_connect()
+{
+    int result;
+
+    if(database) {
+        return 0;
+    }
+
+    database = mysql_init(0);
+    if(!database) {
+        DEBUG_MSG("mysql_init() failed");
+        return -1;
+    }
+
+    if(!mysql_real_connect(database, DB_HOST, DB_USER, DB_PASS, DB_NAME,
+                                0, 0, 0)) {
+        DEBUG_MSG("mysql_real_connect() failed");
+        mysql_close(database);
+        database = 0;
+        return -1;
+    }
+    
+    my_bool yes = 1;
+    result = mysql_options(database, MYSQL_OPT_RECONNECT, &yes);
+    if(result != 0) {
+        DEBUG_MSG("Warning: mysql_option() failed");
+    }
+
+
+    return 0;
+}
+
+void db_disconnect()
+{
+    if(database) {
+        mysql_close(database);
+        database = 0;
+    }
+}
+
+/*
+ * DB QUERY
+ *
+ * Performs a MYSQL query on the database.  The syntax is the same as printf.
+ *
+ * Returns 0 on success or -1 on failure.
+ */
+int db_query(const char* format, ...)
+{
+    va_list args;
+    char query[MAX_QUERY_LEN];
+    int len;
+    int result;
+
+    va_start(args, format);
+    len = vsnprintf(query, sizeof(query), format, args);
+    va_end(args);
+
+    if(len >= sizeof(query)) {
+        DEBUG_MSG("vsnprintf overflow");
+        return -1;
+    }
+
+    result = mysql_real_query(database, query, len);
+    if(result != 0) {
+        snprintf(msg_buffer, sizeof(msg_buffer),
+                 "mysql_query failed: %s",
+                 mysql_error(database));
+        DEBUG_MSG(msg_buffer);
+        return -1;
+    }
+        
+    return 0;
+}
+
+/*
+ * DB GET UNIQUEID
+ */
+unsigned short db_get_unique_id(const char* hwaddr)
+{
+    int result;
+    unsigned short unique_id = 0;
+
+    result = db_query("select id from uniqueid where hwaddr='%s' limit 1", hwaddr);
+    if(result == -1) {
+        return 0;
+    }
+
+    MYSQL_RES* qr = mysql_store_result(database);
+    if(!qr) {
+        snprintf(msg_buffer, sizeof(msg_buffer),
+                 "mysql_store_result failed: %s",
+                 mysql_error(database));
+        return 0;
+    }
+    
+    MYSQL_ROW row = mysql_fetch_row(qr);
+    
+    if(row) {
+        unique_id = atoi(row[0]);
+        
+    } else {
+        // Make an entry for the node
+        result = db_query("insert into uniqueid (hwaddr) values ('%s')", hwaddr);
+        if(result == 0) {
+            unique_id = mysql_insert_id(database);
+        }
+    }
+
+    mysql_free_result(qr);
+    return unique_id;
+}
+
+
+
+

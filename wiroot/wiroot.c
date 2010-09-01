@@ -11,6 +11,7 @@
 
 #include "contchan.h"
 #include "controllers.h"
+#include "database.h"
 #include "debug.h"
 #include "lease.h"
 #include "sockets.h"
@@ -68,6 +69,12 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    result = db_connect();
+    if(result == -1) {
+        DEBUG_MSG("failed to connect to mysql database");
+        return 1;
+    }
+
     server_sock = tcp_passive_open(WIROOT_PORT, SOMAXCONN);
     if(server_sock == -1) {
         DEBUG_MSG("failed to open server socket");
@@ -115,8 +122,9 @@ int main(int argc, char* argv[])
         }
     }
 
-    config_destroy(&config);
     close(server_sock);
+    db_disconnect();
+    config_destroy(&config);
 }
 
 /*
@@ -253,10 +261,16 @@ static void handle_gateway_config(struct client* client, const char* packet, int
 
     const struct lease* lease;
     lease = grant_lease(request->hw_addr, sizeof(request->hw_addr));
-    
+  
+    // Query the database for the unique id of the client
+    char p_hw_addr[DB_UNIQUE_ID_LEN+1];
+    to_hex_string((const char*)request->hw_addr, sizeof(request->hw_addr), p_hw_addr, sizeof(p_hw_addr));
+    unsigned short unique_id = db_get_unique_id(p_hw_addr);
+
     char response_buffer[MTU];
     struct cchan_response* response = (struct cchan_response*)response_buffer;
     response->type = request->type;
+    response->unique_id = htons(unique_id);
 
     // Any controller IPs will be added to the packet after this structure.
     int response_index = sizeof(struct cchan_response);
@@ -296,9 +310,15 @@ static void handle_controller_config(struct client* client, const char* packet, 
     const struct lease* lease;
     lease = grant_lease(request->hw_addr, sizeof(request->hw_addr));
     
+    // Query the database for the unique id of the client
+    char p_hw_addr[DB_UNIQUE_ID_LEN+1];
+    to_hex_string((const char*)request->hw_addr, sizeof(request->hw_addr), p_hw_addr, sizeof(p_hw_addr));
+    unsigned short unique_id = db_get_unique_id(p_hw_addr);
+    
     char response_buffer[MTU];
     struct cchan_response* response = (struct cchan_response*)response_buffer;
     response->type = request->type;
+    response->unique_id = htons(unique_id);
 
     if(lease) {
         uint32_t pub_ip = client->addr.sin_addr.s_addr;

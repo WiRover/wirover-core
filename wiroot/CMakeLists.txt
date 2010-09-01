@@ -1,13 +1,13 @@
 add_executable(wiroot
     wiroot.c
+    database.c
     lease.c
     controllers.c
     ${COMMON}/debug.c
     ${COMMON}/sockets.c
 )
 
-# Link in libconfig, a flexible config file parser
-target_link_libraries(wiroot config)
+target_link_libraries(wiroot config mysqlclient)
 
 add_executable(test
     test.c

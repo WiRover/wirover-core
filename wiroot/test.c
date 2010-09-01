@@ -10,8 +10,8 @@
 #include "debug.h"
 #include "sockets.h"
 
-const char* WIROOT_ADDRESS = "127.0.0.1";
-const unsigned short WIROOT_PORT = 8082;
+const char* WIROOT_ADDRESS = "128.105.22.229";
+const unsigned short WIROOT_PORT = 8088;
 
 static char msg_buffer[1000];
 
