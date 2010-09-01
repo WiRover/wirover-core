@@ -8,7 +8,6 @@
 #include "debug.h"
 
 static MYSQL* database = 0;
-static char msg_buffer[1024];
 
 int db_connect()
 {
@@ -37,7 +36,6 @@ int db_connect()
     if(result != 0) {
         DEBUG_MSG("Warning: mysql_option() failed");
     }
-
 
     return 0;
 }
@@ -75,10 +73,7 @@ int db_query(const char* format, ...)
 
     result = mysql_real_query(database, query, len);
     if(result != 0) {
-        snprintf(msg_buffer, sizeof(msg_buffer),
-                 "mysql_query failed: %s",
-                 mysql_error(database));
-        DEBUG_MSG(msg_buffer);
+        DEBUG_MSG("mysql_query failed - %s", mysql_error(database));
         return -1;
     }
         
@@ -100,9 +95,7 @@ unsigned short db_get_unique_id(const char* hwaddr)
 
     MYSQL_RES* qr = mysql_store_result(database);
     if(!qr) {
-        snprintf(msg_buffer, sizeof(msg_buffer),
-                 "mysql_store_result failed: %s",
-                 mysql_error(database));
+        DEBUG_MSG("mysql_store_result failed - %s", mysql_error(database));
         return 0;
     }
     

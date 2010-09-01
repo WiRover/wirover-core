@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <time.h>
 #include <sys/time.h>
@@ -21,10 +22,17 @@ void print_time(FILE* out)
 }
 
 #ifdef DEBUG_PRINT
-void __debug_msg(const char* msg, const char* file, int line, const char* func)
+void __debug_msg(const char* file, int line, const char* func, const char* msg, ...)
 {
     print_time(stdout);
 
+    va_list args;
+    char buffer[MAX_DEBUG_LEN];
+
+    va_start(args, msg);
+    vsnprintf(buffer, sizeof(buffer), msg, args);
+    va_end(args);
+    
     const char* split_file = strrchr(file, '/');
     if(!split_file) {
         // It was not a full path
@@ -34,14 +42,19 @@ void __debug_msg(const char* msg, const char* file, int line, const char* func)
         split_file++;
     }
 
-    printf("\t%s (line %d): %s() -- %s\n", split_file, line, func, msg);
+    printf("\t%s (line %d): %s() -- %s\n", split_file, line, func, buffer);
 }
-#endif //DEBUG_PRINT
 
-#ifdef ERROR_PRINT
-void __error_msg(const char* msg, const char* file, int line, const char* func)
+void __error_msg(const char* file, int line, const char* func, const char* msg, ...)
 {
     print_time(stdout);
+    
+    va_list args;
+    char buffer[MAX_DEBUG_LEN];
+
+    va_start(args, msg);
+    vsnprintf(buffer, sizeof(buffer), msg, args);
+    va_end(args);
 
     const char* split_file = strrchr(file, '/');
     if(!split_file) {
@@ -53,9 +66,9 @@ void __error_msg(const char* msg, const char* file, int line, const char* func)
     }
 
     printf("\tERROR_MSG: %s (line %d): %s() -- %s: %s - Error #(%d)\n", split_file,
-           line, func, msg, strerror(errno), errno);
+           line, func, buffer, strerror(errno), errno);
 }
-#endif //ERROR_PRINT
+#endif //DEBUG_PRINT
 
 void to_hex_string(const char* __restrict__ src, int src_len,
                    char* __restrict__ dest, int dest_len)

@@ -8,8 +8,6 @@
 
 #include "debug.h"
 
-static char msg_buffer[1024];
-
 const char* VIRT_DEVICE = "virt0";
 
 /*
@@ -28,9 +26,7 @@ int setup_virtual_interface(const char* __restrict__ ip)
 
     result = getaddrinfo(ip, 0, &hints, &ainfo);
     if(result != 0) {
-        snprintf(msg_buffer, sizeof(msg_buffer), "getaddrinfo() failed: %s",
-                 gai_strerror(result));
-        DEBUG_MSG(msg_buffer);
+        DEBUG_MSG("getaddrinfo() failed - %s", gai_strerror(result));
         return -1;
     }
 

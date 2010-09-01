@@ -8,8 +8,6 @@
 const char* WIROOT_ADDRESS = "128.105.22.229";
 const unsigned short WIROOT_PORT = 8088;
 
-static char msg_buffer[1024];
-
 int main(int argc, char* argv[])
 {
     uint32_t priv_ip;
@@ -26,8 +24,7 @@ int main(int argc, char* argv[])
     char p_ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &priv_ip, p_ip, sizeof(p_ip));
 
-    snprintf(msg_buffer, sizeof(msg_buffer), "Obtained lease of %s", p_ip);
-    DEBUG_MSG(msg_buffer);
+    DEBUG_MSG("Obtained lease of %s", p_ip);
 
     result = setup_virtual_interface(p_ip);
     if(result == -1) {

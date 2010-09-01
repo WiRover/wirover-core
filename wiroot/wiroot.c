@@ -47,7 +47,6 @@ static int            CLIENT_TIMEOUT = 5;
 static struct client* clients_head = 0;
 
 static config_t       config;
-static char           msg_buffer[1024];
 
 static int  configure_wiroot(const char* filename);
 static void handle_connection(int server_sock);
@@ -145,16 +144,11 @@ static int configure_wiroot(const char* filename)
         return -1;
     }
 
-    snprintf(msg_buffer, sizeof(msg_buffer),
-             "Found config file: %s", buffer);
-    DEBUG_MSG(msg_buffer);
+    DEBUG_MSG("Found config file: %s", buffer);
 
     result = config_read_file(&config, buffer);
     if(result == CONFIG_FALSE) {
-        snprintf(msg_buffer, sizeof(msg_buffer),
-                 "Failed to read config file: %s",
-                 config_error_text(&config));
-        DEBUG_MSG(msg_buffer);
+        DEBUG_MSG("Failed to read config file: %s", config_error_text(&config));
     }
 
     int port;

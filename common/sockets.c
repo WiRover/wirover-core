@@ -78,12 +78,7 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port)
     struct addrinfo* results = 0;
     rtn = getaddrinfo(remote_addr, port_string, &hints, &results);
     if(rtn != 0) {
-        char buffer[500];
-        snprintf(buffer, sizeof(buffer),
-                 "getaddrinfo failed - %s",
-                 gai_strerror(rtn));
-        DEBUG_MSG(buffer);
-
+        DEBUG_MSG("getaddrinfo failed - %s", gai_strerror(rtn));
         goto close_and_return;
     }
 

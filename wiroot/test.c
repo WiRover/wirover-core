@@ -13,8 +13,6 @@
 const char* WIROOT_ADDRESS = "128.105.22.229";
 const unsigned short WIROOT_PORT = 8088;
 
-static char msg_buffer[1000];
-
 void request_lease(int is_controller, const char* hw_addr)
 {
     int sock;
@@ -49,8 +47,7 @@ void request_lease(int is_controller, const char* hw_addr)
     char p_ip[INET_ADDRSTRLEN];
     inet_ntop(AF_INET, &response->priv_ip, p_ip, sizeof(p_ip));
 
-    snprintf(msg_buffer, sizeof(msg_buffer), "Received lease of %s", p_ip);
-    DEBUG_MSG(msg_buffer);
+    DEBUG_MSG("Received lease of %s", p_ip);
 
     struct cchan_controller_info* cinfo = 
             (struct cchan_controller_info*)(pkt_buff + sizeof(struct cchan_response));
@@ -63,8 +60,7 @@ void request_lease(int is_controller, const char* hw_addr)
         inet_ntop(AF_INET, &cinfo->priv_ip, priv_ip, sizeof(priv_ip));
         inet_ntop(AF_INET, &cinfo->pub_ip, pub_ip, sizeof(pub_ip));
 
-        snprintf(msg_buffer, sizeof(msg_buffer), "Controller %d: %s / %s", i, priv_ip, pub_ip);
-        DEBUG_MSG(msg_buffer);
+        DEBUG_MSG("Controller %d: %s / %s", i, priv_ip, pub_ip);
 
         cinfo++;
     }
