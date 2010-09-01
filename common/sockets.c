@@ -91,6 +91,7 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port)
     // null, so this assert should never be triggered
     assert(results != 0 && results->ai_addr != 0);
 
+    // TODO: Implement connect with a timeout
     rtn = connect(sockfd, results->ai_addr, sizeof(struct sockaddr_in));
     if(rtn == -1) {
         goto close_and_return;

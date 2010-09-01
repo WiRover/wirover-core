@@ -1,0 +1,10 @@
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCONTROLLER")
+
+add_executable(wicontroller
+    wicontroller.c
+    ${COMMON}/contchan.c
+    ${COMMON}/debug.c
+    ${COMMON}/sockets.c
+    ${COMMON}/virtInterface.c
+)
+
