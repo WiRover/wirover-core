@@ -3,6 +3,7 @@
 
 #include "contchan.h"
 #include "debug.h"
+#include "netlink.h"
 #include "virtInterface.h"
 
 const char* WIROOT_ADDRESS = "128.105.22.229";
@@ -18,7 +19,7 @@ int main(int argc, char* argv[])
     priv_ip = obtain_lease(WIROOT_ADDRESS, WIROOT_PORT);
     if(priv_ip == -1) {
         DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
-        exit(1);
+//        exit(1);
     }
 
     char p_ip[INET_ADDRSTRLEN];
@@ -29,7 +30,12 @@ int main(int argc, char* argv[])
     result = setup_virtual_interface(p_ip);
     if(result == -1) {
         DEBUG_MSG("Fatal error: failed to bring up virtual interface");
-        exit(1);
+//        exit(1);
+    }
+
+    result = init_interface_list();
+    if(result == -1) {
+        DEBUG_MSG("Failed to initialize interface list");
     }
 
     return 0;

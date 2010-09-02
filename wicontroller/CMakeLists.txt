@@ -4,6 +4,7 @@ add_executable(wicontroller
     wicontroller.c
     ${COMMON}/contchan.c
     ${COMMON}/debug.c
+    ${COMMON}/netlink.c
     ${COMMON}/sockets.c
     ${COMMON}/virtInterface.c
 )
