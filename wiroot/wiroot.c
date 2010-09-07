@@ -16,6 +16,7 @@
 #include "lease.h"
 #include "sockets.h"
 #include "utlist.h"
+#include "common/rootchan.h"
 
 const unsigned int  MTU = 1500;
 const char*         CONFIG_FILENAME = "wiroot.conf";
@@ -236,10 +237,10 @@ static void handle_incoming(struct client* client)
 
     uint8_t type = packet[0];
     switch(type) {
-        case CCHAN_GATEWAY_CONFIG:
+        case RCHAN_GATEWAY_CONFIG:
             handle_gateway_config(client, packet, bytes);
             break;
-        case CCHAN_CONTROLLER_CONFIG:
+        case RCHAN_CONTROLLER_CONFIG:
             handle_controller_config(client, packet, bytes);
             break;
     }
@@ -251,7 +252,7 @@ static void handle_incoming(struct client* client)
  * Processes a request from a gateway and sends a response.
  */
 static void handle_gateway_config(struct client* client, const char* packet, int length) {
-    struct cchan_request* request = (struct cchan_request*)packet;
+    struct rchan_request* request = (struct rchan_request*)packet;
 
     const struct lease* lease;
     lease = grant_lease(request->hw_addr, sizeof(request->hw_addr));
@@ -262,12 +263,12 @@ static void handle_gateway_config(struct client* client, const char* packet, int
     unsigned short unique_id = db_get_unique_id(p_hw_addr);
 
     char response_buffer[MTU];
-    struct cchan_response* response = (struct cchan_response*)response_buffer;
+    struct rchan_response* response = (struct rchan_response*)response_buffer;
     response->type = request->type;
     response->unique_id = htons(unique_id);
 
     // Any controller IPs will be added to the packet after this structure.
-    int response_index = sizeof(struct cchan_response);
+    int response_index = sizeof(struct rchan_response);
 
     if(lease) {
         struct node* node_list[MAX_CONTROLLERS];
@@ -276,11 +277,11 @@ static void handle_gateway_config(struct client* client, const char* packet, int
 
         int i;
         for(i = 0; i < response->controllers; i++) {
-            struct cchan_controller_info* cinfo =
-                    (struct cchan_controller_info*)&response_buffer[response_index];
+            struct rchan_controller_info* cinfo =
+                    (struct rchan_controller_info*)&response_buffer[response_index];
             cinfo->priv_ip = node_list[i]->priv_ip;
             cinfo->pub_ip = node_list[i]->pub_ip;
-            response_index += sizeof(struct cchan_controller_info);
+            response_index += sizeof(struct rchan_controller_info);
         }
 
         response->priv_ip = lease->ip;
@@ -299,7 +300,7 @@ static void handle_gateway_config(struct client* client, const char* packet, int
  * Processes a request from a controller and sends a response.
  */
 static void handle_controller_config(struct client* client, const char* packet, int length) {
-    struct cchan_request* request = (struct cchan_request*)packet;
+    struct rchan_request* request = (struct rchan_request*)packet;
 
     const struct lease* lease;
     lease = grant_lease(request->hw_addr, sizeof(request->hw_addr));
@@ -310,7 +311,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
     unsigned short unique_id = db_get_unique_id(p_hw_addr);
     
     char response_buffer[MTU];
-    struct cchan_response* response = (struct cchan_response*)response_buffer;
+    struct rchan_response* response = (struct rchan_response*)response_buffer;
     response->type = request->type;
     response->unique_id = htons(unique_id);
 
@@ -323,7 +324,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
         response->controllers = 0;
     }
 
-    int bytes = send(client->fd, response, sizeof(struct cchan_response), 0);
+    int bytes = send(client->fd, response, sizeof(struct rchan_response), 0);
     if(bytes < sizeof(response)) {
         DEBUG_MSG("Failed to send lease response");
     }

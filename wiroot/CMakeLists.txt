@@ -9,9 +9,3 @@ add_executable(wiroot
 
 target_link_libraries(wiroot config mysqlclient)
 
-add_executable(test
-    test.c
-    ${COMMON}/debug.c
-    ${COMMON}/sockets.c
-)
-

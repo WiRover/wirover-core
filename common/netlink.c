@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -12,6 +13,13 @@ static void add_interface(struct interface* ife);
 static const char* read_dev_name(const char* __restrict__ buffer, char* __restrict__ dest, int destlen);
 
 static struct interface* head_interface = 0;
+
+static pthread_mutex_t list_access_lock = PTHREAD_MUTEX_INITIALIZER;
+static unsigned int    active_readers = 0;
+static unsigned int    active_writers = 0;
+static unsigned int    waiting_writers = 0;
+static pthread_cond_t  list_read_cond = PTHREAD_COND_INITIALIZER;
+static pthread_cond_t  list_write_cond = PTHREAD_COND_INITIALIZER;
 
 /*
  * INIT INTERFACE LIST
@@ -103,6 +111,62 @@ static const char* read_dev_name(const char* __restrict__ buffer, char* __restri
     }
 
     return &buffer[i];
+}
+
+struct interface* obtain_read_lock()
+{
+    pthread_mutex_lock(&list_access_lock);
+
+    while(waiting_writers > 0) {
+        pthread_cond_wait(&list_read_cond, &list_access_lock);
+    }
+    active_readers++;
+
+    pthread_mutex_unlock(&list_access_lock);
+
+    return head_interface;
+}
+
+struct interface* obtain_write_lock()
+{
+    pthread_mutex_lock(&list_access_lock);
+
+    while(active_readers > 0 || active_writers > 0) {
+        waiting_writers++;
+        pthread_cond_wait(&list_write_cond, &list_access_lock);
+        waiting_writers--;
+    }
+    active_writers++;
+    
+    pthread_mutex_unlock(&list_access_lock);
+
+    return head_interface;
+}
+
+void release_read_lock()
+{
+    pthread_mutex_lock(&list_access_lock);
+
+    active_readers--;
+    if(waiting_writers > 0 && active_readers == 0) {
+        pthread_cond_signal(&list_write_cond);
+    }
+
+    pthread_mutex_unlock(&list_access_lock);
+}
+
+void release_write_lock()
+{
+    pthread_mutex_lock(&list_access_lock);
+
+    active_writers--;
+    if(waiting_writers > 0) {
+        pthread_cond_signal(&list_write_cond);
+    } else {
+        pthread_cond_broadcast(&list_read_cond);
+    }
+
+    pthread_mutex_unlock(&list_access_lock);
 }
 
 

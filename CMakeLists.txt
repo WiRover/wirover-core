@@ -8,7 +8,7 @@ set(WIROVER_VERSION_MINOR 0)
 set(CMAKE_C_FLAGS "-g -Wall -pedantic -std=c99 -D_POSIX_C_SOURCE -DDEBUG_PRINT")
 
 # Include the common header files
-include_directories(${WIROVER_SOURCE_DIR}/common)
+include_directories(${WIROVER_SOURCE_DIR} ${WIROVER_SOURCE_DIR}/common)
 
 # Set the location of common source files
 set(COMMON ${WIROVER_SOURCE_DIR}/common)

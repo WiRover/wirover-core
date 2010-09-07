@@ -1,23 +1,20 @@
 #include <math.h>
+#include <stdlib.h>
+#include <string.h>
 #include <stropts.h>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <linux/if.h>
 
-#include "contchan.h"
 #include "debug.h"
+#include "rootchan.h"
 #include "sockets.h"
-
-static uint32_t private_ip = 0;
-static uint16_t unique_id = 0;
 
 /*
  * OBTAIN LEASE
- *
- * Returns a valid IPv4 address or 0 on error.
  */
-uint32_t obtain_lease(const char* wiroot_ip, unsigned short wiroot_port)
+struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_port)
 {
     int sockfd;
     int bytes;
@@ -29,11 +26,11 @@ uint32_t obtain_lease(const char* wiroot_ip, unsigned short wiroot_port)
         return 0;
     }
 
-    struct cchan_request request;
+    struct rchan_request request;
 #ifdef CONTROLLER
-    request.type = CCHAN_CONTROLLER_CONFIG;
+    request.type = RCHAN_CONTROLLER_CONFIG;
 #else
-    request.type = CCHAN_GATEWAY_CONFIG;
+    request.type = RCHAN_GATEWAY_CONFIG;
 #endif
     request.latitude = NAN;
     request.longitude = NAN;
@@ -42,33 +39,67 @@ uint32_t obtain_lease(const char* wiroot_ip, unsigned short wiroot_port)
     result = get_device_mac("eth0", request.hw_addr, sizeof(request.hw_addr));
     if(result == -1) {
         DEBUG_MSG("get_device_mac() failed");
+        close(sockfd);
         return 0;
     }
 
-    bytes = send(sockfd, &request, sizeof(struct cchan_request), 0);
+    bytes = send(sockfd, &request, sizeof(struct rchan_request), 0);
     if(bytes <= 0) {
         ERROR_MSG("error sending lease request");
+        close(sockfd);
         return 0;
     }
 
-    char pkt_buff[1024];
-
-    bytes = recv(sockfd, pkt_buff, sizeof(pkt_buff), 0);
+    struct rchan_response response;
+    bytes = recv(sockfd, &response, sizeof(response), 0);
     if(bytes <= 0) {
         ERROR_MSG("error receiving lease response");
+        close(sockfd);
         return 0;
-    } else if(bytes < sizeof(struct cchan_response)) {
+    } else if(bytes < sizeof(struct rchan_response)) {
         DEBUG_MSG("lease response was too small to be valid");
+        close(sockfd);
+        return 0;
+    }
+
+    struct lease_info* lease;
+    lease = (struct lease_info*)malloc(sizeof(struct lease_info));
+    ASSERT_OR_ELSE(lease) {
+        DEBUG_MSG("out of memory");
+        close(sockfd);
+        return 0;
+    }
+
+    lease->priv_ip = response.priv_ip;
+    lease->unique_id = ntohs(response.unique_id);
+    lease->controllers = response.controllers;
+    
+    const int cinfo_size = lease->controllers * sizeof(struct rchan_controller_info);
+    lease->cinfo = (struct rchan_controller_info*)malloc(cinfo_size);
+    ASSERT_OR_ELSE(lease->cinfo) {
+        DEBUG_MSG("out of memory");
+        free(lease);
+        close(sockfd);
+        return 0;
+    }
+
+    bytes = recv(sockfd, lease->cinfo, cinfo_size, 0);
+    if(bytes <= 0) {
+        ERROR_MSG("error receiving lease response");
+        free(lease->cinfo);
+        free(lease);
+        close(sockfd);
+        return 0;
+    } else if(bytes < cinfo_size) {
+        DEBUG_MSG("lease response was too small to be valid");
+        free(lease->cinfo);
+        free(lease);
+        close(sockfd);
         return 0;
     }
 
     close(sockfd);
-
-    struct cchan_response* response = (struct cchan_response*)pkt_buff;
-    private_ip = response->priv_ip;
-    unique_id = response->unique_id;
-
-    return response->priv_ip;
+    return lease;
 }
 
 /*
@@ -103,4 +134,6 @@ int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, 
 
     return copy_bytes;
 }
+
+
 

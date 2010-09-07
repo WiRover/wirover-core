@@ -5,25 +5,26 @@
 #include "debug.h"
 #include "netlink.h"
 #include "virtInterface.h"
+#include "common/rootchan.h"
 
 const char* WIROOT_ADDRESS = "128.105.22.229";
 const unsigned short WIROOT_PORT = 8088;
 
 int main(int argc, char* argv[])
 {
-    uint32_t priv_ip;
+    struct lease_info* lease;
     int result;
 
     DEBUG_MSG("Starting wicontroller...");
 
-    priv_ip = obtain_lease(WIROOT_ADDRESS, WIROOT_PORT);
-    if(priv_ip == -1) {
+    lease = obtain_lease(WIROOT_ADDRESS, WIROOT_PORT);
+    if(!lease) {
         DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
 //        exit(1);
     }
 
     char p_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &priv_ip, p_ip, sizeof(p_ip));
+    inet_ntop(AF_INET, &lease->priv_ip, p_ip, sizeof(p_ip));
 
     DEBUG_MSG("Obtained lease of %s", p_ip);
 
