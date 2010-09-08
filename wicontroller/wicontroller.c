@@ -1,14 +1,23 @@
+#include <errno.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <arpa/inet.h>
 
 #include "contchan.h"
 #include "debug.h"
 #include "netlink.h"
+#include "rootchan.h"
+#include "sockets.h"
+#include "utlist.h"
 #include "virtInterface.h"
-#include "common/rootchan.h"
 
 const char* WIROOT_ADDRESS = "128.105.22.229";
+const unsigned short CCHAN_PORT = 8082;
 const unsigned short WIROOT_PORT = 8088;
+const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_idle_clients()
+const unsigned int  CLIENT_TIMEOUT = 5;
+
+static void server_loop(int cchan_sock);
 
 int main(int argc, char* argv[])
 {
@@ -39,6 +48,63 @@ int main(int argc, char* argv[])
         DEBUG_MSG("Failed to initialize interface list");
     }
 
+
+    int cchan_sock = tcp_passive_open(CCHAN_PORT, SOMAXCONN);
+    if(cchan_sock == -1) {
+        DEBUG_MSG("Failed to open control channel socket.");
+        exit(1);
+    }
+    set_nonblock(cchan_sock, 1);
+
+    server_loop(cchan_sock);
+
+    close(cchan_sock);
     return 0;
 }
+
+static void server_loop(int cchan_sock)
+{
+    int result;
+    struct client* cchan_clients = 0;
+
+    while(1) {
+        fd_set read_set;
+        FD_ZERO(&read_set);
+        FD_SET(cchan_sock, &read_set);
+
+        struct timeval timeout;
+        timeout.tv_sec = CLEANUP_INTERVAL;
+        timeout.tv_usec = 0;
+
+        int max_fd = cchan_sock;
+        fdset_add_clients(cchan_clients, &read_set, &max_fd);
+
+        result = select(max_fd+1, &read_set, 0, 0, &timeout);
+        if(result == -1) {
+            if(errno != EINTR) {
+                ERROR_MSG("select failed");
+                return;
+            }
+        } else if(result == 0) {
+            // If select timed out, we must be idle, so it is a good time for
+            // cleanup.
+            remove_idle_clients(cchan_clients, CLIENT_TIMEOUT);
+        } else {
+            if(FD_ISSET(cchan_sock, &read_set)) {
+                handle_connection(cchan_clients, cchan_sock);
+                DEBUG_MSG("client!");
+            }
+
+            struct client* client;
+            struct client* tmp;
+
+            DL_FOREACH_SAFE(cchan_clients, client, tmp) {
+                if(FD_ISSET(client->fd, &read_set)) {
+                    handle_disconnection(cchan_clients, client);
+                }
+            }
+        }
+    }
+}
+
 

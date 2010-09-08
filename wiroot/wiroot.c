@@ -20,25 +20,7 @@
 
 const unsigned int  MTU = 1500;
 const char*         CONFIG_FILENAME = "wiroot.conf";
-const int           MAX_CONTROLLERS = 3;
 const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_stale_leases()
-
-/*
- * STRUCT CLIENT
- *
- * Stores information about a connected client.  This is not to be confused
- * with outstanding leases.  Client connections are very short-lived.
- */
-struct client {
-    int                 fd;
-    struct sockaddr_in  addr;
-    socklen_t           addr_len;
-    time_t              last_active;
-
-    //only to be modified by utlist
-    struct client*      next;
-    struct client*      prev;
-};
 
 // This default value will be writted during configuration.
 static unsigned short WIROOT_PORT = 8088;
@@ -50,14 +32,10 @@ static struct client* clients_head = 0;
 static config_t       config;
 
 static int  configure_wiroot(const char* filename);
-static void handle_connection(int server_sock);
 static void handle_incoming(struct client* client);
 static void handle_gateway_config(struct client* client, const char* packet, int length);
 static void handle_controller_config(struct client* client, const char* packet, int length);
-static void handle_disconnection(struct client* client);
-static void fdset_add_clients(fd_set* set, int* max_fd);
 static int  find_config_file(char* filename, int length);
-static void remove_idle_clients();
 
 int main(int argc, char* argv[])
 {
@@ -92,7 +70,7 @@ int main(int argc, char* argv[])
         timeout.tv_usec = 0;
 
         int max_fd = server_sock;
-        fdset_add_clients(&read_set, &max_fd);
+        fdset_add_clients(clients_head, &read_set, &max_fd);
 
         result = select(max_fd+1, &read_set, 0, 0, &timeout);
         if(result == -1) {
@@ -104,10 +82,10 @@ int main(int argc, char* argv[])
             // If select timed out, we must be idle, so it is a good time for
             // cleanup.
             remove_stale_leases();
-            remove_idle_clients();
+            remove_idle_clients(clients_head, CLIENT_TIMEOUT);
         } else {
             if(FD_ISSET(server_sock, &read_set)) {
-                handle_connection(server_sock);
+                handle_connection(clients_head, server_sock);
             }
 
             struct client* client;
@@ -182,34 +160,6 @@ static int configure_wiroot(const char* filename)
 }
 
 /*
- * HANDLE CONNECTION
- *
- * Accepts a client connection attempt and adds it to the linked list of
- * clients.
- */
-static void handle_connection(int server_sock)
-{
-    struct client* client = (struct client*)malloc(sizeof(struct client));
-    assert(client);
-
-    client->addr_len = sizeof(client->addr);
-    client->fd = accept(server_sock, (struct sockaddr*)&client->addr, &client->addr_len);
-    if(client->fd == -1) {
-        ERROR_MSG("accept() failed");
-        free(client);
-        return;
-    }
-
-    // All of our sockets will be non-blocking since they are handled by a
-    // single thread, and we cannot have one evil client hold up the rest.
-    set_nonblock(client->fd, 1);
-
-    client->last_active = time(0);
-
-    DL_APPEND(clients_head, client);
-}
-
-/*
  * HANDLE INCOMING
  *
  * Receives a packet from a client and dispatches it to an appropriate packet
@@ -228,7 +178,7 @@ static void handle_incoming(struct client* client)
         ERROR_MSG("recv() failed");
         return;
     } else if(bytes == 0) {
-        handle_disconnection(client);
+        handle_disconnection(clients_head, client);
         return;
     } else if(bytes < MIN_REQUEST_LEN) {
         DEBUG_MSG("Client packet was too small to be a valid request.");
@@ -262,34 +212,30 @@ static void handle_gateway_config(struct client* client, const char* packet, int
     to_hex_string((const char*)request->hw_addr, sizeof(request->hw_addr), p_hw_addr, sizeof(p_hw_addr));
     unsigned short unique_id = db_get_unique_id(p_hw_addr);
 
-    char response_buffer[MTU];
-    struct rchan_response* response = (struct rchan_response*)response_buffer;
-    response->type = request->type;
-    response->unique_id = htons(unique_id);
-
-    // Any controller IPs will be added to the packet after this structure.
-    int response_index = sizeof(struct rchan_response);
+    struct rchan_response response;
+    response.type = request->type;
+    response.unique_id = htons(unique_id);
 
     if(lease) {
         struct node* node_list[MAX_CONTROLLERS];
-        response->controllers = assign_controllers(node_list, MAX_CONTROLLERS, 
+        response.controllers = assign_controllers(node_list, MAX_CONTROLLERS, 
                 request->latitude, request->longitude);
 
         int i;
-        for(i = 0; i < response->controllers; i++) {
-            struct rchan_controller_info* cinfo =
-                    (struct rchan_controller_info*)&response_buffer[response_index];
-            cinfo->priv_ip = node_list[i]->priv_ip;
-            cinfo->pub_ip = node_list[i]->pub_ip;
-            response_index += sizeof(struct rchan_controller_info);
+        for(i = 0; i < response.controllers && i < MAX_CONTROLLERS; i++) {
+            response.cinfo[i].priv_ip = node_list[i]->priv_ip;
+            response.cinfo[i].pub_ip = node_list[i]->pub_ip;
         }
 
-        response->priv_ip = lease->ip;
-        response->lease_time = (lease->end - lease->start);
+        response.priv_ip = lease->ip;
+        response.lease_time = (lease->end - lease->start);
     }
 
-    int bytes = send(client->fd, response, response_index, 0);
-    if(bytes < sizeof(response)) {
+    const unsigned int response_len = MIN_RESPONSE_LEN +
+            response.controllers * sizeof(struct controller_info);
+
+    int bytes = send(client->fd, &response, response_len, 0);
+    if(bytes < response_len) {
         DEBUG_MSG("Failed to send lease response");
     }
 }
@@ -331,42 +277,6 @@ static void handle_controller_config(struct client* client, const char* packet, 
 }
 
 /*
- * HANDLE DISCONNECTION
- *
- * Removes a client from the linked list, closes its socket, and frees its
- * memory.
- */
-static void handle_disconnection(struct client* client)
-{
-    assert(client);
-
-    close(client->fd);
-    client->fd = -1;
-
-    DL_DELETE(clients_head, client);
-    free(client);
-}
-
-/*
- * FDSET ADD CLIENTS
- *
- * Adds every client in the list to an fd_set and updates the max_fd value.
- */
-static void fdset_add_clients(fd_set* set, int* max_fd)
-{
-    assert(set && max_fd);
-
-    struct client* client;
-    DL_FOREACH(clients_head, client) {
-        FD_SET(client->fd, set);
-
-        if(client->fd > *max_fd) {
-            *max_fd = client->fd;
-        }
-    }
-}
-
-/*
  * FIND CONFIG FILE
  *
  * Checks the current directory and the system /etc directory for wiroot.conf.
@@ -393,24 +303,5 @@ static int find_config_file(char* filename, int length)
     }
 
     return 0;
-}
-
-/*
- * REMOVE IDLE CLIENTS
- *
- * Drops connections that are idle.
- */
-void remove_idle_clients()
-{
-    time_t cutoff = time(0) - CLIENT_TIMEOUT;
-
-    struct client* client;
-    struct client* tmp;
-
-    DL_FOREACH_SAFE(clients_head, client, tmp) {
-        if(client->last_active <= cutoff) {
-            handle_disconnection(client);           
-        }
-    }
 }
 

@@ -1,6 +1,7 @@
 #ifndef _ROOTCHAN_H_
 #define _ROOTCHAN_H_
 
+#include <stddef.h>
 #include <stdint.h>
 #include <sys/socket.h>
 #include <linux/if.h>
@@ -8,9 +9,17 @@
 
 #include "netlink.h"
 
+// Root server will inform gateway of at most 3 controllers
+#define MAX_CONTROLLERS     3
+
 #define RCHAN_GATEWAY_CONFIG       0x01
 #define RCHAN_CONTROLLER_CONFIG    0x02
 #define RCHAN_SHUTDOWN             0x03
+
+struct controller_info {
+    uint32_t    priv_ip;
+    uint32_t    pub_ip;
+} __attribute__((__packed__));
 
 struct rchan_request {
     uint8_t     type;
@@ -26,13 +35,10 @@ struct rchan_response {
     uint32_t    lease_time;
     uint16_t    unique_id;
     uint8_t     controllers;
-} __attribute__((__packed__));
-#define MIN_RESPONSE_LEN (sizeof(struct rchan_response))
 
-struct rchan_controller_info {
-    uint32_t    priv_ip;
-    uint32_t    pub_ip;
+    struct controller_info cinfo[MAX_CONTROLLERS];
 } __attribute__((__packed__));
+#define MIN_RESPONSE_LEN (offsetof(struct rchan_response, cinfo))
 
 struct lease_info {
     uint32_t    priv_ip;
@@ -40,7 +46,7 @@ struct lease_info {
     uint16_t    unique_id;
 
     unsigned int    controllers;
-    struct rchan_controller_info* cinfo;
+    struct controller_info* cinfo;
 };
 
 struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_port);

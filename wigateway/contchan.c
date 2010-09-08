@@ -28,32 +28,47 @@ int send_notification(const struct lease_info* lease)
         return -1;
     }
 
-    char packet[1024];
-    struct cchan_notification* notification = (struct cchan_notification*)packet;
-    struct cchan_interface_info* ife_info =
-           (struct cchan_interface_info*)(packet + sizeof(struct cchan_notification));
+    struct cchan_notification notification;
 
-    notification->type = CCHAN_NOTIFICATION;
-    notification->priv_ip = lease->priv_ip;
-    notification->unique_id = lease->unique_id;
+    notification.type = CCHAN_NOTIFICATION;
+    notification.priv_ip = lease->priv_ip;
+    notification.unique_id = lease->unique_id;
 
     int ife_ind = 0;
     struct interface* ife = obtain_read_lock();
-    while(ife) {
-        memset(&ife_info[ife_ind], 0, sizeof(ife_info[ife_ind]));
+    while(ife && ife_ind < MAX_INTERFACES) {
+        struct interface_info* dest = &notification.if_info[ife_ind];
 
-        strncpy(ife_info[ife_ind].ifname, ife->name,
-                sizeof(ife_info[ife_ind].ifname));
-        strncpy(ife_info[ife_ind].network, ife->network,
-                sizeof(ife_info[ife_ind].network));
-        ife_info[ife_ind].state = ife->state;
+        memset(dest, 0, sizeof(*dest));
+
+        strncpy(dest->ifname, ife->name, sizeof(dest->ifname));
+        strncpy(dest->network, ife->network, sizeof(dest->network));
+        dest->state = ife->state;
 
         ife = ife->next;
         ife_ind++;
     }
     release_read_lock();
     
-    notification->interfaces = ife_ind;
+    notification.interfaces = ife_ind;
+    
+    const size_t notification_len = MIN_NOTIFICATION_LEN +
+            ife_ind * sizeof(struct interface_info);
+
+    int bytes = send(sockfd, &notification, notification_len, 0);
+    if(bytes < 0) {
+        ERROR_MSG("sending notification failed");
+        close(sockfd);
+        return -1;
+    } else if(bytes == 0) {
+        DEBUG_MSG("Controller closed control channel");
+        close(sockfd);
+        return -1;
+    } else if(bytes < notification_len) {
+        DEBUG_MSG("Full notification packet was not sent, investigate this.");
+        close(sockfd);
+        return -1;
+    }
 
     close(sockfd);
     return 0;

@@ -26,6 +26,8 @@ int main(int argc, char* argv[])
     inet_ntop(AF_INET, &lease->priv_ip, p_ip, sizeof(p_ip));
     DEBUG_MSG("Obtained lease of %s and unique id %u", p_ip, lease->unique_id);
 
+    DEBUG_MSG("There are %d controllers available.", lease->controllers);
+
     result = setup_virtual_interface(p_ip);
     if(result == -1) {
         DEBUG_MSG("Fatal error: failed to bring up virtual interface");
@@ -35,6 +37,11 @@ int main(int argc, char* argv[])
     result = init_interface_list();
     if(result == -1) {
         DEBUG_MSG("Failed to initialize interface list");
+    }
+
+    result = send_notification(lease);
+    if(result == -1) {
+        DEBUG_MSG("Failed to send notification to controller.");
     }
 
     return 0;

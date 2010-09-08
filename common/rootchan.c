@@ -56,11 +56,13 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
         ERROR_MSG("error receiving lease response");
         close(sockfd);
         return 0;
-    } else if(bytes < sizeof(struct rchan_response)) {
+    } else if(bytes < MIN_RESPONSE_LEN) {
         DEBUG_MSG("lease response was too small to be valid");
         close(sockfd);
         return 0;
     }
+
+    close(sockfd);
 
     struct lease_info* lease;
     lease = (struct lease_info*)malloc(sizeof(struct lease_info));
@@ -73,32 +75,22 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
     lease->priv_ip = response.priv_ip;
     lease->unique_id = ntohs(response.unique_id);
     lease->controllers = response.controllers;
-    
-    const int cinfo_size = lease->controllers * sizeof(struct rchan_controller_info);
-    lease->cinfo = (struct rchan_controller_info*)malloc(cinfo_size);
+
+    if(response.controllers == 0) {
+        lease->cinfo = 0;
+        return lease;
+    }
+   
+    const int cinfo_size = lease->controllers * sizeof(struct controller_info);
+    lease->cinfo = (struct controller_info*)malloc(cinfo_size);
     ASSERT_OR_ELSE(lease->cinfo) {
         DEBUG_MSG("out of memory");
         free(lease);
-        close(sockfd);
         return 0;
     }
+    
+    memcpy(lease->cinfo, response.cinfo, cinfo_size);
 
-    bytes = recv(sockfd, lease->cinfo, cinfo_size, 0);
-    if(bytes <= 0) {
-        ERROR_MSG("error receiving lease response");
-        free(lease->cinfo);
-        free(lease);
-        close(sockfd);
-        return 0;
-    } else if(bytes < cinfo_size) {
-        DEBUG_MSG("lease response was too small to be valid");
-        free(lease->cinfo);
-        free(lease);
-        close(sockfd);
-        return 0;
-    }
-
-    close(sockfd);
     return lease;
 }
 

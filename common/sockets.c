@@ -2,11 +2,15 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 
 #include "debug.h"
+#include "sockets.h"
+#include "utlist.h"
 
 /*
  * TCP PASSIVE OPEN
@@ -131,4 +135,92 @@ int set_nonblock(int sockfd, int enable)
 
     return 0;
 }
+
+/*
+ * FDSET ADD CLIENTS
+ *
+ * Adds every client in the linked list to the given fd_set and updates the
+ * max_fd value.  Both of these operations are generally necessary before using
+ * select().
+ */
+void fdset_add_clients(const struct client* head, fd_set* set, int* max_fd)
+{
+    assert(set && max_fd);
+
+    while(head) {
+        FD_SET(head->fd, set);
+
+        if(head->fd > *max_fd) {
+            *max_fd = head->fd;
+        }
+
+        assert(head != head->next);
+        head = head->next;
+    }
+}
+
+/*
+ * HANDLE CONNECTION
+ *
+ * Accepts a client connection attempt and adds it to the linked list of
+ * clients.
+ */
+void handle_connection(struct client* head, int server_sock)
+{
+    struct client* client = (struct client*)malloc(sizeof(struct client));
+    assert(client);
+
+    client->addr_len = sizeof(client->addr);
+    client->fd = accept(server_sock, (struct sockaddr*)&client->addr, &client->addr_len);
+    if(client->fd == -1) {
+        ERROR_MSG("accept() failed");
+        free(client);
+        return;
+    }
+
+    // All of our sockets will be non-blocking since they are handled by a
+    // single thread, and we cannot have one evil client hold up the rest.
+    set_nonblock(client->fd, 1);
+
+    client->last_active = time(0);
+
+    DL_APPEND(head, client);
+}
+
+/*
+ * HANDLE DISCONNECTION
+ *
+ * Removes a client from the linked list, closes its socket, and frees its
+ * memory.
+ */
+void handle_disconnection(struct client* head, struct client* client)
+{
+    assert(head && client);
+
+    close(client->fd);
+    client->fd = -1;
+
+    DL_DELETE(head, client);
+    free(client);
+}
+
+/*
+ * REMOVE IDLE CLIENTS
+ *
+ * Drops connections that are idle.
+ */
+void remove_idle_clients(struct client* head, unsigned int timeout_sec)
+{
+    time_t cutoff = time(0) - timeout_sec;
+
+    struct client* client;
+    struct client* tmp;
+
+    DL_FOREACH_SAFE(head, client, tmp) {
+        if(client->last_active <= cutoff) {
+            handle_disconnection(head, client);
+        }
+    }
+}
+
 

@@ -1,6 +1,7 @@
 #ifndef _CONTCHAN_H_
 #define _CONTCHAN_H_
 
+#include <stddef.h>
 #include <stdint.h>
 #include <sys/socket.h>
 #include <linux/if.h>
@@ -8,21 +9,29 @@
 
 #include "netlink.h"
 
+#define MAX_INTERFACES    6
+
 #define CCHAN_NOTIFICATION         0x10
+
+struct interface_info {
+    char        ifname[IFNAMSIZ];
+    char        network[NETWORK_NAME_LENGTH];
+    uint8_t     state;
+} __attribute__((__packed__));
 
 struct cchan_notification {
     uint8_t     type;
     uint32_t    priv_ip;
     uint16_t    unique_id;
     uint8_t     interfaces;
+    struct interface_info if_info[MAX_INTERFACES];
 } __attribute__((__packed__));
-#define MIN_NOTIFICATION_LEN (sizeof(struct cchan_notification))
+#define MIN_NOTIFICATION_LEN (offsetof(struct cchan_notification, if_info))
 
-struct cchan_interface_info {
-    char        ifname[IFNAMSIZ];
-    char        network[NETWORK_NAME_LENGTH];
-    uint8_t     state;
-} __attribute__((__packed__));
+#ifdef GATEWAY
+struct lease_info;
+int send_notification(const struct lease_info* lease);
+#endif
 
 #endif //_CONTCHAN_H_
 
