@@ -82,10 +82,10 @@ int main(int argc, char* argv[])
             // If select timed out, we must be idle, so it is a good time for
             // cleanup.
             remove_stale_leases();
-            remove_idle_clients(clients_head, CLIENT_TIMEOUT);
+            remove_idle_clients(&clients_head, CLIENT_TIMEOUT);
         } else {
             if(FD_ISSET(server_sock, &read_set)) {
-                handle_connection(clients_head, server_sock);
+                handle_connection(&clients_head, server_sock);
             }
 
             struct client* client;
@@ -178,7 +178,7 @@ static void handle_incoming(struct client* client)
         ERROR_MSG("recv() failed");
         return;
     } else if(bytes == 0) {
-        handle_disconnection(clients_head, client);
+        handle_disconnection(&clients_head, client);
         return;
     } else if(bytes < MIN_REQUEST_LEN) {
         DEBUG_MSG("Client packet was too small to be a valid request.");

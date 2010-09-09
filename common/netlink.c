@@ -2,8 +2,6 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/socket.h>
-#include <linux/if.h>
 
 #include "debug.h"
 #include "netlink.h"

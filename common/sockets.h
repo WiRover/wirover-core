@@ -21,9 +21,9 @@ int set_nonblock(int sockfd, int enable);
 
 // Some generic TCP server functions
 void fdset_add_clients(const struct client* head, fd_set* set, int* max_fd);
-void handle_connection(struct client* head, int server_sock);
-void handle_disconnection(struct client* head, struct client* client);
-void remove_idle_clients(struct client* head, unsigned int timeout_sec);
+void handle_connection(struct client** head, int server_sock);
+void handle_disconnection(struct client** head, struct client* client);
+void remove_idle_clients(struct client** head, unsigned int timeout_sec);
 
 #endif //_SOCKETS_H_
 

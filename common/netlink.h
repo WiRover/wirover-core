@@ -1,6 +1,7 @@
 #ifndef _NETLINK_H_
 #define _NETLINK_H_
 
+#include <sys/socket.h>
 #include <linux/if.h>
 #include <netinet/in.h>
 
@@ -14,8 +15,8 @@ enum if_state {
 
 struct interface {
     char              name[IFNAMSIZ];
-    enum if_state     state;
     char              network[NETWORK_NAME_LENGTH];
+    enum if_state     state;
 
     // default gateway for routing if needed
     char              gw_ip[INET6_ADDRSTRLEN];

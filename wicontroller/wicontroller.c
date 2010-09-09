@@ -88,11 +88,10 @@ static void server_loop(int cchan_sock)
         } else if(result == 0) {
             // If select timed out, we must be idle, so it is a good time for
             // cleanup.
-            remove_idle_clients(cchan_clients, CLIENT_TIMEOUT);
+            remove_idle_clients(&cchan_clients, CLIENT_TIMEOUT);
         } else {
             if(FD_ISSET(cchan_sock, &read_set)) {
-                handle_connection(cchan_clients, cchan_sock);
-                DEBUG_MSG("client!");
+                handle_connection(&cchan_clients, cchan_sock);
             }
 
             struct client* client;
@@ -100,7 +99,16 @@ static void server_loop(int cchan_sock)
 
             DL_FOREACH_SAFE(cchan_clients, client, tmp) {
                 if(FD_ISSET(client->fd, &read_set)) {
-                    handle_disconnection(cchan_clients, client);
+                    char buffer[1500];
+                    int bytes = recv(client->fd, buffer, sizeof(buffer), 0);
+                    if(bytes < 0) {
+                        ERROR_MSG("Error receiving from client");
+                        handle_disconnection(&cchan_clients, client);
+                    } else if(bytes == 0) {
+                        handle_disconnection(&cchan_clients, client);
+                    } else {
+                        process_notification(buffer, bytes);
+                    }
                 }
             }
         }

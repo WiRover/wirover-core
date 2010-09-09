@@ -1,3 +1,12 @@
+/*
+ * contchan.h
+ *
+ * The control channel is a TCP connection between a gateway and a controller
+ * that the gateway uses to setup and update link states with the controller.
+ * This typically consists of notification messages whenever a link's state
+ * changes.
+ */
+
 #ifndef _CONTCHAN_H_
 #define _CONTCHAN_H_
 
@@ -27,6 +36,10 @@ struct cchan_notification {
     struct interface_info if_info[MAX_INTERFACES];
 } __attribute__((__packed__));
 #define MIN_NOTIFICATION_LEN (offsetof(struct cchan_notification, if_info))
+
+#ifdef CONTROLLER
+int process_notification(const char* packet, unsigned int pkt_len);
+#endif
 
 #ifdef GATEWAY
 struct lease_info;

@@ -165,8 +165,10 @@ void fdset_add_clients(const struct client* head, fd_set* set, int* max_fd)
  * Accepts a client connection attempt and adds it to the linked list of
  * clients.
  */
-void handle_connection(struct client* head, int server_sock)
+void handle_connection(struct client** head, int server_sock)
 {
+    assert(head);
+
     struct client* client = (struct client*)malloc(sizeof(struct client));
     assert(client);
 
@@ -184,7 +186,7 @@ void handle_connection(struct client* head, int server_sock)
 
     client->last_active = time(0);
 
-    DL_APPEND(head, client);
+    DL_APPEND(*head, client);
 }
 
 /*
@@ -193,14 +195,14 @@ void handle_connection(struct client* head, int server_sock)
  * Removes a client from the linked list, closes its socket, and frees its
  * memory.
  */
-void handle_disconnection(struct client* head, struct client* client)
+void handle_disconnection(struct client** head, struct client* client)
 {
     assert(head && client);
 
     close(client->fd);
     client->fd = -1;
 
-    DL_DELETE(head, client);
+    DL_DELETE(*head, client);
     free(client);
 }
 
@@ -209,14 +211,16 @@ void handle_disconnection(struct client* head, struct client* client)
  *
  * Drops connections that are idle.
  */
-void remove_idle_clients(struct client* head, unsigned int timeout_sec)
+void remove_idle_clients(struct client** head, unsigned int timeout_sec)
 {
+    assert(head);
+
     time_t cutoff = time(0) - timeout_sec;
 
     struct client* client;
     struct client* tmp;
 
-    DL_FOREACH_SAFE(head, client, tmp) {
+    DL_FOREACH_SAFE(*head, client, tmp) {
         if(client->last_active <= cutoff) {
             handle_disconnection(head, client);
         }

@@ -32,7 +32,7 @@ int send_notification(const struct lease_info* lease)
 
     notification.type = CCHAN_NOTIFICATION;
     notification.priv_ip = lease->priv_ip;
-    notification.unique_id = lease->unique_id;
+    notification.unique_id = htons(lease->unique_id);
 
     int ife_ind = 0;
     struct interface* ife = obtain_read_lock();
