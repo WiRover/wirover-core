@@ -55,5 +55,7 @@ int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, 
 uint32_t get_private_ip();
 uint16_t get_unique_id();
 
+const struct lease_info* get_lease_info();
+
 #endif //_ROOTCHAN_H_
 

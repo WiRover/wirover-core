@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <stdlib.h>
 #include <arpa/inet.h>
 
 #include "contchan.h"
@@ -51,20 +52,14 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
     assert(notif);
 
     struct gateway* gw = alloc_gateway();
-    if(!gw) {
-        return 0;
-    }
-    
     gw->private_ip = notif->priv_ip;
     gw->unique_id = ntohs(notif->unique_id);
 
     int i;
     for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
-        struct interface* ife = create_interface(notif->if_info[i].ifname);
-        if(!ife) {
-            return gw;
-        }
+        struct interface* ife = alloc_interface();
 
+        strncpy(ife->name, notif->if_info[i].ifname, sizeof(ife->name));
         strncpy(ife->network, notif->if_info[i].network, sizeof(ife->network));
         ife->state = notif->if_info[i].state;
 
@@ -88,12 +83,48 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
 {
     assert(gw && notif);
 
-    DEBUG_MSG("Warning: function not implemented");
+    struct interface* ife;
+    DL_FOREACH(gw->head_interface, ife) {
+        ife->state = DEAD;
+    }
+    gw->active_interfaces = 0;
 
     int i;
     for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
-        //TODO: Lookup interface, update or create
+        int is_new = 0;
+
+        ife = find_interface_by_name(gw->head_interface, notif->if_info[i].ifname);
+        if(!ife) {
+            is_new = 1;
+            ife = alloc_interface();
+            strncpy(ife->name, notif->if_info[i].ifname, sizeof(ife->name));
+        }
+        
+        strncpy(ife->network, notif->if_info[i].network, sizeof(ife->network));
+        ife->state = notif->if_info[i].state;
+
+        if(is_new) {
+            DL_APPEND(gw->head_interface, ife);
+        }
+
+        if(ife->state == ACTIVE) {
+            gw->active_interfaces++;
+        }
     }
+
+    struct interface* tmp;
+    DL_FOREACH_SAFE(gw->head_interface, ife, tmp) {
+        if(ife->state == DEAD) {
+            DL_DELETE(gw->head_interface, ife);
+            free(ife);
+        }
+    }
+    
+    char p_ip[INET_ADDRSTRLEN];
+    inet_ntop(AF_INET, &gw->private_ip, p_ip, sizeof(p_ip));
+
+    DEBUG_MSG("Updated gateway %s (uid %d) with %d active interfaces",
+              p_ip, gw->unique_id, gw->active_interfaces);
 }
 
 

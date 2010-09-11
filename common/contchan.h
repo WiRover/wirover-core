@@ -16,7 +16,7 @@
 #include <linux/if.h>
 #include <linux/if_ether.h>
 
-#include "netlink.h"
+#include "interface.h"
 
 #define MAX_INTERFACES    6
 

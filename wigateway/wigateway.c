@@ -1,11 +1,12 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 
+#include "config.h"
 #include "contchan.h"
 #include "debug.h"
 #include "netlink.h"
+#include "rootchan.h"
 #include "virtInterface.h"
-#include "common/rootchan.h"
 
 const char* WIROOT_ADDRESS = "128.105.22.229";
 const unsigned short WIROOT_PORT = 8088;
@@ -14,7 +15,8 @@ int main(int argc, char* argv[])
 {
     int result;
 
-    DEBUG_MSG("Starting wigateway...");
+    DEBUG_MSG("Starting wigateway version %d.%d",
+              WIROVER_VERSION_MAJOR, WIROVER_VERSION_MINOR);
 
     const struct lease_info* lease = obtain_lease(WIROOT_ADDRESS, WIROOT_PORT);
     if(lease == 0) {
@@ -33,7 +35,11 @@ int main(int argc, char* argv[])
         DEBUG_MSG("Fatal error: failed to bring up virtual interface");
 //        exit(1);
     }
-
+    
+    if(create_netlink_thread() == -1) {
+        DEBUG_MSG("Failed to create netlink thread");
+    }
+    
     result = init_interface_list();
     if(result == -1) {
         DEBUG_MSG("Failed to initialize interface list");
@@ -43,6 +49,8 @@ int main(int argc, char* argv[])
     if(result == -1) {
         DEBUG_MSG("Failed to send notification to controller.");
     }
+
+    wait_for_netlink_thread();
 
     return 0;
 }

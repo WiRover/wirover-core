@@ -5,9 +5,12 @@ add_executable(wicontroller
     contchan.c
     gateway.c
     ${COMMON}/debug.c
-    ${COMMON}/netlink.c
+    ${COMMON}/interface.c
     ${COMMON}/rootchan.c
+    ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
     ${COMMON}/virtInterface.c
 )
+
+target_link_libraries(wicontroller pthread)
 

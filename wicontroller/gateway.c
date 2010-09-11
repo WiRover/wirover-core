@@ -12,13 +12,9 @@ static struct gateway* gateway_id_hash = 0;
 struct gateway* alloc_gateway()
 {
     struct gateway* gw = (struct gateway*)malloc(sizeof(struct gateway));
-    ASSERT_OR_ELSE(gw) {
-        DEBUG_MSG("out of memory");
-        return 0;
-    }
-
+    assert(gw);
+    
     gw->creation_time = time(0);
-
     gw->active_interfaces = 0;
     gw->head_interface = 0;
 

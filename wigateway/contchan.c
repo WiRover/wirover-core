@@ -4,8 +4,9 @@
 #include "contchan.h"
 #include "debug.h"
 #include "netlink.h"
+#include "rootchan.h"
+#include "rwlock.h"
 #include "sockets.h"
-#include "common/rootchan.h"
 
 const unsigned short CCHAN_PORT = 8082;
 
@@ -34,8 +35,10 @@ int send_notification(const struct lease_info* lease)
     notification.priv_ip = lease->priv_ip;
     notification.unique_id = htons(lease->unique_id);
 
+    obtain_read_lock(&interface_list_lock);
+
     int ife_ind = 0;
-    struct interface* ife = obtain_read_lock();
+    struct interface* ife = interface_list;
     while(ife && ife_ind < MAX_INTERFACES) {
         struct interface_info* dest = &notification.if_info[ife_ind];
 
@@ -48,7 +51,8 @@ int send_notification(const struct lease_info* lease)
         ife = ife->next;
         ife_ind++;
     }
-    release_read_lock();
+
+    release_read_lock(&interface_list_lock);
     
     notification.interfaces = ife_ind;
     

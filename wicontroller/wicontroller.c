@@ -5,11 +5,11 @@
 
 #include "contchan.h"
 #include "debug.h"
-#include "netlink.h"
 #include "rootchan.h"
 #include "sockets.h"
 #include "utlist.h"
 #include "virtInterface.h"
+#include "config.h"
 
 const char* WIROOT_ADDRESS = "128.105.22.229";
 const unsigned short CCHAN_PORT = 8082;
@@ -24,7 +24,8 @@ int main(int argc, char* argv[])
     struct lease_info* lease;
     int result;
 
-    DEBUG_MSG("Starting wicontroller...");
+    DEBUG_MSG("Starting wicontroller version %d.%d",
+              WIROVER_VERSION_MAJOR, WIROVER_VERSION_MINOR);
 
     lease = obtain_lease(WIROOT_ADDRESS, WIROOT_PORT);
     if(!lease) {
@@ -42,12 +43,6 @@ int main(int argc, char* argv[])
         DEBUG_MSG("Fatal error: failed to bring up virtual interface");
 //        exit(1);
     }
-
-    result = init_interface_list();
-    if(result == -1) {
-        DEBUG_MSG("Failed to initialize interface list");
-    }
-
 
     int cchan_sock = tcp_passive_open(CCHAN_PORT, SOMAXCONN);
     if(cchan_sock == -1) {

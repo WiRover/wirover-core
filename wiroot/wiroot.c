@@ -14,9 +14,9 @@
 #include "database.h"
 #include "debug.h"
 #include "lease.h"
+#include "rootchan.h"
 #include "sockets.h"
 #include "utlist.h"
-#include "common/rootchan.h"
 
 const unsigned int  MTU = 1500;
 const char*         CONFIG_FILENAME = "wiroot.conf";

@@ -3,6 +3,7 @@
 #include <string.h>
 #include <stropts.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <linux/if.h>
@@ -10,6 +11,8 @@
 #include "debug.h"
 #include "rootchan.h"
 #include "sockets.h"
+
+static struct lease_info* latest_lease = 0;
 
 /*
  * OBTAIN LEASE
@@ -78,6 +81,7 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
 
     if(response.controllers == 0) {
         lease->cinfo = 0;
+        latest_lease = lease;
         return lease;
     }
    
@@ -91,6 +95,7 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
     
     memcpy(lease->cinfo, response.cinfo, cinfo_size);
 
+    latest_lease = lease;
     return lease;
 }
 
@@ -127,5 +132,8 @@ int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, 
     return copy_bytes;
 }
 
-
+const struct lease_info* get_lease_info()
+{
+    return latest_lease;
+}
 
