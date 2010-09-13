@@ -17,7 +17,7 @@ static struct lease_info* latest_lease = 0;
 /*
  * OBTAIN LEASE
  */
-struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_port)
+struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_port, unsigned short base_port)
 {
     int sockfd;
     int bytes;
@@ -37,6 +37,7 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
 #endif
     request.latitude = NAN;
     request.longitude = NAN;
+    request.base_port = htons(base_port);
 
     // TODO: get internal interface name from somewhere else
     result = get_device_mac("eth0", request.hw_addr, sizeof(request.hw_addr));
@@ -132,8 +133,56 @@ int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, 
     return copy_bytes;
 }
 
+uint16_t get_unique_id()
+{
+    if(latest_lease) {
+        return latest_lease->unique_id;
+    } else {
+        return 0;
+    }
+}
+
 const struct lease_info* get_lease_info()
 {
     return latest_lease;
+}
+
+int get_controller_addr(struct sockaddr* addr, socklen_t addr_len)
+{
+    assert(addr);
+
+    if(!latest_lease || latest_lease->controllers == 0) {
+        DEBUG_MSG("There are no controllers.");
+        return FAILURE;
+    }
+
+    if(addr_len < sizeof(struct sockaddr_in)) {
+        DEBUG_MSG("addr_len is too small");
+        return FAILURE;
+    }
+
+    memset(addr, 0, addr_len);
+
+    struct sockaddr_in* a = (struct sockaddr_in*)addr;
+    a->sin_family = AF_INET;
+    a->sin_port = latest_lease->cinfo[0].base_port;
+    a->sin_addr.s_addr = latest_lease->cinfo[0].pub_ip;
+
+    return 0;
+}
+
+/*
+ * GET CONTROLLER BASE PORT
+ *
+ * Returns controller's base port in host byte order.
+ */
+unsigned short get_controller_base_port()
+{
+    if(!latest_lease || latest_lease->controllers == 0) {
+        DEBUG_MSG("There are no controllers.");
+        return FAILURE;
+    }
+
+    return ntohs(latest_lease->cinfo[0].base_port);
 }
 

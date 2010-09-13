@@ -217,14 +217,14 @@ static void handle_gateway_config(struct client* client, const char* packet, int
     response.unique_id = htons(unique_id);
 
     if(lease) {
-        struct node* node_list[MAX_CONTROLLERS];
-        response.controllers = assign_controllers(node_list, MAX_CONTROLLERS, 
+        struct controller* controller_list[MAX_CONTROLLERS];
+        response.controllers = assign_controllers(controller_list, MAX_CONTROLLERS, 
                 request->latitude, request->longitude);
 
         int i;
         for(i = 0; i < response.controllers && i < MAX_CONTROLLERS; i++) {
-            response.cinfo[i].priv_ip = node_list[i]->priv_ip;
-            response.cinfo[i].pub_ip = node_list[i]->pub_ip;
+            response.cinfo[i].priv_ip = controller_list[i]->priv_ip;
+            response.cinfo[i].pub_ip = controller_list[i]->pub_ip;
         }
 
         response.priv_ip = lease->ip;
@@ -263,7 +263,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
 
     if(lease) {
         uint32_t pub_ip = client->addr.sin_addr.s_addr;
-        add_controller(lease->ip, pub_ip, request->latitude, request->longitude);
+        add_controller(lease->ip, pub_ip, request->base_port, request->latitude, request->longitude);
 
         response->priv_ip = lease->ip;
         response->lease_time = (lease->end - lease->start);

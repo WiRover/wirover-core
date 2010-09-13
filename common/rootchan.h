@@ -19,6 +19,7 @@
 struct controller_info {
     uint32_t    priv_ip;
     uint32_t    pub_ip;
+    uint16_t    base_port;
 } __attribute__((__packed__));
 
 struct rchan_request {
@@ -26,6 +27,7 @@ struct rchan_request {
     uint8_t     hw_addr[ETH_ALEN];
     double      latitude;
     double      longitude;
+    uint16_t    base_port;
 } __attribute__((__packed__));
 #define MIN_REQUEST_LEN (sizeof(struct rchan_request))
 
@@ -49,13 +51,16 @@ struct lease_info {
     struct controller_info* cinfo;
 };
 
-struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_port);
+struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_port, unsigned short base_port);
 int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, int destlen);
 
 uint32_t get_private_ip();
 uint16_t get_unique_id();
 
 const struct lease_info* get_lease_info();
+
+int get_controller_addr(struct sockaddr* addr, socklen_t addr_len);
+unsigned short get_controller_base_port();
 
 #endif //_ROOTCHAN_H_
 

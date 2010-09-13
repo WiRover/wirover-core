@@ -3,9 +3,10 @@
 
 #include "uthash.h"
 
-struct node {
+struct controller {
     uint32_t        priv_ip;
     uint32_t        pub_ip;
+    uint16_t        base_port;
 
     double          latitude;
     double          longitude;
@@ -13,9 +14,9 @@ struct node {
     UT_hash_handle  hh_ip;
 };
 
-void add_controller(uint32_t priv_ip, uint32_t pub_ip,
+void add_controller(uint32_t priv_ip, uint32_t pub_ip, uint16_t base_port,
                     double latitude, double longitude);
-int assign_controllers(struct node** node_list, int list_size,
+int assign_controllers(struct controller** node_list, int list_size,
                        double latitude, double longitude);
 
 #endif //_CONTROLLERS_H_
