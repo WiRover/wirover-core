@@ -225,6 +225,7 @@ static void handle_gateway_config(struct client* client, const char* packet, int
         for(i = 0; i < response.controllers && i < MAX_CONTROLLERS; i++) {
             response.cinfo[i].priv_ip = controller_list[i]->priv_ip;
             response.cinfo[i].pub_ip = controller_list[i]->pub_ip;
+            response.cinfo[i].base_port = controller_list[i]->base_port;
         }
 
         response.priv_ip = lease->ip;
