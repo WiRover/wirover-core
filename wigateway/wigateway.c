@@ -2,9 +2,11 @@
 #include <arpa/inet.h>
 
 #include "config.h"
+#include "configuration.h"
 #include "contchan.h"
 #include "debug.h"
 #include "netlink.h"
+#include "ping.h"
 #include "rootchan.h"
 #include "virtInterface.h"
 
@@ -18,7 +20,9 @@ int main(int argc, char* argv[])
     DEBUG_MSG("Starting wigateway version %d.%d",
               WIROVER_VERSION_MAJOR, WIROVER_VERSION_MINOR);
 
-    const struct lease_info* lease = obtain_lease(WIROOT_ADDRESS, WIROOT_PORT);
+    unsigned short base_port = get_base_port();
+
+    const struct lease_info* lease = obtain_lease(WIROOT_ADDRESS, WIROOT_PORT, base_port);
     if(lease == 0) {
         DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
 //        exit(1);
@@ -45,8 +49,12 @@ int main(int argc, char* argv[])
         DEBUG_MSG("Failed to initialize interface list");
     }
 
-    result = send_notification(lease);
-    if(result == -1) {
+    if(start_ping_thread() == FAILURE) {
+        DEBUG_MSG("Cannot continue due to ping thread failure");
+        exit(1);
+    }
+
+    if(send_notification() == FAILURE) {
         DEBUG_MSG("Failed to send notification to controller.");
     }
 

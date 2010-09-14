@@ -61,6 +61,7 @@ const struct lease_info* get_lease_info();
 
 int get_controller_addr(struct sockaddr* addr, socklen_t addr_len);
 unsigned short get_controller_base_port();
+int get_controller_ip(char* dest, int dest_len);
 
 #endif //_ROOTCHAN_H_
 

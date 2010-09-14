@@ -133,6 +133,15 @@ int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, 
     return copy_bytes;
 }
 
+uint32_t get_private_ip()
+{
+    if(latest_lease) {
+        return latest_lease->priv_ip;
+    } else {
+        return 0;
+    }
+}
+
 uint16_t get_unique_id()
 {
     if(latest_lease) {
@@ -185,4 +194,22 @@ unsigned short get_controller_base_port()
 
     return ntohs(latest_lease->cinfo[0].base_port);
 }
+
+/*
+ * GET CONTROLLER IP
+ *
+ * It is recommended that your buffer be at least INET6_ADDRSTRLEN bytes in
+ * size.
+ */
+int get_controller_ip(char* dest, int dest_len)
+{
+    if(!latest_lease || latest_lease->controllers == 0) {
+        DEBUG_MSG("There are no controllers.");
+        return FAILURE;
+    }
+
+    inet_ntop(AF_INET, &latest_lease->cinfo[0].pub_ip, dest, dest_len);
+    return 0;
+}
+
 

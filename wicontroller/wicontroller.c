@@ -3,8 +3,10 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
+#include "configuration.h"
 #include "contchan.h"
 #include "debug.h"
+#include "ping.h"
 #include "rootchan.h"
 #include "sockets.h"
 #include "utlist.h"
@@ -12,7 +14,6 @@
 #include "config.h"
 
 const char* WIROOT_ADDRESS = "128.105.22.229";
-const unsigned short CCHAN_PORT = 8082;
 const unsigned short WIROOT_PORT = 8088;
 const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_idle_clients()
 const unsigned int  CLIENT_TIMEOUT = 5;
@@ -27,7 +28,9 @@ int main(int argc, char* argv[])
     DEBUG_MSG("Starting wicontroller version %d.%d",
               WIROVER_VERSION_MAJOR, WIROVER_VERSION_MINOR);
 
-    lease = obtain_lease(WIROOT_ADDRESS, WIROOT_PORT);
+    unsigned short base_port = get_base_port();
+
+    lease = obtain_lease(WIROOT_ADDRESS, WIROOT_PORT, base_port);
     if(!lease) {
         DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
 //        exit(1);
@@ -44,12 +47,17 @@ int main(int argc, char* argv[])
 //        exit(1);
     }
 
-    int cchan_sock = tcp_passive_open(CCHAN_PORT, SOMAXCONN);
+    int cchan_sock = tcp_passive_open(base_port + CONTROL_CHANNEL_OFFSET, SOMAXCONN);
     if(cchan_sock == -1) {
         DEBUG_MSG("Failed to open control channel socket.");
         exit(1);
     }
     set_nonblock(cchan_sock, 1);
+
+    if(start_ping_thread() == FAILURE) {
+        DEBUG_MSG("Failed to start ping thread");
+        exit(1);
+    }
 
     server_loop(cchan_sock);
 

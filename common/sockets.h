@@ -3,6 +3,10 @@
 
 #include <sys/select.h>
 
+// For the set_nonblock function
+#define BLOCKING 0
+#define NONBLOCKING 1
+
 struct client {
     int                 fd;
     struct sockaddr_in  addr;
@@ -17,7 +21,11 @@ struct client {
 //SOMAXCONN is a good value for backlog
 int tcp_passive_open(unsigned short local_port, int backlog);
 int tcp_active_open(const char* remote_addr, unsigned short remote_port);
+int udp_raw_open(const char* device);
+int udp_bind_open(unsigned short local_port);
+
 int set_nonblock(int sockfd, int enable);
+int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage* dest);
 
 // Some generic TCP server functions
 void fdset_add_clients(const struct client* head, fd_set* set, int* max_fd);

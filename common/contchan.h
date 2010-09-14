@@ -42,8 +42,7 @@ int process_notification(const char* packet, unsigned int pkt_len);
 #endif
 
 #ifdef GATEWAY
-struct lease_info;
-int send_notification(const struct lease_info* lease);
+int send_notification();
 #endif
 
 #endif //_CONTCHAN_H_

@@ -1,6 +1,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
+#include "config.h"
 #include "contchan.h"
 #include "debug.h"
 #include "netlink.h"
@@ -8,32 +9,31 @@
 #include "rwlock.h"
 #include "sockets.h"
 
-const unsigned short CCHAN_PORT = 8082;
-
-int send_notification(const struct lease_info* lease)
+int send_notification()
 {
     int sockfd;
 
-    if(lease->controllers == 0) {
-        DEBUG_MSG("There are no controllers");
-        return -1;
+    char controller_ip[INET6_ADDRSTRLEN];
+    if(get_controller_ip(controller_ip, sizeof(controller_ip)) == FAILURE) {
+        DEBUG_MSG("There are no controllers!");
+        return FAILURE;
     }
 
-    char cont_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &lease->cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
+    const unsigned short controller_port =
+            get_controller_base_port() + CONTROL_CHANNEL_OFFSET;
 
-    sockfd = tcp_active_open(cont_ip, CCHAN_PORT);
+    sockfd = tcp_active_open(controller_ip, controller_port);
     if(sockfd == -1) {
         DEBUG_MSG("Failed to open control channel with controller %s:%d",
-                  cont_ip, CCHAN_PORT);
-        return -1;
+                  controller_ip, controller_port);
+        return FAILURE;
     }
 
     struct cchan_notification notification;
 
     notification.type = CCHAN_NOTIFICATION;
-    notification.priv_ip = lease->priv_ip;
-    notification.unique_id = htons(lease->unique_id);
+    notification.priv_ip = get_private_ip();
+    notification.unique_id = htons(get_unique_id());
 
     obtain_read_lock(&interface_list_lock);
 

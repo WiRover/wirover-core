@@ -1,0 +1,116 @@
+#include <libconfig.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+
+#include "config.h"
+#include "configuration.h"
+#include "debug.h"
+
+static int      is_open = 0;
+static config_t config;
+
+static int find_config_file(const char* __restrict__ filename, char* __restrict__ dest, int length);
+
+/*
+ * GET CONFIG
+ *
+ * Opens the config file if it is not already open and returns a config_t
+ * pointer, which can be used to read values from it.
+ */
+const config_t* get_config()
+{
+    if(!is_open) {
+        char filename[MAX_CONFIG_PATH_LEN];
+        if(find_config_file(CONFIG_FILENAME, filename, sizeof(filename)) == 0) {
+            DEBUG_MSG("Failed to find config file %s", CONFIG_FILENAME);
+            return 0;
+        }
+
+        if(config_read_file(&config, filename) == CONFIG_FALSE) {
+            DEBUG_MSG("Failed to parse config file %s", filename);
+            DEBUG_MSG("  Error: %s", config_error_text(&config));
+            DEBUG_MSG("  Line: %s", config_error_line(&config));
+            return 0;
+        }
+
+        is_open = 1;
+    }
+
+    return &config;
+}       
+
+/*
+ * CLOSE CONFIG
+ */
+void close_config()
+{
+    if(is_open) {
+        config_destroy(&config);
+        is_open = 0;
+    }
+}
+
+unsigned short get_base_port()
+{
+    const config_t* config = get_config();
+
+    int tmp_port;
+    if(!config || config_lookup_int(config, "base-port", &tmp_port) == CONFIG_FALSE) {
+        DEBUG_MSG("Failed to read base-port from config file");
+        return 0;
+    } else if(tmp_port < 0 || tmp_port > 0x0000FFFF) {
+        DEBUG_MSG("base-port in config file is out of range");
+        return 0;
+    }
+
+    return (unsigned short)tmp_port;
+}
+
+unsigned int get_ping_interval()
+{
+    const config_t* config = get_config();
+
+    int interval;
+    if(!config || config_lookup_int(config, "ping-interval", &interval) == CONFIG_FALSE) {
+        DEBUG_MSG("failed to read ping-interval from config file");
+        interval = DEFAULT_PING_INTERVAL;
+    } else if(interval <= 0) {
+        DEBUG_MSG("ping-interval %d is not acceptable", interval);
+        interval = DEFAULT_PING_INTERVAL;
+    }
+
+    return interval;
+}
+
+/*
+ * FIND CONFIG FILE
+ *
+ * Checks the current directory and the system /etc directory for
+ * the given filename.
+ *
+ * On success find_config_file() returns 1 and dest is valid.  On
+ * failure it returns 0, and dest is not valid.
+ */
+int find_config_file(const char* __restrict__ filename, char* __restrict__ dest, int length)
+{
+    int result;
+
+    // First check if the file is in the current directory
+    snprintf(dest, length, "%s", filename);
+    result = access(dest, R_OK);
+    if(result == 0) {
+        return 1;
+    }
+
+    // Check for a system config file
+    snprintf(dest, length, "/etc/%s", filename);
+    result = access(dest, R_OK);
+    if(result == 0) {
+        return 1;
+    }
+
+    return 0;
+}
+
+

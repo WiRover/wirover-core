@@ -9,6 +9,7 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 
+#include "configuration.h"
 #include "contchan.h"
 #include "controllers.h"
 #include "database.h"
@@ -19,7 +20,6 @@
 #include "utlist.h"
 
 const unsigned int  MTU = 1500;
-const char*         CONFIG_FILENAME = "wiroot.conf";
 const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_stale_leases()
 
 // This default value will be writted during configuration.
@@ -29,13 +29,10 @@ static int            CLIENT_TIMEOUT = 5;
 // Doubly-linked list of connected clients
 static struct client* clients_head = 0;
 
-static config_t       config;
-
 static int  configure_wiroot(const char* filename);
 static void handle_incoming(struct client* client);
 static void handle_gateway_config(struct client* client, const char* packet, int length);
 static void handle_controller_config(struct client* client, const char* packet, int length);
-static int  find_config_file(char* filename, int length);
 
 int main(int argc, char* argv[])
 {
@@ -102,7 +99,7 @@ int main(int argc, char* argv[])
 
     close(server_sock);
     db_disconnect();
-    config_destroy(&config);
+    close_config();
 }
 
 /*
@@ -115,23 +112,11 @@ int main(int argc, char* argv[])
 static int configure_wiroot(const char* filename)
 {
     int result;
-    char buffer[1024];
 
-    result = find_config_file(buffer, sizeof(buffer));
-    if(!result) {
-        DEBUG_MSG("Failed to find a config file for wiroot");
-        return -1;
-    }
-
-    DEBUG_MSG("Found config file: %s", buffer);
-
-    result = config_read_file(&config, buffer);
-    if(result == CONFIG_FALSE) {
-        DEBUG_MSG("Failed to read config file: %s", config_error_text(&config));
-    }
+    const config_t* config = get_config();
 
     int port;
-    result = config_lookup_int(&config, "server.port", &port);
+    result = config_lookup_int(config, "server.port", &port);
     if(result == CONFIG_FALSE) {
         DEBUG_MSG("Error reading server.port from config file");
     } else if(port < 0 || port > 0x0000FFFF) {
@@ -141,7 +126,7 @@ static int configure_wiroot(const char* filename)
     }
     
     int timeout;
-    result = config_lookup_int(&config, "server.client-timeout", &timeout);
+    result = config_lookup_int(config, "server.client-timeout", &timeout);
     if(result == CONFIG_FALSE) {
         DEBUG_MSG("Error reading server.client-timeout from config file");
     } else if(timeout < 0) {
@@ -150,7 +135,7 @@ static int configure_wiroot(const char* filename)
         CLIENT_TIMEOUT = timeout;
     }
 
-    result = read_lease_config(&config);
+    result = read_lease_config(config);
     if(result == -1) {
         DEBUG_MSG("read_lease_config() failed");
         return -1;
@@ -275,34 +260,5 @@ static void handle_controller_config(struct client* client, const char* packet, 
     if(bytes < sizeof(response)) {
         DEBUG_MSG("Failed to send lease response");
     }
-}
-
-/*
- * FIND CONFIG FILE
- *
- * Checks the current directory and the system /etc directory for wiroot.conf.
- *
- * On success find_config_file() returns 1 and filename is valid.  On
- * failure it returns 0, and filename is not valid.
- */
-static int find_config_file(char* filename, int length)
-{
-    int result;
-
-    // First check if the file is in the current directory
-    snprintf(filename, length, "%s", CONFIG_FILENAME);
-    result = access(filename, R_OK);
-    if(result == 0) {
-        return 1;
-    }
-
-    // Check for a system config file
-    snprintf(filename, length, "/etc/%s", CONFIG_FILENAME);
-    result = access(filename, R_OK);
-    if(result == 0) {
-        return 1;
-    }
-
-    return 0;
 }
 

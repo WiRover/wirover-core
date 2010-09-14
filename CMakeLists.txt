@@ -17,5 +17,7 @@ add_subdirectory(${WIROVER_SOURCE_DIR}/wiroot)
 add_subdirectory(${WIROVER_SOURCE_DIR}/wigateway)
 add_subdirectory(${WIROVER_SOURCE_DIR}/wicontroller)
 
-CONFIGURE_FILE(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/wigateway/wigateway.conf ${CMAKE_CURRENT_BINARY_DIR}/wigateway.conf COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/wicontroller/wicontroller.conf ${CMAKE_CURRENT_BINARY_DIR}/wicontroller.conf COPYONLY)
 

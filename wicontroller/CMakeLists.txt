@@ -4,6 +4,8 @@ add_executable(wicontroller
     wicontroller.c
     contchan.c
     gateway.c
+    ping.c
+    ${COMMON}/configuration.c
     ${COMMON}/debug.c
     ${COMMON}/interface.c
     ${COMMON}/rootchan.c
@@ -12,5 +14,5 @@ add_executable(wicontroller
     ${COMMON}/virtInterface.c
 )
 
-target_link_libraries(wicontroller pthread)
+target_link_libraries(wicontroller pthread config)
 

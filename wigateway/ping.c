@@ -1,0 +1,256 @@
+#include <libconfig.h>
+#include <stropts.h>
+#include <unistd.h>
+#include <asm-generic/sockios.h>
+#include <linux/ip.h>
+#include <linux/udp.h>
+#include <netinet/in.h>
+#include <sys/time.h>
+
+#include "config.h"
+#include "configuration.h"
+#include "contchan.h"
+#include "debug.h"
+#include "interface.h"
+#include "netlink.h"
+#include "ping.h"
+#include "rootchan.h"
+#include "rwlock.h"
+#include "sockets.h"
+
+static void* ping_thread_func(void* arg);
+static int handle_incoming(int sockfd, int timeout);
+unsigned long timeval_diff_usec(const struct timeval* __restrict__ start,
+                                const struct timeval* __restrict__ end);
+
+static int          running;
+static pthread_t    ping_thread;
+
+int start_ping_thread()
+{
+    if(running) {
+        DEBUG_MSG("Ping thread already running");
+        return FAILURE;
+    }
+
+    pthread_attr_t attr;
+
+    // Initialize and set thread detached attribute
+    pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+    int result;
+    result = pthread_create(&ping_thread, &attr, ping_thread_func, 0);
+    if(result != 0) {
+        ERROR_MSG("Creating thread failed");
+        return FAILURE;
+    }
+
+    running = 1;
+
+    pthread_attr_destroy(&attr);
+    return 0;
+}
+
+/*
+ * PING ALL INTERFACES
+ *
+ * Locks: Holds a read lock on the interface list for the duration of the
+ * function call.
+ */
+int ping_all_interfaces(const char* dst_ip, unsigned short dst_port, unsigned short src_port)
+{
+    int pings_sent = 0;
+
+    struct sockaddr_storage dest_addr;
+    if(build_sockaddr(dst_ip, dst_port, &dest_addr) == FAILURE) {
+        return FAILURE;
+    }
+
+    //We need a read lock on the interface list to prevent anyone from adding
+    //or removing interfaces while we iterate over the list.
+    obtain_read_lock(&interface_list_lock);
+
+    struct interface* curr_ife = interface_list;
+    while(curr_ife) {
+        send_ping(curr_ife, src_port, dst_port, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+
+        assert(curr_ife != curr_ife->next);
+        curr_ife = curr_ife->next;
+    }
+
+    release_read_lock(&interface_list_lock);
+    return pings_sent;
+}
+
+/*
+ * SEND PING
+ */
+int send_ping(struct interface* ife, unsigned short src_port, unsigned int dest_port,
+              const struct sockaddr* dest_addr, socklen_t dest_len)
+{
+    int sockfd;
+    struct timeval now;
+    int bytes;
+
+    sockfd = udp_raw_open(ife->name);
+    if(sockfd == FAILURE) {
+        return FAILURE;
+    }
+
+    const unsigned int pkt_len = sizeof(struct udphdr) + sizeof(struct ping_packet);
+    char buffer[pkt_len];
+
+    struct udphdr* udphdr = (struct udphdr*)buffer;
+    struct ping_packet* pkt = (struct ping_packet*)(buffer + sizeof(struct udphdr));
+
+    udphdr->source = htons(src_port);
+    udphdr->dest = htons(dest_port);
+    udphdr->len = htons(pkt_len);
+    udphdr->check = 0;
+
+    memset(pkt, 0, sizeof(*pkt));
+    pkt->seq_no = SPECIAL_SEQ_NO;
+    pkt->type = PING_PACKET_TYPE;
+    pkt->src_id = htons(get_unique_id());
+    pkt->link_id = htonl(ife->index);
+   
+    //Store a timestamp in the packet for calculating RTT.
+    gettimeofday(&now, 0);
+    pkt->sent_sec = htonl(now.tv_sec);
+    pkt->sent_usec = htonl(now.tv_usec);
+
+    bytes = sendto(sockfd, buffer, pkt_len, 0, dest_addr, dest_len);
+    if(bytes < 0) {
+        ERROR_MSG("sending ping packet on %s failed", ife->name);
+        close(sockfd);
+        return -1;
+    }
+
+    // This last_ping timestamp will be compared to the timestamp in the ping
+    // response packet to make sure the response is for the most recent
+    // request.
+    // TODO: We should obtain a write lock here
+    ife->last_ping = now.tv_sec;
+
+    close(sockfd);
+    return 0;
+}
+
+void* ping_thread_func(void* arg)
+{
+    const unsigned short    local_port = get_base_port() + DATA_CHANNEL_OFFSET;
+    const unsigned int      ping_interval = get_ping_interval();
+    int sockfd;
+
+    sockfd = udp_bind_open(local_port);
+    if(sockfd == FAILURE) {
+        DEBUG_MSG("Ping thread cannot continue due to failure");
+        return 0;
+    }
+
+    // We never want reads to hold up the thread.
+    set_nonblock(sockfd, NONBLOCKING);
+
+    char controller_ip[INET6_ADDRSTRLEN];
+    get_controller_ip(controller_ip, sizeof(controller_ip));
+
+    const unsigned short controller_port = 
+            get_controller_base_port() + DATA_CHANNEL_OFFSET;
+
+    ping_all_interfaces(controller_ip, controller_port, local_port);
+    time_t last_ping = time(0);
+
+    unsigned int next_timeout = ping_interval;
+    while(1) {
+        struct timeval timeout;
+        timeout.tv_sec = next_timeout;
+        timeout.tv_usec = 0;
+
+        fd_set read_set;
+        FD_ZERO(&read_set);
+        FD_SET(sockfd, &read_set);
+
+        int result = select(sockfd+1, &read_set, 0, 0, &timeout);
+        if(result > 0 && FD_ISSET(sockfd, &read_set)) {
+            // Most likely we have an incoming ping response.
+            handle_incoming(sockfd, ping_interval);
+        } else if(result < 0) {
+            ERROR_MSG("select failed for ping socket (%d)", sockfd);
+        }
+
+        int time_remaining = ping_interval - (time(0) - last_ping);
+        if(time_remaining <= 0) {
+            send_notification();
+            // It is time to send out another round of pings.
+            ping_all_interfaces(controller_ip, controller_port, local_port);
+            last_ping = time(0);
+        } else {
+            next_timeout = time_remaining;
+        }
+    }
+
+    close(sockfd);
+    running = 0;
+    return 0;
+}
+
+static int handle_incoming(int sockfd, int timeout)
+{
+    int bytes;
+    struct sockaddr_storage addr;
+    socklen_t addr_len = sizeof(addr);
+    char buffer[1024];
+
+    bytes = recvfrom(sockfd, buffer, sizeof(buffer), 0,
+            (struct sockaddr*)&addr, &addr_len);
+    if(bytes >= sizeof(struct ping_packet)) {
+        struct ping_packet* pkt = (struct ping_packet*)buffer;
+
+        struct timeval send_time;
+        send_time.tv_sec = ntohl(pkt->sent_sec);
+        send_time.tv_usec = ntohl(pkt->sent_usec);
+
+        // The receive timestamp recorded by the kernel will be more accurate
+        // than if we call gettimeofday() at this point.
+        struct timeval recv_time;
+        if(ioctl(sockfd, SIOCGSTAMP, &recv_time) == -1) {
+            DEBUG_MSG("ioctl SIOCGSTAMP failed");
+            gettimeofday(&recv_time, 0);
+        }
+
+        unsigned long diff = timeval_diff_usec(&send_time, &recv_time);
+
+        // If the ping response is older than timeout seconds, we just ignore it.
+        if((diff / 1000000) < timeout) {
+            unsigned int h_link_id = ntohl(pkt->link_id);
+
+            struct interface* ife = find_interface_by_index(interface_list, h_link_id);
+            if(ife && send_time.tv_sec == ife->last_ping) {
+                //TODO: Do a lot more stuff here
+                ife->state = ACTIVE;
+                ife->avg_rtt = ema_update(ife->avg_rtt, (double)diff, 0.25);
+
+                DEBUG_MSG("Ping on %s rtt %d avg_rtt %f", ife->name, diff, ife->avg_rtt);
+            }
+        }
+    }
+
+    return 0;
+}
+
+/*
+ * TIMEVAL DIFF USEC
+ */
+unsigned long timeval_diff_usec(const struct timeval* __restrict__ start,
+                                const struct timeval* __restrict__ end)
+{
+    unsigned long diff;
+
+    diff = (end->tv_sec - start->tv_sec) * 1000000;
+    diff += (end->tv_usec - start->tv_usec);
+
+    return diff;
+}
+
+

@@ -7,6 +7,10 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include <sys/types.h>
+#include <linux/if.h>
+#include <linux/if_ether.h>
+#include <netdb.h>
 
 #include "debug.h"
 #include "sockets.h"
@@ -104,6 +108,73 @@ close_and_return:
 }
 
 /*
+ * UDP RAW OPEN
+ *
+ * Opens a raw UDP socket.  If device is non-null and contains the name
+ * of a network device, it binds the socket to that device.
+ */
+int udp_raw_open(const char* device)
+{
+    int sockfd;
+
+    sockfd = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
+    if(sockfd < 0) {
+        ERROR_MSG("creating socket failed");
+        return FAILURE;
+    }
+
+    if(device) {
+        // Bind socket to device
+        if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, device, IFNAMSIZ) < 0) {
+            DEBUG_MSG("SO_BINDTODEVICE failed");
+            close(sockfd);
+            return FAILURE;
+        }
+    }
+
+    return sockfd;
+}
+
+int udp_bind_open(unsigned short local_port)
+{
+    int sockfd;
+
+    // getaddrinfo takes a string rather than an int
+    char port_str[16];
+    snprintf(port_str, sizeof(port_str), "%d", local_port);
+
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_protocol = IPPROTO_UDP;
+    hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV | AI_V4MAPPED | AI_ADDRCONFIG;
+
+    struct addrinfo* results = 0;
+    int err = getaddrinfo(0, port_str, &hints, &results);
+    if(err != 0) {
+        DEBUG_MSG("getaddrinfo failed: %s", gai_strerror(err));
+        return FAILURE;
+    }
+
+    sockfd = socket(results->ai_family, results->ai_socktype, results->ai_protocol);
+    if(sockfd < 0) {
+        ERROR_MSG("Failed to create socket");
+        freeaddrinfo(results);
+        return FAILURE;
+    }
+
+    if(bind(sockfd, results->ai_addr, results->ai_addrlen) == -1) {
+        ERROR_MSG("Failed to bind socket");
+        close(sockfd);
+        freeaddrinfo(results);
+        return FAILURE;
+    }
+
+    return sockfd;   
+}
+
+/*
  * SET NONBLOCK
  *
  * enable should be non-zero to set or 0 to clear.
@@ -133,6 +204,40 @@ int set_nonblock(int sockfd, int enable)
         }
     }
 
+    return 0;
+}
+
+/*
+ * BUILD SOCKADDR
+ */
+int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage* dest)
+{
+    assert(ip && dest);
+
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_flags = AI_ADDRCONFIG | AI_V4MAPPED | AI_NUMERICSERV;
+
+    struct addrinfo* results = 0;
+    int err;
+
+    if(port > 0) {
+        char port_str[16];
+        snprintf(port_str, sizeof(port_str), "%d", port);
+
+        err = getaddrinfo(ip, port_str, &hints, &results);
+    } else {
+        err = getaddrinfo(ip, 0, &hints, &results);
+    }
+
+    if(err != 0) {
+        DEBUG_MSG("Failed to convert IP address %s: %s", ip, gai_strerror(err));
+        return FAILURE;
+    }
+
+    memset(dest, 0, sizeof(*dest));
+    memcpy(dest, results->ai_addr, results->ai_addrlen);
     return 0;
 }
 

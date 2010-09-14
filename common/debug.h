@@ -7,6 +7,10 @@
 
 #define MAX_DEBUG_LEN 1024
 
+#ifndef FAILURE
+#define FAILURE -1
+#endif
+
 void print_time(FILE* out);
 
 #ifdef DEBUG_PRINT

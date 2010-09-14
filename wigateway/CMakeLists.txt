@@ -3,6 +3,8 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DGATEWAY")
 add_executable(wigateway
     wigateway.c
     contchan.c
+    ping.c
+    ${COMMON}/configuration.c
     ${COMMON}/debug.c
     ${COMMON}/interface.c
     ${COMMON}/netlink.c
@@ -12,5 +14,5 @@ add_executable(wigateway
     ${COMMON}/virtInterface.c
 )
 
-target_link_libraries(wigateway pthread)
+target_link_libraries(wigateway pthread config)
 

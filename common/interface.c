@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <math.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,6 +20,7 @@ struct interface* alloc_interface()
     assert(ife);
 
     memset(ife, 0, sizeof(*ife));
+    ife->avg_rtt = NAN;
 
     return ife;
 }
@@ -80,5 +82,20 @@ struct interface* find_interface_by_network(struct interface* head, const char* 
     }
 
     return 0;
+}
+
+/*
+ * EMA UPDATE
+ *
+ * Performs an exponential moving average.  If the old value is NaN, then it is
+ * assumed that new_val is the first value in the sequence.
+ */
+double ema_update(double old_val, double new_val, double new_weight)
+{
+    if(isnan(old_val)) {
+        return new_val;
+    } else {
+        return ((1.0 - new_weight) * old_val + new_weight * new_val);
+    }
 }
 

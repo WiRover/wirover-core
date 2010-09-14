@@ -4,5 +4,18 @@
 #define WIROVER_VERSION_MAJOR @WIROVER_VERSION_MAJOR@
 #define WIROVER_VERSION_MINOR @WIROVER_VERSION_MINOR@
 
+#define SPECIAL_SEQ_NO 0xFFFFFFFF
+
+#define DEFAULT_BASE_PORT       8000
+#define DEFAULT_PING_INTERVAL   10
+
+// Controllers pick a base port, then use subsequent port numbers for other
+// services.  Data, pings, and nat punches will go over the "data channel"
+// port.  Notification of interface changes will go over the control channel.
+// Active bandwidth tests will use the bandwidth channel.
+#define DATA_CHANNEL_OFFSET         0
+#define CONTROL_CHANNEL_OFFSET      1
+#define BANDWIDTH_CHANNEL_OFFSET    2
+
 #endif //_CONFIG_H_
 
