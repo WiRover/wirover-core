@@ -10,7 +10,7 @@
 #include "rootchan.h"
 #include "sockets.h"
 #include "utlist.h"
-#include "virtInterface.h"
+#include "kernel.h"
 #include "config.h"
 
 const char* WIROOT_ADDRESS = "128.105.22.229";

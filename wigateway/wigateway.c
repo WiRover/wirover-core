@@ -8,10 +8,14 @@
 #include "netlink.h"
 #include "ping.h"
 #include "rootchan.h"
-#include "virtInterface.h"
+#include "kernel.h"
 
 const char* WIROOT_ADDRESS = "128.105.22.229";
 const unsigned short WIROOT_PORT = 8088;
+
+// The virtual interface will use this IP address if we are unable to obtain a
+// private IP from the root server.
+const char* DEFAULT_VIRT_ADDRESS = "172.31.25.1";
 
 int main(int argc, char* argv[])
 {
@@ -22,19 +26,30 @@ int main(int argc, char* argv[])
 
     unsigned short base_port = get_base_port();
 
+    char my_ip[INET6_ADDRSTRLEN];
+    strncpy(my_ip, DEFAULT_VIRT_ADDRESS, sizeof(my_ip));
+
     const struct lease_info* lease = obtain_lease(WIROOT_ADDRESS, WIROOT_PORT, base_port);
     if(lease == 0) {
-        DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
-//        exit(1);
+        DEBUG_MSG("Failed to obtain a lease from wiroot server.");
+        DEBUG_MSG("We will use the IP address %s and NAT mode.", DEFAULT_VIRT_ADDRESS);
+    } else {
+        inet_ntop(AF_INET, &lease->priv_ip, my_ip, sizeof(my_ip));
+
+        DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease->unique_id);
+        DEBUG_MSG("There are %d controllers available.", lease->controllers);
+
+        if(lease->controllers > 0) {
+            struct sockaddr_in caddr;
+            get_controller_addr((struct sockaddr*)&caddr, sizeof(caddr));
+
+            if(kernel_set_controller(&caddr) == FAILURE) {
+                DEBUG_MSG("Failed to set controller in kernel module");
+            }
+        }
     }
 
-    char p_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &lease->priv_ip, p_ip, sizeof(p_ip));
-    DEBUG_MSG("Obtained lease of %s and unique id %u", p_ip, lease->unique_id);
-
-    DEBUG_MSG("There are %d controllers available.", lease->controllers);
-
-    result = setup_virtual_interface(p_ip);
+    result = setup_virtual_interface(my_ip);
     if(result == -1) {
         DEBUG_MSG("Fatal error: failed to bring up virtual interface");
 //        exit(1);

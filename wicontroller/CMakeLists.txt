@@ -11,7 +11,7 @@ add_executable(wicontroller
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
-    ${COMMON}/virtInterface.c
+    ${COMMON}/kernel.c
 )
 
 target_link_libraries(wicontroller pthread config)

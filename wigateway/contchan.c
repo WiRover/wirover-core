@@ -8,6 +8,7 @@
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
+#include "kernel.h"
 
 int send_notification()
 {

@@ -17,5 +17,9 @@
 #define CONTROL_CHANNEL_OFFSET      1
 #define BANDWIDTH_CHANNEL_OFFSET    2
 
+// Enables cooperation with the virt module.  If this is not defined, only
+// user-level code is used.
+#define WITH_MODULE 1
+
 #endif //_CONFIG_H_
 

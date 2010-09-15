@@ -11,7 +11,7 @@ add_executable(wigateway
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
-    ${COMMON}/virtInterface.c
+    ${COMMON}/kernel.c
 )
 
 target_link_libraries(wigateway pthread config)

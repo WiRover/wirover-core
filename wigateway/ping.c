@@ -18,6 +18,8 @@
 #include "rwlock.h"
 #include "sockets.h"
 
+static int send_ping(struct interface* ife, unsigned short src_port, unsigned int dest_port,
+              const struct sockaddr* dest_addr, socklen_t dest_len);
 static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd, int timeout);
 unsigned long timeval_diff_usec(const struct timeval* __restrict__ start,
@@ -55,15 +57,20 @@ int start_ping_thread()
 /*
  * PING ALL INTERFACES
  *
- * Locks: Holds a read lock on the interface list for the duration of the
- * function call.
+ * Locking: Assumes the calling thread does not have a lock on the interface list.
  */
-int ping_all_interfaces(const char* dst_ip, unsigned short dst_port, unsigned short src_port)
+int ping_all_interfaces(unsigned short src_port)
 {
     int pings_sent = 0;
 
+    char controller_ip[INET6_ADDRSTRLEN];
+    get_controller_ip(controller_ip, sizeof(controller_ip));
+
+    const unsigned short controller_port = 
+            get_controller_base_port() + DATA_CHANNEL_OFFSET;
+
     struct sockaddr_storage dest_addr;
-    if(build_sockaddr(dst_ip, dst_port, &dest_addr) == FAILURE) {
+    if(build_sockaddr(controller_ip, controller_port, &dest_addr) == FAILURE) {
         return FAILURE;
     }
 
@@ -73,7 +80,7 @@ int ping_all_interfaces(const char* dst_ip, unsigned short dst_port, unsigned sh
 
     struct interface* curr_ife = interface_list;
     while(curr_ife) {
-        send_ping(curr_ife, src_port, dst_port, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+        send_ping(curr_ife, src_port, controller_port, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
 
         assert(curr_ife != curr_ife->next);
         curr_ife = curr_ife->next;
@@ -84,10 +91,44 @@ int ping_all_interfaces(const char* dst_ip, unsigned short dst_port, unsigned sh
 }
 
 /*
- * SEND PING
+ * PING INTERFACE
+ *
+ * This is a more convenient method for initiating a connectivity test
+ * from outside this module -- eg. to be used by the netlink module when
+ * a link comes up.
+ *
+ * Locking: Assumes the calling thread has a read lock on the interface list.
  */
-int send_ping(struct interface* ife, unsigned short src_port, unsigned int dest_port,
-              const struct sockaddr* dest_addr, socklen_t dest_len)
+int ping_interface(struct interface* ife)
+{
+    const unsigned short local_port = get_base_port() + DATA_CHANNEL_OFFSET;
+
+    char controller_ip[INET6_ADDRSTRLEN];
+    get_controller_ip(controller_ip, sizeof(controller_ip));
+
+    const unsigned short controller_port = 
+            get_controller_base_port() + DATA_CHANNEL_OFFSET;
+
+    struct sockaddr_storage dest_addr;
+    if(build_sockaddr(controller_ip, controller_port, &dest_addr) == FAILURE) {
+        return FAILURE;
+    }
+
+    if(send_ping(ife, local_port, controller_port, (struct sockaddr*)&dest_addr,
+            sizeof(dest_addr)) == FAILURE) {
+        return FAILURE;
+    }
+
+    return 0;
+}   
+
+/*
+ * SEND PING
+ *
+ * Locking: Assumes the calling thread has a read lock on the interface list.
+ */
+static int send_ping(struct interface* ife, unsigned short src_port, unsigned int dest_port,
+        const struct sockaddr* dest_addr, socklen_t dest_len)
 {
     int sockfd;
     struct timeval now;
@@ -130,8 +171,9 @@ int send_ping(struct interface* ife, unsigned short src_port, unsigned int dest_
     // This last_ping timestamp will be compared to the timestamp in the ping
     // response packet to make sure the response is for the most recent
     // request.
-    // TODO: We should obtain a write lock here
+    upgrade_read_lock(&interface_list_lock);
     ife->last_ping = now.tv_sec;
+    downgrade_write_lock(&interface_list_lock);
 
     close(sockfd);
     return 0;
@@ -152,13 +194,7 @@ void* ping_thread_func(void* arg)
     // We never want reads to hold up the thread.
     set_nonblock(sockfd, NONBLOCKING);
 
-    char controller_ip[INET6_ADDRSTRLEN];
-    get_controller_ip(controller_ip, sizeof(controller_ip));
-
-    const unsigned short controller_port = 
-            get_controller_base_port() + DATA_CHANNEL_OFFSET;
-
-    ping_all_interfaces(controller_ip, controller_port, local_port);
+    ping_all_interfaces(local_port);
     time_t last_ping = time(0);
 
     unsigned int next_timeout = ping_interval;
@@ -183,7 +219,7 @@ void* ping_thread_func(void* arg)
         if(time_remaining <= 0) {
             send_notification();
             // It is time to send out another round of pings.
-            ping_all_interfaces(controller_ip, controller_port, local_port);
+            ping_all_interfaces(local_port);
             last_ping = time(0);
         } else {
             next_timeout = time_remaining;
@@ -195,6 +231,11 @@ void* ping_thread_func(void* arg)
     return 0;
 }
 
+/*
+ * HANDLE INCOMING
+ *
+ * Locking: Assumes the calling thread does not have a lock on the interface list.
+ */
 static int handle_incoming(int sockfd, int timeout)
 {
     int bytes;
@@ -225,14 +266,20 @@ static int handle_incoming(int sockfd, int timeout)
         if((diff / 1000000) < timeout) {
             unsigned int h_link_id = ntohl(pkt->link_id);
 
+            obtain_read_lock(&interface_list_lock);
+
             struct interface* ife = find_interface_by_index(interface_list, h_link_id);
             if(ife && send_time.tv_sec == ife->last_ping) {
-                //TODO: Do a lot more stuff here
-                ife->state = ACTIVE;
+                //TODO: Do more stuff here
+                upgrade_read_lock(&interface_list_lock);
+                change_interface_state(ife, ACTIVE);
                 ife->avg_rtt = ema_update(ife->avg_rtt, (double)diff, 0.25);
+                downgrade_write_lock(&interface_list_lock);
 
                 DEBUG_MSG("Ping on %s rtt %d avg_rtt %f", ife->name, diff, ife->avg_rtt);
             }
+
+            release_read_lock(&interface_list_lock);
         }
     }
 

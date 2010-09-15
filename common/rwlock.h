@@ -22,8 +22,15 @@ struct rwlock {
     .write_cond = PTHREAD_COND_INITIALIZER,         \
 }
 
+/*
+ * These functions make extensive use of assert() calls to quickly alert the
+ * programmer to mistakes, especially due to improper use of upgrade/downgrade.
+ * If you are concerned, compiling with the NDEBUG flag makes those disappear.
+ */
 void obtain_read_lock(struct rwlock* lock);
 void obtain_write_lock(struct rwlock* lock);
+void upgrade_read_lock(struct rwlock* lock);
+void downgrade_write_lock(struct rwlock* lock);
 void release_read_lock(struct rwlock* lock);
 void release_write_lock(struct rwlock* lock);
 

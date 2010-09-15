@@ -8,13 +8,16 @@
 #include <linux/rtnetlink.h>
 #include <net/if.h>
 
+#include "config.h"
 #include "contchan.h"
 #include "debug.h"
 #include "interface.h"
 #include "netlink.h"
+#include "ping.h"
 #include "rootchan.h"
 #include "rwlock.h"
 #include "utlist.h"
+#include "kernel.h"
 
 static void* netlink_thread_func(void* arg);
 static void add_interface(struct interface* ife);
@@ -137,6 +140,7 @@ int handle_netlink_message(const char* msg, int msg_len)
 {
     const struct nlmsghdr* nh;
     int should_notify = 0;
+    struct interface* ife;
 
     for(nh = (const struct nlmsghdr*)msg; NLMSG_OK(nh, msg_len); nh = NLMSG_NEXT(nh, msg_len)) {
         if(nh->nlmsg_type == RTM_NEWADDR) {
@@ -148,16 +152,13 @@ int handle_netlink_message(const char* msg, int msg_len)
 
             DEBUG_MSG("Received RTM_NEWADDR for device %s (%d)", device, ifa->ifa_index);
 
-            struct interface* ife;
-
             obtain_read_lock(&interface_list_lock);
             ife = find_interface_by_index(interface_list, ifa->ifa_index);
-            release_read_lock(&interface_list_lock);
 
             if(ife) {
-                obtain_write_lock(&interface_list_lock);
-                ife->state = INACTIVE;
-                release_write_lock(&interface_list_lock);
+                upgrade_read_lock(&interface_list_lock);
+                change_interface_state(ife, INACTIVE);
+                downgrade_write_lock(&interface_list_lock);
             } else {
                 ife = alloc_interface();
                 assert(ife);
@@ -166,10 +167,13 @@ int handle_netlink_message(const char* msg, int msg_len)
                 strncpy(ife->name, device, sizeof(ife->name));
                 ife->state = INACTIVE;
 
-                obtain_write_lock(&interface_list_lock);
+                upgrade_read_lock(&interface_list_lock);
                 add_interface(ife);
-                release_write_lock(&interface_list_lock);
+                downgrade_write_lock(&interface_list_lock);
             }
+
+            ping_interface(ife);
+            release_read_lock(&interface_list_lock);
 
             should_notify = 1;
         } else if(nh->nlmsg_type == RTM_DELADDR) {
@@ -177,37 +181,15 @@ int handle_netlink_message(const char* msg, int msg_len)
             //struct rtattr*    rth = IFA_RTA(ifa);
 
             DEBUG_MSG("Received RTM_DELADDR for device %d", ifa->ifa_index);
-            
-            struct interface* ife;
 
-            obtain_read_lock(&interface_list_lock);
-            ife = find_interface_by_index(interface_list, ifa->ifa_index);
-            release_read_lock(&interface_list_lock);
-
-            if(ife) {
-                obtain_write_lock(&interface_list_lock);
-                delete_interface(ife);
-                release_write_lock(&interface_list_lock);
-            }
-
-            should_notify = 1;
-        } else if(nh->nlmsg_type == RTM_NEWLINK) {
-            struct ifinfomsg* ifa = (struct ifinfomsg*)NLMSG_DATA(nh);
-
-            char device[IFNAMSIZ];
-            if_indextoname(ifa->ifi_index, device);
-
-            DEBUG_MSG("Received RTM_NEWLINK for device %s (%d)", device, ifa->ifi_index);
-
-            struct interface* ife;
-
+/*
             obtain_read_lock(&interface_list_lock);
             ife = find_interface_by_index(interface_list, ifa->ifi_index);
             release_read_lock(&interface_list_lock);
 
             if(ife) {
                 obtain_write_lock(&interface_list_lock);
-                ife->state = INACTIVE;
+                change_interface_state(ife, INACTIVE);
                 release_write_lock(&interface_list_lock);
             } else {
                 ife = alloc_interface(device);
@@ -222,7 +204,7 @@ int handle_netlink_message(const char* msg, int msg_len)
                 release_write_lock(&interface_list_lock);
             }
 
-            should_notify = 1;
+            should_notify = 1; */
         } else if(nh->nlmsg_type == RTM_DELLINK) {
             struct ifinfomsg* ifa = (struct ifinfomsg*)NLMSG_DATA(nh);
 
@@ -232,14 +214,18 @@ int handle_netlink_message(const char* msg, int msg_len)
             
             obtain_read_lock(&interface_list_lock);
             ife = find_interface_by_index(interface_list, ifa->ifi_index);
-            release_read_lock(&interface_list_lock);
 
             if(ife) {
-                obtain_write_lock(&interface_list_lock);
+                upgrade_read_lock(&interface_list_lock);
+
+                change_interface_state(ife, DEAD);
                 delete_interface(ife);
-                release_write_lock(&interface_list_lock);
+
+                downgrade_write_lock(&interface_list_lock);
             }
 
+            release_read_lock(&interface_list_lock);
+            
             should_notify = 1;
         } else if(nh->nlmsg_type == RTM_NEWROUTE) {
             DEBUG_MSG("Received RTM_NEWROUTE");
@@ -249,6 +235,38 @@ int handle_netlink_message(const char* msg, int msg_len)
     const struct lease_info* lease = get_lease_info();
     if(should_notify && lease != 0) {
         send_notification(lease);
+    }
+
+    return 0;
+}
+
+/*
+ * CHANGE INTERFACE STATE
+ *
+ * Sets the interface's state to the given state, and if there was a change
+ * between ACTIVE and non-ACTIVE states, it makes the appropriate ioctl()
+ * calls.
+ */
+int change_interface_state(struct interface* ife, enum if_state state)
+{
+    if(ife->state != ACTIVE && state == ACTIVE) {
+        ife->state = state;
+
+#ifdef WITH_KERNEL
+        if(kernel_enslave_device(ife->name) == FAILURE) {
+            DEBUG_MSG("Failed to enslave device");
+            return FAILURE;
+        }
+#endif
+    } else if(ife->state == ACTIVE && state != ACTIVE) {
+        ife->state = state;
+
+#ifdef WITH_KERNEL
+        if(kernel_release_device(ife->name) == FAILURE) {
+            DEBUG_MSG("Failed to release device");
+            return FAILURE;
+        }
+#endif
     }
 
     return 0;
