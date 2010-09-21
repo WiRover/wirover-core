@@ -51,6 +51,34 @@ void close_config()
     }
 }
 
+const char* get_wiroot_ip()
+{
+    const config_t* config = get_config();
+
+    const char* address = 0;
+    if(!config || config_lookup_string(config, "wiroot-ip", &address) == CONFIG_FALSE) {
+        DEBUG_MSG("failed to read wiroot-ip from config file");
+    }
+
+    return address;
+}
+
+unsigned short get_wiroot_port()
+{
+    const config_t* config = get_config();
+
+    int tmp_port;
+    if(!config || config_lookup_int(config, "wiroot-port", &tmp_port) == CONFIG_FALSE) {
+        DEBUG_MSG("Failed to read wiroot-port from config file");
+        return 0;
+    } else if(tmp_port < 0 || tmp_port > 0x0000FFFF) {
+        DEBUG_MSG("wiroot-port in config file is out of range");
+        return 0;
+    }
+
+    return (unsigned short)tmp_port;
+}
+
 unsigned short get_base_port()
 {
     const config_t* config = get_config();
@@ -81,6 +109,18 @@ unsigned int get_ping_interval()
     }
 
     return interval;
+}
+
+const char* get_internal_interface()
+{
+    const config_t* config = get_config();
+
+    const char* interface = 0;
+    if(!config || config_lookup_string(config, "internal-interface", &interface) == CONFIG_FALSE) {
+        DEBUG_MSG("failed to read internal-interface from config file");
+    }
+
+    return interface;
 }
 
 /*

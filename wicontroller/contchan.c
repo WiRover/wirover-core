@@ -17,16 +17,25 @@ int process_notification(const char* packet, unsigned int pkt_len)
 {
     assert(packet);
 
+    // Make sure the packet is at lease large enough for us to read some fields
+    // from it.
     if(pkt_len < MIN_NOTIFICATION_LEN) {
         DEBUG_MSG("notification packet was too small to be valid");
         return -1;
     }
 
     const struct cchan_notification* notif = (const struct cchan_notification*)packet;
-    
-    //TODO: Check that pkt_len >= the size necessary for the number of
-    //interfaces specified by notif->interfaces
 
+    // Make sure the packet is not shorter than the gateway is claiming based
+    // on the number of interfaces.  It may be longer than we expect though!
+    // We can still accept the packet but not read in more than MAX_INTERFACES.
+    const int expected_len = MIN_NOTIFICATION_LEN +
+            notif->interfaces * sizeof(struct interface_info);
+    if(pkt_len < expected_len) {
+        DEBUG_MSG("Received a malformed notification packet");
+        return -1;
+    }
+    
     struct gateway* gw = lookup_gateway_by_id(ntohs(notif->unique_id));
     if(gw) {
         update_gateway(gw, notif);
@@ -79,6 +88,9 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
     return gw;
 }
 
+/*
+ * UPDATE GATEWAY
+ */
 static void update_gateway(struct gateway* gw, const struct cchan_notification* notif)
 {
     assert(gw && notif);

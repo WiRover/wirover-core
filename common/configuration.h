@@ -16,8 +16,11 @@
 const config_t*     get_config();
 void                close_config();
 
+const char*     get_wiroot_ip();
+unsigned short  get_wiroot_port();
 unsigned short  get_base_port();
 unsigned int    get_ping_interval();
+const char*     get_internal_interface();
 
 #endif //_CONFIGURATION_H_
 

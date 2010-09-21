@@ -10,9 +10,6 @@
 #include "rootchan.h"
 #include "kernel.h"
 
-const char* WIROOT_ADDRESS = "128.105.22.229";
-const unsigned short WIROOT_PORT = 8088;
-
 // The virtual interface will use this IP address if we are unable to obtain a
 // private IP from the root server.
 const char* DEFAULT_VIRT_ADDRESS = "172.31.25.1";
@@ -24,12 +21,18 @@ int main(int argc, char* argv[])
     DEBUG_MSG("Starting wigateway version %d.%d",
               WIROVER_VERSION_MAJOR, WIROVER_VERSION_MINOR);
 
+    const char* wiroot_ip = get_wiroot_ip();
+    const unsigned short wiroot_port = get_wiroot_port();
     unsigned short base_port = get_base_port();
+    if(!(wiroot_ip && wiroot_port && base_port)) {
+        DEBUG_MSG("You must fix the config file.");
+        exit(1);
+    } 
 
     char my_ip[INET6_ADDRSTRLEN];
     strncpy(my_ip, DEFAULT_VIRT_ADDRESS, sizeof(my_ip));
 
-    const struct lease_info* lease = obtain_lease(WIROOT_ADDRESS, WIROOT_PORT, base_port);
+    const struct lease_info* lease = obtain_lease(wiroot_ip, wiroot_port, base_port);
     if(lease == 0) {
         DEBUG_MSG("Failed to obtain a lease from wiroot server.");
         DEBUG_MSG("We will use the IP address %s and NAT mode.", DEFAULT_VIRT_ADDRESS);

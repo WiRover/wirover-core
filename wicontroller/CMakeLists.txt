@@ -16,3 +16,6 @@ add_executable(wicontroller
 
 target_link_libraries(wicontroller pthread config)
 
+install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wicontroller DESTINATION /usr/bin)
+install(FILES wicontroller.conf DESTINATION /etc)
+

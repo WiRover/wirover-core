@@ -13,8 +13,6 @@
 #include "kernel.h"
 #include "config.h"
 
-const char* WIROOT_ADDRESS = "128.105.22.229";
-const unsigned short WIROOT_PORT = 8088;
 const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_idle_clients()
 const unsigned int  CLIENT_TIMEOUT = 5;
 
@@ -28,9 +26,15 @@ int main(int argc, char* argv[])
     DEBUG_MSG("Starting wicontroller version %d.%d",
               WIROVER_VERSION_MAJOR, WIROVER_VERSION_MINOR);
 
+    const char* wiroot_ip = get_wiroot_ip();
+    const unsigned short wiroot_port = get_wiroot_port();
     unsigned short base_port = get_base_port();
+    if(!(wiroot_ip && wiroot_port && base_port)) {
+        DEBUG_MSG("You must fix the config file.");
+        exit(1);
+    }
 
-    lease = obtain_lease(WIROOT_ADDRESS, WIROOT_PORT, base_port);
+    lease = obtain_lease(wiroot_ip, wiroot_port, base_port);
     if(!lease) {
         DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
 //        exit(1);

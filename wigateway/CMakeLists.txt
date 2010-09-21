@@ -16,3 +16,6 @@ add_executable(wigateway
 
 target_link_libraries(wigateway pthread config)
 
+install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wigateway DESTINATION /usr/bin)
+install(FILES wigateway.conf DESTINATION /etc)
+

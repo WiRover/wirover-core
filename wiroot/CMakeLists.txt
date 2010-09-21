@@ -12,3 +12,6 @@ add_executable(wiroot
 
 target_link_libraries(wiroot config mysqlclient)
 
+install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wiroot DESTINATION /usr/bin)
+install(FILES wiroot.conf DESTINATION /etc)
+

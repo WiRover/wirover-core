@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 #include <linux/if.h>
 
+#include "configuration.h"
 #include "debug.h"
 #include "rootchan.h"
 #include "sockets.h"
@@ -39,8 +40,13 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
     request.longitude = NAN;
     request.base_port = htons(base_port);
 
-    // TODO: get internal interface name from somewhere else
-    result = get_device_mac("eth0", request.hw_addr, sizeof(request.hw_addr));
+    const char* internal_if = get_internal_interface();
+    if(!internal_if) {
+        close(sockfd);
+        return 0;
+    }
+
+    result = get_device_mac(internal_if, request.hw_addr, sizeof(request.hw_addr));
     if(result == -1) {
         DEBUG_MSG("get_device_mac() failed");
         close(sockfd);
