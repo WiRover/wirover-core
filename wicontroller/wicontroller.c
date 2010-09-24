@@ -63,6 +63,13 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
+#ifdef WITH_KERNEL
+    const char* internal_if = get_internal_interface();
+    if(kernel_enslave_device(internal_if) == FAILURE) {
+        DEBUG_MSG("Failed to enslave device %s", internal_if);
+    }
+#endif
+
     server_loop(cchan_sock);
 
     close(cchan_sock);

@@ -90,7 +90,9 @@ static int handle_incoming(int sockfd)
 
     int bytes_recvd = recvfrom(sockfd, buffer, sizeof(buffer), 0,
             (struct sockaddr*)&addr, &addr_len);
-    if(bytes_recvd >= sizeof(struct ping_packet)) {
+    if(bytes_recvd < 0) {
+        ERROR_MSG("recvfrom failed (socket %d)", sockfd);
+    } else if(bytes_recvd >= sizeof(struct ping_packet)) {
         //struct ping_packet* pkt = (struct ping_packet*)buffer;
 
         int bytes_sent = sendto(sockfd, buffer, bytes_recvd, 0,
