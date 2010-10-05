@@ -9,6 +9,7 @@
 #include "ping.h"
 #include "rootchan.h"
 #include "kernel.h"
+#include "remote_nodes.h"
 
 // The virtual interface will use this IP address if we are unable to obtain a
 // private IP from the root server.
@@ -45,6 +46,18 @@ int main(int argc, char* argv[])
         if(lease->controllers > 0) {
             struct sockaddr_in caddr;
             get_controller_addr((struct sockaddr*)&caddr, sizeof(caddr));
+
+            struct virt_proc_remote_node remote_node;
+            remote_node.op          = PROC_REMOTE_ADD;
+            remote_node.priv_ip     = lease->cinfo[0].priv_ip;
+            remote_node.base_port   = lease->cinfo[0].base_port;
+            change_remote_node_table(&remote_node);
+
+            struct virt_proc_remote_link remote_link;
+            remote_link.op          = PROC_REMOTE_ADD;
+            remote_link.priv_ip     = lease->cinfo[0].priv_ip;
+            remote_link.pub_ip      = lease->cinfo[0].pub_ip;
+            change_remote_link_table(&remote_link);
 
             if(kernel_set_controller(&caddr) == FAILURE) {
                 DEBUG_MSG("Failed to set controller in kernel module");

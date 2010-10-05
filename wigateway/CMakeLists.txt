@@ -12,6 +12,7 @@ add_executable(wigateway
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
     ${COMMON}/kernel.c
+    ${COMMON}/remote_nodes.c
 )
 
 target_link_libraries(wigateway pthread config)

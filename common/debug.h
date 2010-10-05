@@ -11,6 +11,10 @@
 #define FAILURE -1
 #endif
 
+#ifndef SUCCESS
+#define SUCCESS 0
+#endif
+
 void print_time(FILE* out);
 
 #ifdef DEBUG_PRINT

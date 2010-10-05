@@ -6,6 +6,7 @@
 #include "debug.h"
 #include "gateway.h"
 #include "utlist.h"
+#include "remote_nodes.h"
 
 static struct gateway* make_gateway(const struct cchan_notification* notif);
 static void update_gateway(struct gateway* gw, const struct cchan_notification* notif);
@@ -64,6 +65,12 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
     gw->private_ip = notif->priv_ip;
     gw->unique_id = ntohs(notif->unique_id);
 
+    struct virt_proc_remote_node remote_node;
+    remote_node.op          = PROC_REMOTE_ADD;
+    remote_node.priv_ip     = notif->priv_ip;
+    remote_node.base_port   = 0; //TODO: may need this
+    change_remote_node_table(&remote_node);
+
     int i;
     for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
         struct interface* ife = alloc_interface();
@@ -100,6 +107,12 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
         ife->state = DEAD;
     }
     gw->active_interfaces = 0;
+
+    struct virt_proc_remote_node remote_node;
+    remote_node.op          = PROC_REMOTE_ADD;
+    remote_node.priv_ip     = notif->priv_ip;
+    remote_node.base_port   = 0; //TODO: may need this
+    change_remote_node_table(&remote_node);
 
     int i;
     for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
