@@ -6,6 +6,13 @@
 
 #include "ipaddr.h"
 
+const unsigned char IPV4_ON_IPV6_PREFIX[] = {
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0xff, 0xff,
+    // IPv4 address goes here.
+};
+
 int string_to_ipaddr(const char* addr, ipaddr_t* dest)
 {
     assert(dest);
@@ -103,9 +110,31 @@ int ipv4_to_ipaddr(uint32_t addr, ipaddr_t* dest)
         return -1;
     }
 
-    memset(dest->addr, 0x00, 10);      // The first ten octets are filled with zeros.
-    memset(dest->addr + 10, 0xff, 2);  // The next two octets are filled with ones.
-    memcpy(dest->addr + 12, &addr, 4); // Then the IPv4 address.
+    memcpy(dest->addr, IPV4_ON_IPV6_PREFIX, sizeof(IPV4_ON_IPV6_PREFIX));
+    memcpy(dest->addr + sizeof(IPV4_ON_IPV6_PREFIX), &addr, sizeof(addr));
+
+    return 0;
+}
+
+/*
+ * Please try not to rely on this function, as it means the calling code is
+ * incompatible with IPv6.
+ *
+ * Returns -1 if the ipaddr cannot be represented in v4.
+ */
+int ipaddr_to_ipv4(const ipaddr_t* addr, uint32_t* dest)
+{
+    assert(addr && dest);
+    if(!addr || !dest) {
+        return -1;
+    }
+
+    if(memcmp(addr->addr, IPV4_ON_IPV6_PREFIX, sizeof(IPV4_ON_IPV6_PREFIX)) == 0) {
+        memcpy(dest, addr->addr + sizeof(IPV4_ON_IPV6_PREFIX), sizeof(*dest));
+    } else {
+        // The address is not an IPv4 address!
+        return -1;
+    }
 
     return 0;
 }

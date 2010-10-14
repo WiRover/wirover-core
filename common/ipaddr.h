@@ -19,6 +19,7 @@ int     string_to_ipaddr(const char* addr, ipaddr_t* dest);
 int     ipaddr_to_string(const ipaddr_t* addr, char* dest, unsigned len);
 int     sockaddr_to_ipaddr(const struct sockaddr*, ipaddr_t* dest);
 int     ipv4_to_ipaddr(uint32_t addr, ipaddr_t* dest);
+int     ipaddr_to_ipv4(const ipaddr_t* addr, uint32_t* dest);
 void    copy_ipaddr(const ipaddr_t* src, ipaddr_t* dest);
 
 #endif //WIROVER_IPADDR_H
