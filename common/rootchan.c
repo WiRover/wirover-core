@@ -82,7 +82,7 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
         return 0;
     }
 
-    lease->priv_ip = response.priv_ip;
+    copy_ipaddr(&response.priv_ip, &lease->priv_ip);
     lease->unique_id = ntohs(response.unique_id);
     lease->controllers = response.controllers;
 
@@ -120,7 +120,7 @@ int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, 
 
     strncpy(ifr.ifr_name, device, IFNAMSIZ);
 
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    sockfd = socket(AF_INET6, SOCK_STREAM, 0);
     if(sockfd < 0) {
         ERROR_MSG("error creating socket");
         return -1;
@@ -190,7 +190,7 @@ int get_controller_ip(char* dest, int dest_len)
         return FAILURE;
     }
 
-    inet_ntop(AF_INET, &latest_lease->cinfo[0].pub_ip, dest, dest_len);
+    ipaddr_to_string(&latest_lease->cinfo[0].pub_ip, dest, dest_len);
     return 0;
 }
 

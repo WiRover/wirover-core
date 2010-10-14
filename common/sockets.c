@@ -26,7 +26,7 @@ int tcp_passive_open(unsigned short local_port, int backlog)
 {
     int sockfd = -1;
 
-    sockfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    sockfd = socket(PF_INET6, SOCK_STREAM, IPPROTO_TCP);
     if(sockfd < 0) {
         ERROR_MSG("failed creating socket");
         return -1;
@@ -40,25 +40,44 @@ int tcp_passive_open(unsigned short local_port, int backlog)
         return -1;
     }
 
-    struct sockaddr_in bindAddr;
-    memset(&bindAddr, 0, sizeof(bindAddr));
-    bindAddr.sin_family         = AF_INET;
-    bindAddr.sin_port           = htons(local_port);
-    bindAddr.sin_addr.s_addr    = htonl(INADDR_ANY);
+    char portString[16];
+    snprintf(portString, sizeof(portString), "%d", local_port);
 
-    if(bind(sockfd, (struct sockaddr*)&bindAddr, sizeof(struct sockaddr_in)) < 0) {
-        ERROR_MSG("failed binding socket");
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_INET6;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_V4MAPPED | AI_NUMERICHOST | AI_PASSIVE;
+
+    struct addrinfo* results = 0;
+    int ret = getaddrinfo(0, portString, &hints, &results);
+    if(ret != 0) {
+        DEBUG_MSG("getaddrinfo() failed: %s", gai_strerror(ret));
         close(sockfd);
         return -1;
+    }
+    
+    // If getaddrinfo completed successfully, these pointers should not be
+    // null, so this assert should never be triggered
+    assert(results != 0 && results->ai_addr != 0);
+
+    if(bind(sockfd, results->ai_addr, results->ai_addrlen) < 0) {
+        ERROR_MSG("failed binding socket");
+        goto free_and_return;
     }
 
     if(listen(sockfd, backlog) < 0) {
         ERROR_MSG("failed to listen on socket");
-        close(sockfd);
-        return -1;
+        goto free_and_return;
     }
-
+   
+    freeaddrinfo(results);
     return sockfd;
+
+free_and_return:
+    freeaddrinfo(results);
+    close(sockfd);
+    return -1;
 }
 
 /*
@@ -69,7 +88,7 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port)
     int sockfd;
     int rtn;
 
-    sockfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    sockfd = socket(PF_INET6, SOCK_STREAM, IPPROTO_TCP);
     if(sockfd < 0) {
         ERROR_MSG("failed creating socket");
         return -1;
@@ -77,8 +96,8 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port)
 
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
-    hints.ai_flags = NI_NUMERICSERV;
+    hints.ai_family = AF_INET6;
+    hints.ai_flags = AI_V4MAPPED | NI_NUMERICSERV;
 
     char port_string[16];
     snprintf(port_string, sizeof(port_string), "%d", remote_port);
@@ -95,7 +114,7 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port)
     assert(results != 0 && results->ai_addr != 0);
 
     // TODO: Implement connect with a timeout
-    rtn = connect(sockfd, results->ai_addr, sizeof(struct sockaddr_in));
+    rtn = connect(sockfd, results->ai_addr, results->ai_addrlen);
     if(rtn == -1) {
         goto close_and_return;
     }
@@ -108,34 +127,10 @@ close_and_return:
 }
 
 /*
- * UDP RAW OPEN
- *
- * Opens a raw UDP socket.  If device is non-null and contains the name
- * of a network device, it binds the socket to that device.
+ * Opens a UDP socket and binds it to the given port.  If device is non-null,
+ * it also binds the socket to the device.
  */
-int udp_raw_open(const char* device)
-{
-    int sockfd;
-
-    sockfd = socket(PF_INET, SOCK_RAW, IPPROTO_UDP);
-    if(sockfd < 0) {
-        ERROR_MSG("creating socket failed");
-        return FAILURE;
-    }
-
-    if(device) {
-        // Bind socket to device
-        if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, device, IFNAMSIZ) < 0) {
-            DEBUG_MSG("SO_BINDTODEVICE failed");
-            close(sockfd);
-            return FAILURE;
-        }
-    }
-
-    return sockfd;
-}
-
-int udp_bind_open(unsigned short local_port)
+int udp_bind_open(unsigned short local_port, const char* device)
 {
     int sockfd;
 
@@ -145,7 +140,7 @@ int udp_bind_open(unsigned short local_port)
 
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = AF_INET6;
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_protocol = IPPROTO_UDP;
     hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV | AI_V4MAPPED | AI_ADDRCONFIG;
@@ -160,18 +155,37 @@ int udp_bind_open(unsigned short local_port)
     sockfd = socket(results->ai_family, results->ai_socktype, results->ai_protocol);
     if(sockfd < 0) {
         ERROR_MSG("Failed to create socket");
-        freeaddrinfo(results);
-        return FAILURE;
+        goto free_and_fail;
+    }
+    
+    // Prevent bind from failing with address in use message.
+    const int yes = 1;
+    if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
+        DEBUG_MSG("SO_REUSEADDR failed");
+        goto free_and_fail;
     }
 
     if(bind(sockfd, results->ai_addr, results->ai_addrlen) == -1) {
         ERROR_MSG("Failed to bind socket");
-        close(sockfd);
-        freeaddrinfo(results);
-        return FAILURE;
+        goto free_and_fail;
+    }
+    
+    if(device) {
+        // Bind socket to device
+        if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, device, IFNAMSIZ) < 0) {
+            DEBUG_MSG("SO_BINDTODEVICE failed");
+            goto free_and_fail;
+        }
     }
 
-    return sockfd;   
+    freeaddrinfo(results);
+    return sockfd;
+
+free_and_fail:
+    freeaddrinfo(results);
+    close(sockfd);
+    return FAILURE;
+
 }
 
 /*
@@ -216,7 +230,7 @@ int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage*
 
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = AF_INET6;
     hints.ai_flags = AI_ADDRCONFIG | AI_V4MAPPED | AI_NUMERICSERV;
 
     struct addrinfo* results = 0;
@@ -238,7 +252,9 @@ int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage*
 
     memset(dest, 0, sizeof(*dest));
     memcpy(dest, results->ai_addr, results->ai_addrlen);
-    return 0;
+    freeaddrinfo(results);
+
+    return results->ai_addrlen;
 }
 
 /*

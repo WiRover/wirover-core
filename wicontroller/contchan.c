@@ -145,8 +145,8 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
         }
     }
     
-    char p_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &gw->private_ip, p_ip, sizeof(p_ip));
+    char p_ip[INET6_ADDRSTRLEN];
+    ipaddr_to_string(&gw->private_ip, p_ip, sizeof(p_ip));
 
     DEBUG_MSG("Updated gateway %s (uid %d) with %d active interfaces",
               p_ip, gw->unique_id, gw->active_interfaces);

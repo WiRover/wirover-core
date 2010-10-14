@@ -70,7 +70,9 @@ int ping_all_interfaces(unsigned short src_port)
             get_controller_base_port() + DATA_CHANNEL_OFFSET;
 
     struct sockaddr_storage dest_addr;
-    if(build_sockaddr(controller_ip, controller_port, &dest_addr) == FAILURE) {
+    unsigned dest_len;
+    dest_len = build_sockaddr(controller_ip, controller_port, &dest_addr);
+    if(dest_len < 0) {
         return FAILURE;
     }
 
@@ -80,7 +82,7 @@ int ping_all_interfaces(unsigned short src_port)
 
     struct interface* curr_ife = interface_list;
     while(curr_ife) {
-        send_ping(curr_ife, src_port, controller_port, (struct sockaddr*)&dest_addr, sizeof(dest_addr));
+        send_ping(curr_ife, src_port, controller_port, (struct sockaddr*)&dest_addr, dest_len);
 
         assert(curr_ife != curr_ife->next);
         curr_ife = curr_ife->next;
@@ -110,12 +112,14 @@ int ping_interface(struct interface* ife)
             get_controller_base_port() + DATA_CHANNEL_OFFSET;
 
     struct sockaddr_storage dest_addr;
-    if(build_sockaddr(controller_ip, controller_port, &dest_addr) == FAILURE) {
+    unsigned dest_len;
+    dest_len = build_sockaddr(controller_ip, controller_port, &dest_addr);
+    if(dest_len < 0) {
         return FAILURE;
     }
 
     if(send_ping(ife, local_port, controller_port, (struct sockaddr*)&dest_addr,
-            sizeof(dest_addr)) == FAILURE) {
+         dest_len) == FAILURE) {
         return FAILURE;
     }
 
@@ -134,34 +138,25 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
     struct timeval now;
     int bytes;
 
-    sockfd = udp_raw_open(ife->name);
+    //sockfd = udp_raw_open(ife->name);
+    sockfd = udp_bind_open(src_port, ife->name);
     if(sockfd == FAILURE) {
         return FAILURE;
     }
 
-    const unsigned int pkt_len = sizeof(struct udphdr) + sizeof(struct ping_packet);
-    char buffer[pkt_len];
-
-    struct udphdr* udphdr = (struct udphdr*)buffer;
-    struct ping_packet* pkt = (struct ping_packet*)(buffer + sizeof(struct udphdr));
-
-    udphdr->source = htons(src_port);
-    udphdr->dest = htons(dest_port);
-    udphdr->len = htons(pkt_len);
-    udphdr->check = 0;
-
-    memset(pkt, 0, sizeof(*pkt));
-    pkt->seq_no = SPECIAL_SEQ_NO;
-    pkt->type = PING_PACKET_TYPE;
-    pkt->src_id = htons(get_unique_id());
-    pkt->link_id = htonl(ife->index);
+    struct ping_packet pkt;
+    memset(&pkt, 0, sizeof(pkt));
+    pkt.seq_no = SPECIAL_SEQ_NO;
+    pkt.type = PING_PACKET_TYPE;
+    pkt.src_id = htons(get_unique_id());
+    pkt.link_id = htonl(ife->index);
    
     //Store a timestamp in the packet for calculating RTT.
     gettimeofday(&now, 0);
-    pkt->sent_sec = htonl(now.tv_sec);
-    pkt->sent_usec = htonl(now.tv_usec);
+    pkt.sent_sec = htonl(now.tv_sec);
+    pkt.sent_usec = htonl(now.tv_usec);
 
-    bytes = sendto(sockfd, buffer, pkt_len, 0, dest_addr, dest_len);
+    bytes = sendto(sockfd, &pkt, sizeof(pkt), 0, dest_addr, dest_len);
     if(bytes < 0) {
         ERROR_MSG("sending ping packet on %s failed", ife->name);
         close(sockfd);
@@ -185,7 +180,7 @@ void* ping_thread_func(void* arg)
     const unsigned int      ping_interval = get_ping_interval();
     int sockfd;
 
-    sockfd = udp_bind_open(local_port);
+    sockfd = udp_bind_open(local_port, 0);
     if(sockfd == FAILURE) {
         DEBUG_MSG("Ping thread cannot continue due to failure");
         return 0;

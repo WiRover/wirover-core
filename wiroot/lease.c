@@ -91,9 +91,10 @@ const struct lease* grant_lease(const uint8_t* hw_addr, unsigned int hw_addr_len
     HASH_ADD(hh_ip, leases_ip_hash, ip, sizeof(lease->ip), lease);
     HASH_ADD(hh_hw, leases_hw_hash, hw_addr, sizeof(lease->hw_addr), lease);
 
-    char p_ip[INET_ADDRSTRLEN];
+    char p_ip[INET6_ADDRSTRLEN];
+    ipaddr_to_string(&lease->ip, p_ip, sizeof(p_ip));
+    
     char p_hw_addr[100];
-    inet_ntop(AF_INET, &n_ip, p_ip, sizeof(p_ip));
     to_hex_string((const char*)hw_addr, hw_addr_len, p_hw_addr, sizeof(p_hw_addr));
 
     DEBUG_MSG("Granted lease of %s for hw_addr %s", p_ip, p_hw_addr);
@@ -116,9 +117,10 @@ void remove_stale_leases()
             HASH_DELETE(hh_ip, leases_ip_hash, lease);
             HASH_DELETE(hh_hw, leases_hw_hash, lease);
 
-            char p_ip[INET_ADDRSTRLEN];
+            char p_ip[INET6_ADDRSTRLEN];
+            ipaddr_to_string(&lease->ip, p_ip, sizeof(p_ip));
+            
             char p_hw_addr[100];
-            inet_ntop(AF_INET, &lease->ip, p_ip, sizeof(p_ip));
             to_hex_string((const char*)lease->hw_addr, sizeof(lease->hw_addr), p_hw_addr, sizeof(p_hw_addr));
 
             DEBUG_MSG("Expiring lease of %s for hw_addr %s", p_ip, p_hw_addr);
@@ -139,8 +141,8 @@ static void renew_lease(struct lease* lease)
         return;
     }
 
-    char p_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &lease->ip, p_ip, sizeof(p_ip));
+    char p_ip[INET6_ADDRSTRLEN];
+    ipaddr_to_string(&lease->ip, p_ip, sizeof(p_ip));
 
     char p_hw_addr[100];
     to_hex_string((const char*)lease->hw_addr, sizeof(lease->hw_addr), p_hw_addr, sizeof(p_hw_addr));

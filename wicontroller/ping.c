@@ -54,7 +54,7 @@ void* ping_thread_func(void* arg)
     const unsigned short    base_port = get_base_port();
     int sockfd;
 
-    sockfd = udp_bind_open(base_port);
+    sockfd = udp_bind_open(base_port, 0);
     if(sockfd == FAILURE) {
         DEBUG_MSG("Ping thread cannot continue due to failure");
         return 0;

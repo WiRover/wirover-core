@@ -43,19 +43,23 @@ int main(int argc, char* argv[])
         DEBUG_MSG("There are %d controllers available.", lease->controllers);
 
         if(lease->controllers > 0) {
+            char cont_ip[INET6_ADDRSTRLEN];
+            ipaddr_to_string(&lease->cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
+            DEBUG_MSG("First controller is at: %s", cont_ip);
+
             //struct sockaddr_in caddr;
             //get_controller_addr((struct sockaddr*)&caddr, sizeof(caddr));
 
             struct virt_proc_remote_node remote_node;
             remote_node.op          = PROC_REMOTE_ADD;
             remote_node.base_port   = lease->cinfo[0].base_port;
-            copy_ipaddr(&remote_node.priv_ip, &lease->cinfo[0].priv_ip);
+            copy_ipaddr(&lease->cinfo[0].priv_ip, &remote_node.priv_ip);
             change_remote_node_table(&remote_node);
 
             struct virt_proc_remote_link remote_link;
             remote_link.op          = PROC_REMOTE_ADD;
-            copy_ipaddr(&remote_link.priv_ip, &lease->cinfo[0].priv_ip);
-            copy_ipaddr(&remote_link.pub_ip, &lease->cinfo[0].pub_ip);
+            copy_ipaddr(&lease->cinfo[0].priv_ip, &remote_link.priv_ip);
+            copy_ipaddr(&lease->cinfo[0].pub_ip, &remote_link.pub_ip);
             change_remote_link_table(&remote_link);
 
             //if(kernel_set_controller(&caddr) == FAILURE) {
