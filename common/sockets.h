@@ -9,7 +9,7 @@
 
 struct client {
     int                 fd;
-    struct sockaddr_in  addr;
+    struct sockaddr_storage   addr;  //more than large enough for IPv4 or IPv6
     socklen_t           addr_len;
     time_t              last_active;
 
