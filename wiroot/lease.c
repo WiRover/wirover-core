@@ -84,7 +84,7 @@ const struct lease* grant_lease(const uint8_t* hw_addr, unsigned int hw_addr_len
 
     memset(lease, 0, sizeof(struct lease));
     memcpy(lease->hw_addr, hw_addr, sizeof(lease->hw_addr));
-    lease->ip = n_ip;
+    ipv4_to_ipaddr(n_ip, &lease->ip);
     lease->end = time(&lease->start) + LEASE_TIME_LIMIT;
 
     DL_APPEND(leases_head, lease);

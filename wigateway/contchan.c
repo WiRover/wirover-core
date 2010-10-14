@@ -33,7 +33,7 @@ int send_notification()
     struct cchan_notification notification;
 
     notification.type = CCHAN_NOTIFICATION;
-    notification.priv_ip = get_private_ip();
+    get_private_ip(&notification.priv_ip);
     notification.unique_id = htons(get_unique_id());
 
     obtain_read_lock(&interface_list_lock);

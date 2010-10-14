@@ -11,12 +11,12 @@ static struct controller*    controllers_ip_hash = 0;
  *
  * Adds a controller to list of available controllers.
  */
-void add_controller(uint32_t priv_ip, uint32_t pub_ip, uint16_t base_port, double latitude, double longitude)
+void add_controller(const ipaddr_t* priv_ip, const ipaddr_t* pub_ip, uint16_t base_port, double latitude, double longitude)
 {
     struct controller* controller;
     int is_new = 0;
 
-    HASH_FIND(hh_ip, controllers_ip_hash, &priv_ip, sizeof(priv_ip), controller);
+    HASH_FIND(hh_ip, controllers_ip_hash, priv_ip, sizeof(*priv_ip), controller);
     if(!controller) {
         controller = (struct controller*)malloc(sizeof(struct controller));
         ASSERT_OR_ELSE(controller) {
@@ -27,14 +27,14 @@ void add_controller(uint32_t priv_ip, uint32_t pub_ip, uint16_t base_port, doubl
         is_new = 1;
     }
 
-    controller->priv_ip = priv_ip;
-    controller->pub_ip = pub_ip;
+    copy_ipaddr(priv_ip, &controller->priv_ip);
+    copy_ipaddr(pub_ip, &controller->pub_ip);
     controller->base_port = base_port;
     controller->latitude = latitude;
     controller->longitude = longitude;
 
     if(is_new) {
-        HASH_ADD(hh_ip, controllers_ip_hash, priv_ip, sizeof(priv_ip), controller);
+        HASH_ADD(hh_ip, controllers_ip_hash, priv_ip, sizeof(*priv_ip), controller);
     }
 }
 

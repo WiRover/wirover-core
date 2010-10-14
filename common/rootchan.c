@@ -139,12 +139,12 @@ int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, 
     return copy_bytes;
 }
 
-uint32_t get_private_ip()
+void get_private_ip(ipaddr_t* dest)
 {
     if(latest_lease) {
-        return latest_lease->priv_ip;
+        copy_ipaddr(&latest_lease->priv_ip, dest);
     } else {
-        return 0;
+        memset(dest, 0, sizeof(*dest));
     }
 }
 
@@ -160,30 +160,6 @@ uint16_t get_unique_id()
 const struct lease_info* get_lease_info()
 {
     return latest_lease;
-}
-
-int get_controller_addr(struct sockaddr* addr, socklen_t addr_len)
-{
-    assert(addr);
-
-    if(!latest_lease || latest_lease->controllers == 0) {
-        DEBUG_MSG("There are no controllers.");
-        return FAILURE;
-    }
-
-    if(addr_len < sizeof(struct sockaddr_in)) {
-        DEBUG_MSG("addr_len is too small");
-        return FAILURE;
-    }
-
-    memset(addr, 0, addr_len);
-
-    struct sockaddr_in* a = (struct sockaddr_in*)addr;
-    a->sin_family = AF_INET;
-    a->sin_port = latest_lease->cinfo[0].base_port;
-    a->sin_addr.s_addr = latest_lease->cinfo[0].pub_ip;
-
-    return 0;
 }
 
 /*

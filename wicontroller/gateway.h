@@ -3,12 +3,14 @@
 
 #include <stdint.h>
 #include <time.h>
+
+#include "ipaddr.h"
 #include "uthash.h"
 
 struct interface;
 
 struct gateway {
-    uint32_t            private_ip; //IP is stored in network byte order
+    ipaddr_t            private_ip;
     unsigned short      unique_id;
 
     time_t              creation_time;

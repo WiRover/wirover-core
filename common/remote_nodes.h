@@ -2,6 +2,7 @@
 #define _REMOTE_NODES_H_
 
 #include <stdint.h>
+#include "ipaddr.h"
 
 // Locations of proc files
 #define PROC_FILE_REMOTE_NODES "/proc/virtmod/remote/nodes"
@@ -12,7 +13,7 @@
 
 struct virt_proc_remote_node {
     unsigned    op;
-    uint32_t    priv_ip;
+    ipaddr_t    priv_ip;
     uint16_t    base_port;
 } __attribute__((__packed__));
 
@@ -21,8 +22,8 @@ struct virt_proc_remote_link {
 
     // priv_ip identifies the node to which this link belongs, so the node must
     // be added before a link is added.
-    uint32_t    priv_ip;
-    uint32_t    pub_ip;
+    ipaddr_t    priv_ip;
+    ipaddr_t    pub_ip;
 } __attribute__((__packed__));
 
 int change_remote_node_table(struct virt_proc_remote_node* change);

@@ -8,6 +8,7 @@ add_executable(wicontroller
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
     ${COMMON}/interface.c
+    ${COMMON}/ipaddr.c
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c

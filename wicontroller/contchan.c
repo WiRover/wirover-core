@@ -62,12 +62,12 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
     assert(notif);
 
     struct gateway* gw = alloc_gateway();
-    gw->private_ip = notif->priv_ip;
+    copy_ipaddr(&notif->priv_ip, &gw->private_ip);
     gw->unique_id = ntohs(notif->unique_id);
 
     struct virt_proc_remote_node remote_node;
     remote_node.op          = PROC_REMOTE_ADD;
-    remote_node.priv_ip     = notif->priv_ip;
+    copy_ipaddr(&notif->priv_ip, &remote_node.priv_ip);
     remote_node.base_port   = 0; //TODO: may need this
     change_remote_node_table(&remote_node);
 
@@ -86,11 +86,11 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
         DL_APPEND(gw->head_interface, ife);
     }
     
-    char p_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &gw->private_ip, p_ip, sizeof(p_ip));
+    char ip_string[INET6_ADDRSTRLEN];
+    ipaddr_to_string(&gw->private_ip, ip_string, sizeof(ip_string));
 
     DEBUG_MSG("Registered new gateway %s (uid %d) with %d active interfaces",
-              p_ip, gw->unique_id, gw->active_interfaces);
+              ip_string, gw->unique_id, gw->active_interfaces);
 
     return gw;
 }

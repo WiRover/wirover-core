@@ -7,6 +7,7 @@ add_executable(wiroot
     controllers.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
+    ${COMMON}/ipaddr.c
     ${COMMON}/sockets.c
 )
 

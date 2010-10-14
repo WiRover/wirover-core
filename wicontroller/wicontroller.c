@@ -40,9 +40,8 @@ int main(int argc, char* argv[])
 //        exit(1);
     }
 
-    char p_ip[INET_ADDRSTRLEN];
-    inet_ntop(AF_INET, &lease->priv_ip, p_ip, sizeof(p_ip));
-
+    char p_ip[INET6_ADDRSTRLEN];
+    ipaddr_to_string(&lease->priv_ip, p_ip, sizeof(p_ip));
     DEBUG_MSG("Obtained lease of %s", p_ip);
 
     result = setup_virtual_interface(p_ip);

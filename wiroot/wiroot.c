@@ -208,12 +208,12 @@ static void handle_gateway_config(struct client* client, const char* packet, int
 
         int i;
         for(i = 0; i < response.controllers && i < MAX_CONTROLLERS; i++) {
-            response.cinfo[i].priv_ip = controller_list[i]->priv_ip;
-            response.cinfo[i].pub_ip = controller_list[i]->pub_ip;
+            copy_ipaddr(&controller_list[i]->priv_ip, &response.cinfo[i].priv_ip);
+            copy_ipaddr(&controller_list[i]->pub_ip, &response.cinfo[i].pub_ip);
             response.cinfo[i].base_port = controller_list[i]->base_port;
         }
 
-        response.priv_ip = lease->ip;
+        copy_ipaddr(&lease->ip, &response.priv_ip);
         response.lease_time = (lease->end - lease->start);
     }
 
@@ -248,10 +248,12 @@ static void handle_controller_config(struct client* client, const char* packet, 
     response->unique_id = htons(unique_id);
 
     if(lease) {
-        uint32_t pub_ip = client->addr.sin_addr.s_addr;
-        add_controller(lease->ip, pub_ip, request->base_port, request->latitude, request->longitude);
+        ipaddr_t client_ip;
+        sockaddr_to_ipaddr((const struct sockaddr*)&client->addr, &client_ip);
 
-        response->priv_ip = lease->ip;
+        add_controller(&lease->ip, &client_ip, request->base_port, request->latitude, request->longitude);
+
+        copy_ipaddr(&lease->ip, &response->priv_ip);
         response->lease_time = (lease->end - lease->start);
         response->controllers = 0;
     }

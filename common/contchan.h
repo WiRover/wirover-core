@@ -17,6 +17,7 @@
 #include <linux/if_ether.h>
 
 #include "interface.h"
+#include "ipaddr.h"
 
 #define MAX_INTERFACES    6
 
@@ -30,7 +31,7 @@ struct interface_info {
 
 struct cchan_notification {
     uint8_t     type;
-    uint32_t    priv_ip;
+    ipaddr_t    priv_ip;
     uint16_t    unique_id;
     uint8_t     interfaces;
     struct interface_info if_info[MAX_INTERFACES];

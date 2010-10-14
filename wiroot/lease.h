@@ -6,11 +6,12 @@
 #include <time.h>
 #include <linux/if_ether.h>
 
+#include "ipaddr.h"
 #include "uthash.h"
 
 struct lease {
     uint8_t     hw_addr[ETH_ALEN];
-    uint32_t    ip;
+    ipaddr_t    ip;
     time_t      start;
     time_t      end;
 
