@@ -48,6 +48,8 @@ int send_notification()
         strncpy(dest->ifname, ife->name, sizeof(dest->ifname));
         strncpy(dest->network, ife->network, sizeof(dest->network));
         dest->state = ife->state;
+        dest->local_ip = ife->local_ip.s_addr;
+        dest->data_port = ife->data_port;
 
         ife = ife->next;
         ife_ind++;

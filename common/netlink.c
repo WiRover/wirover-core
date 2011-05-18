@@ -7,6 +7,7 @@
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
 #include <net/if.h>
+#include <ifaddrs.h>
 
 #include "config.h"
 #include "contchan.h"
@@ -36,38 +37,46 @@ static pthread_t    netlink_thread;
  */
 int init_interface_list()
 {
-    FILE* proc_file;
-    char buffer[512];
-
-    proc_file = fopen("/proc/net/dev", "r");
-    if(!proc_file) {
-        ERROR_MSG("Failed to open /proc/net/dev for reading");
+    struct ifaddrs *ifap = 0;
+    if(getifaddrs(&ifap) < 0) {
+        ERROR_MSG("getifaddrs failed");
         return -1;
     }
 
-    // Throw away the first two lines
-    fgets(buffer, sizeof(buffer), proc_file);
-    fgets(buffer, sizeof(buffer), proc_file);
-
     obtain_write_lock(&interface_list_lock);
 
-    while(fgets(buffer, sizeof(buffer), proc_file)) {
-        char name[IFNAMSIZ];
-        read_dev_name(buffer, name, sizeof(name));
+    while(ifap) {
+        if((ifap->ifa_flags & IFF_UP) && (ifap->ifa_flags & IFF_RUNNING) &&
+                !(ifap->ifa_flags & IFF_LOOPBACK)) {
+            struct interface *ife;
 
-        struct interface* ife;
-        ife = alloc_interface();
+            ife = find_interface_by_name(interface_list, ifap->ifa_name);
+            if(!ife) {
+                ife = alloc_interface();
+                if(!ife)
+                    continue;
 
-        ife->index = if_nametoindex(name);
-        strncpy(ife->name, name, sizeof(ife->name));
+                ife->index = if_nametoindex(ifap->ifa_name);
+                strncpy(ife->name, ifap->ifa_name, sizeof(ife->name));
 
-        // Set to INACTIVE until connectivity is confirmed
-        ife->state = INACTIVE;
+                // Set to INACTIVE until connectivity is confirmed
+                ife->state = INACTIVE;
 
-        add_interface(ife);
+                add_interface(ife);
+            }
+
+            // TODO: Keep IPv6 address(es) as well
+            if(ifap->ifa_addr->sa_family == AF_INET) {
+                struct sockaddr_in *sin = (struct sockaddr_in *)ifap->ifa_addr;
+                memcpy(&ife->local_ip, &sin->sin_addr, sizeof(struct sockaddr_in));
+            }
+        }
+        
+        ifap = ifap->ifa_next;
     }
 
     release_write_lock(&interface_list_lock);
+    freeifaddrs(ifap);
 
     return 0;
 }

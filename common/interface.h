@@ -21,6 +21,10 @@ struct interface {
     char              network[NETWORK_NAME_LENGTH];
     enum if_state     state;
 
+    /* These are in network byte order. */
+    struct in_addr    local_ip;
+    uint16_t          data_port;
+
     time_t            last_ping;
 
     double            avg_rtt;

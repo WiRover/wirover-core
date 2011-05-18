@@ -9,7 +9,6 @@
 #include "ping.h"
 #include "rootchan.h"
 #include "kernel.h"
-#include "remote_nodes.h"
 
 // The virtual interface will use this IP address if we are unable to obtain a
 // private IP from the root server.
@@ -47,20 +46,16 @@ int main(int argc, char* argv[])
             ipaddr_to_string(&lease->cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
             DEBUG_MSG("First controller is at: %s", cont_ip);
 
-            //struct sockaddr_in caddr;
-            //get_controller_addr((struct sockaddr*)&caddr, sizeof(caddr));
+            uint32_t priv_ip;
+            uint32_t pub_ip;
+            uint32_t netmask = 0xffffffff;
 
-            struct virt_proc_remote_node remote_node;
-            remote_node.op          = PROC_REMOTE_ADD;
-            remote_node.base_port   = lease->cinfo[0].base_port;
-            copy_ipaddr(&lease->cinfo[0].priv_ip, &remote_node.priv_ip);
-            change_remote_node_table(&remote_node);
+            ipaddr_to_ipv4(&lease->cinfo[0].priv_ip, &priv_ip);
+            ipaddr_to_ipv4(&lease->cinfo[0].pub_ip, &pub_ip);
 
-            struct virt_proc_remote_link remote_link;
-            remote_link.op          = PROC_REMOTE_ADD;
-            copy_ipaddr(&lease->cinfo[0].priv_ip, &remote_link.priv_ip);
-            copy_ipaddr(&lease->cinfo[0].pub_ip, &remote_link.pub_ip);
-            change_remote_link_table(&remote_link);
+            virt_add_remote_node((struct in_addr *)&priv_ip, (struct in_addr *)&netmask);
+            virt_add_remote_link((struct in_addr *)&priv_ip, 
+                (struct in_addr *)&pub_ip, lease->cinfo[0].base_port);
 
             //if(kernel_set_controller(&caddr) == FAILURE) {
             //    DEBUG_MSG("Failed to set controller in kernel module");

@@ -27,6 +27,9 @@ struct interface_info {
     char        ifname[IFNAMSIZ];
     char        network[NETWORK_NAME_LENGTH];
     uint8_t     state;
+
+    uint32_t    local_ip;
+    uint16_t    data_port;
 } __attribute__((__packed__));
 
 struct cchan_notification {

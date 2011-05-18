@@ -1,5 +1,6 @@
 #include <netdb.h>
 #include <stropts.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <linux/if.h>
 #include <sys/ioctl.h>
@@ -14,15 +15,17 @@ const char* VIRT_DEVICE = "virt0";
 /*
  * SETUP VIRTUAL INTERFACE
  */
-int setup_virtual_interface(const char* __restrict__ ip)
+int setup_virtual_interface(const char *ip)
 {
     int sockfd;
     struct addrinfo hints;
     struct addrinfo* ainfo;
     int result;
 
+    /* TODO: struct ifreq only has space for a sockaddr, so only IPv4
+     * addresses can be added with the current code. */
     memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = AF_INET;
     hints.ai_flags = AI_NUMERICHOST;
 
     result = getaddrinfo(ip, 0, &hints, &ainfo);
@@ -128,6 +131,62 @@ int kernel_release_device(const char* device)
     }
 
     close(sockfd);
+    return 0;
+}
+
+
+int virt_add_remote_node(const struct in_addr *priv_ip,   
+                const struct in_addr *netmask)
+{
+    struct virt_proc_remote_node node;
+    memset(&node, 0, sizeof(node));
+
+    node.op = VIRT_PROC_REMOTE_ADD;
+    memcpy(&node.priv_ip, priv_ip, sizeof(node.priv_ip));
+    memcpy(&node.netmask, netmask, sizeof(node.netmask));
+
+    int fd = open("/proc/virtmod/remote/nodes", O_WRONLY);
+    if(fd < 0) {
+        ERROR_MSG("open /proc/virtmod/remote/nodes failed");
+        return -1;
+    }
+
+    int written = write(fd, &node, sizeof(node));
+    if(written < sizeof(node)) {
+        ERROR_MSG("write failed");
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+    return 0;
+}
+
+int virt_add_remote_link(const struct in_addr *priv_ip,
+                const struct in_addr *pub_ip, unsigned short data_port)
+{
+    struct virt_proc_remote_link link;
+    memset(&link, 0, sizeof(link));
+
+    link.op = VIRT_PROC_REMOTE_ADD;
+    memcpy(&link.priv_ip, priv_ip, sizeof(link.priv_ip));
+    memcpy(&link.pub_ip, pub_ip, sizeof(link.pub_ip));
+    link.data_port = data_port;
+
+    int fd = open("/proc/virtmod/remote/links", O_WRONLY);
+    if(fd < 0) {
+        ERROR_MSG("open /proc/virtmod/remote/links failed");
+        return -1;
+    }
+
+    int written = write(fd, &link, sizeof(link));
+    if(written < sizeof(link)) {
+        ERROR_MSG("write failed");
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
     return 0;
 }
 

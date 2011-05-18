@@ -6,15 +6,15 @@
 #include "debug.h"
 #include "gateway.h"
 #include "utlist.h"
-#include "remote_nodes.h"
+#include "kernel.h"
 
 static struct gateway* make_gateway(const struct cchan_notification* notif);
 static void update_gateway(struct gateway* gw, const struct cchan_notification* notif);
 
 /*
- * PROCESS NOTIFICATION
+ * Parse a notification packet and update the list of gateways accordingly.
  */
-int process_notification(const char* packet, unsigned int pkt_len)
+int process_notification(const char *packet, unsigned int pkt_len)
 {
     assert(packet);
 
@@ -53,8 +53,6 @@ int process_notification(const char* packet, unsigned int pkt_len)
 }
 
 /*
- * MAKE GATEWAY
- *
  * Makes a new gateway based on the received notification message.
  */
 static struct gateway* make_gateway(const struct cchan_notification* notif)
@@ -65,11 +63,13 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
     copy_ipaddr(&notif->priv_ip, &gw->private_ip);
     gw->unique_id = ntohs(notif->unique_id);
 
-    struct virt_proc_remote_node remote_node;
-    remote_node.op          = PROC_REMOTE_ADD;
-    copy_ipaddr(&notif->priv_ip, &remote_node.priv_ip);
-    remote_node.base_port   = 0; //TODO: may need this
-    change_remote_node_table(&remote_node);
+    struct in_addr priv_ip;
+    ipaddr_to_ipv4(&notif->priv_ip, (uint32_t *)&priv_ip.s_addr);
+
+    struct in_addr netmask;
+    netmask.s_addr = 0xFFFFFFFF;
+
+    virt_add_remote_node(&priv_ip, &netmask);
 
     int i;
     for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
@@ -81,6 +81,11 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
 
         if(ife->state == ACTIVE) {
             gw->active_interfaces++;
+
+            struct in_addr pub_ip;
+            ipaddr_to_ipv4(&notif->if_info[i].pub_ip, (uint32_t *)&pub_ip.s_addr);
+
+            virt_add_remote_link(&priv_ip, &pub_ip, notif->if_info[i].data_port);
         }
 
         DL_APPEND(gw->head_interface, ife);
@@ -96,7 +101,7 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
 }
 
 /*
- * UPDATE GATEWAY
+ * Update an exisiting gateway based on the notification message.
  */
 static void update_gateway(struct gateway* gw, const struct cchan_notification* notif)
 {
@@ -108,11 +113,13 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
     }
     gw->active_interfaces = 0;
 
-    struct virt_proc_remote_node remote_node;
-    remote_node.op          = PROC_REMOTE_ADD;
-    remote_node.priv_ip     = notif->priv_ip;
-    remote_node.base_port   = 0; //TODO: may need this
-    change_remote_node_table(&remote_node);
+    struct in_addr priv_ip;
+    ipaddr_to_ipv4(&notif->priv_ip, (uint32_t *)&priv_ip.s_addr);
+
+    struct in_addr netmask;
+    netmask.s_addr = 0xFFFFFFFF;
+
+    virt_add_remote_node(&priv_ip, &netmask);
 
     int i;
     for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
@@ -130,6 +137,11 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
 
         if(is_new) {
             DL_APPEND(gw->head_interface, ife);
+
+            struct in_addr pub_ip;
+            ipaddr_to_ipv4(&notif->if_info[i].pub_ip, (uint32_t *)&pub_ip.s_addr);
+
+            virt_add_remote_link(&priv_ip, &pub_ip, notif->if_info[i].data_port);
         }
 
         if(ife->state == ACTIVE) {
