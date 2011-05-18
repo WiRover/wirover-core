@@ -114,6 +114,10 @@ static int configure_wiroot(const char* filename)
     int result;
 
     const config_t* config = get_config();
+    if(!config) {
+        DEBUG_MSG("Warning: wiroot config file was not found\n");
+        return 0;
+    }
 
     int port;
     result = config_lookup_int(config, "server.port", &port);

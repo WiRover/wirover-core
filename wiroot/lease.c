@@ -8,9 +8,10 @@
 #include "utlist.h"
 
 // These default values will be overwritten by read_lease_config().
-static const char*  LEASE_RANGE_START = "192.168.1.1";
-static const char*  LEASE_RANGE_END   = "192.168.1.254";
-static int          LEASE_TIME_LIMIT = 86400;
+static const char   *LEASE_RANGE_START  = "192.168.1.1";
+static const char   *LEASE_RANGE_END    = "192.168.1.254";
+static int          GATEWAY_SUBNET_SIZE = 32;
+static int          LEASE_TIME_LIMIT    = 86400;
 
 static struct lease* leases_head = 0;
 static struct lease* leases_ip_hash = 0;
@@ -28,8 +29,9 @@ int read_lease_config(const config_t* config)
 {
     int result;
 
-    ASSERT_OR_ELSE(config) {
-        return -1;
+    // Just use default values if config file was not found.
+    if(!config) {
+        return 0;
     }
 
     result = config_lookup_string(config, "lease.range-start", &LEASE_RANGE_START);
@@ -40,6 +42,16 @@ int read_lease_config(const config_t* config)
     result = config_lookup_string(config, "lease.range-end", &LEASE_RANGE_END);
     if(result == CONFIG_FALSE) {
         DEBUG_MSG("lease.range-end missing in config file");
+    }
+
+    int subnet_size;
+    result = config_lookup_int(config, "lease.gateway-subnet-size", &subnet_size);
+    if(result == CONFIG_FALSE) {
+        DEBUG_MSG("lease.gateway-subnet-size missing in config file");
+    } else if(subnet_size < 0 || subnet_size > IPV4_ADDRESS_BITS) {
+        DEBUG_MSG("lease.gateway-subnet-size has invalid value (%d)", subnet_size);
+    } else {
+        GATEWAY_SUBNET_SIZE = subnet_size;
     }
     
     result = config_lookup_int(config, "lease.time-limit", &LEASE_TIME_LIMIT);
@@ -170,10 +182,10 @@ static uint32_t find_free_ip()
     uint32_t end = 0;
 
     inet_pton(AF_INET, LEASE_RANGE_START, &start);
-    start = ntohl(start);
+    start = ntohl(start) >> (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE);
 
     inet_pton(AF_INET, LEASE_RANGE_END, &end);
-    end = ntohl(end);
+    end = ntohl(end) >> (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE);
 
     // This is the case when find_free_ip() is called for the first time or if
     // the lease ranges are ever changed.
@@ -195,7 +207,7 @@ static uint32_t find_free_ip()
         struct lease* lease;
         HASH_FIND(hh_ip, leases_ip_hash, &n_curr_ip, sizeof(n_curr_ip), lease);
         if(!lease) {
-            return n_curr_ip;
+            return n_curr_ip << (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE);
         }
     } while(h_next_ip != first_ip_tried);
 

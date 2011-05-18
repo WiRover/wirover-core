@@ -11,7 +11,8 @@ static struct controller*    controllers_ip_hash = 0;
  *
  * Adds a controller to list of available controllers.
  */
-void add_controller(const ipaddr_t* priv_ip, const ipaddr_t* pub_ip, uint16_t base_port, double latitude, double longitude)
+void add_controller(const ipaddr_t* priv_ip, const ipaddr_t* pub_ip, 
+        uint16_t base_port, double latitude, double longitude)
 {
     struct controller* controller;
     int is_new = 0;

@@ -9,6 +9,8 @@
 #include "ipaddr.h"
 #include "uthash.h"
 
+#define IPV4_ADDRESS_BITS   32
+
 struct lease {
     uint8_t     hw_addr[ETH_ALEN];
     ipaddr_t    ip;

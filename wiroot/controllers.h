@@ -7,6 +7,9 @@
 struct controller {
     ipaddr_t        priv_ip;
     ipaddr_t        pub_ip;
+
+    uint16_t        data_port;
+    uint16_t        cchan_port;
     uint16_t        base_port;
 
     double          latitude;
