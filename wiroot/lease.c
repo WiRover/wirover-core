@@ -197,7 +197,8 @@ static uint32_t find_free_ip()
     uint32_t first_ip_tried = h_next_ip;
 
     do {
-        uint32_t n_curr_ip = htonl(h_next_ip);
+        uint32_t n_curr_ip = htonl(h_next_ip << 
+                (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE));
         
         h_next_ip++;
         if(h_next_ip > end) {
@@ -207,7 +208,7 @@ static uint32_t find_free_ip()
         struct lease* lease;
         HASH_FIND(hh_ip, leases_ip_hash, &n_curr_ip, sizeof(n_curr_ip), lease);
         if(!lease) {
-            return n_curr_ip << (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE);
+            return n_curr_ip;
         }
     } while(h_next_ip != first_ip_tried);
 
