@@ -82,10 +82,9 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
         if(ife->state == ACTIVE) {
             gw->active_interfaces++;
 
-            struct in_addr pub_ip;
-            ipaddr_to_ipv4(&notif->if_info[i].pub_ip, (uint32_t *)&pub_ip.s_addr);
-
-            virt_add_remote_link(&priv_ip, &pub_ip, notif->if_info[i].data_port);
+            virt_add_remote_link(&priv_ip, 
+                (struct in_addr *)&notif->if_info[i].local_ip, 
+                notif->if_info[i].data_port);
         }
 
         DL_APPEND(gw->head_interface, ife);
@@ -138,10 +137,9 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
         if(is_new) {
             DL_APPEND(gw->head_interface, ife);
 
-            struct in_addr pub_ip;
-            ipaddr_to_ipv4(&notif->if_info[i].pub_ip, (uint32_t *)&pub_ip.s_addr);
-
-            virt_add_remote_link(&priv_ip, &pub_ip, notif->if_info[i].data_port);
+            virt_add_remote_link(&priv_ip, 
+                (struct in_addr *)&notif->if_info[i].local_ip, 
+                notif->if_info[i].data_port);
         }
 
         if(ife->state == ACTIVE) {
