@@ -129,7 +129,7 @@ void remove_stale_leases()
             char p_ip[INET6_ADDRSTRLEN];
             ipaddr_to_string(&lease->ip, p_ip, sizeof(p_ip));
 
-            DEBUG_MSG("Expiring lease of %s for node %d", p_ip, lease->unique_id);
+            DEBUG_MSG("Expired lease of %s for node %d", p_ip, lease->unique_id);
 
             free(lease);
         }
@@ -150,7 +150,7 @@ static void renew_lease(struct lease* lease)
     char p_ip[INET6_ADDRSTRLEN];
     ipaddr_to_string(&lease->ip, p_ip, sizeof(p_ip));
 
-    DEBUG_MSG("Renewing lease of %s for node %d", p_ip, lease->unique_id);
+    DEBUG_MSG("Renewed lease of %s for node %d", p_ip, lease->unique_id);
 
     lease->end = time(&lease->start) + LEASE_TIME_LIMIT;
 }
@@ -177,7 +177,7 @@ static uint32_t find_free_ip(int unique_id)
     //end = ntohl(end) >> (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE);
     end = ntohl(end);
 
-    uint32_t next_ip = unique_id;
+    uint32_t next_ip = start + unique_id;
     if(next_ip < start || next_ip > end) {
         next_ip = start;
     }
