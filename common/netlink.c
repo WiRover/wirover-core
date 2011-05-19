@@ -128,7 +128,7 @@ int open_netlink_socket()
     struct sockaddr_nl nladdr;
     memset(&nladdr, 0, sizeof(nladdr));
     nladdr.nl_family = AF_NETLINK;
-    nladdr.nl_pid    = getpid();
+    nladdr.nl_pid    = 0;
     nladdr.nl_groups = RTMGRP_LINK | RTMGRP_IPV4_IFADDR | RTMGRP_IPV4_ROUTE;
 
     int result;
@@ -284,16 +284,22 @@ int change_interface_state(struct interface* ife, enum if_state state)
 static void* netlink_thread_func(void* arg)
 {
     int sockfd;
-    char buffer[4096];
+
+    char *buffer = malloc(NETLINK_BUFFER_SIZE);
+    if(!buffer) {
+        DEBUG_MSG("out of memory");
+        return 0;
+    }
 
     sockfd = open_netlink_socket();
     if(sockfd == -1) {
+        free(buffer);
         return 0;
     }
 
     struct iovec iov;
     iov.iov_base = buffer;
-    iov.iov_len  = sizeof(buffer);
+    iov.iov_len  = NETLINK_BUFFER_SIZE;
 
     struct sockaddr_nl sa;
     memset(&sa, 0, sizeof(sa));
@@ -321,6 +327,9 @@ static void* netlink_thread_func(void* arg)
         }
     }
 
+    close(sockfd);
+    free(buffer);
+
     return 0;
 }
 
@@ -338,8 +347,6 @@ static void delete_interface(struct interface* ife)
 }
 
 /*
- * READ DEV NAME
- *
  * Reads the device name from a line from /proc/net/dev.
  *
  * Returns a pointer to the next character after the name.

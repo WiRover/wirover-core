@@ -173,7 +173,7 @@ int udp_bind_open(unsigned short local_port, const char* device)
     if(device) {
         // Bind socket to device
         if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, device, IFNAMSIZ) < 0) {
-            DEBUG_MSG("SO_BINDTODEVICE failed");
+            ERROR_MSG("SO_BINDTODEVICE failed");
             goto free_and_fail;
         }
     }

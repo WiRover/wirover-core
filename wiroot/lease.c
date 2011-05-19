@@ -8,17 +8,17 @@
 #include "utlist.h"
 
 // These default values will be overwritten by read_lease_config().
-static const char   *LEASE_RANGE_START  = "192.168.1.1";
-static const char   *LEASE_RANGE_END    = "192.168.1.254";
+static const char   *LEASE_RANGE_START  = "192.168.0.0";
+static const char   *LEASE_RANGE_END    = "192.168.255.255";
 static int          GATEWAY_SUBNET_SIZE = 32;
 static int          LEASE_TIME_LIMIT    = 86400;
 
 static struct lease* leases_head = 0;
 static struct lease* leases_ip_hash = 0;
-static struct lease* leases_hw_hash = 0;
+static struct lease* leases_id_hash = 0;
 
 static void renew_lease(struct lease* lease);
-static uint32_t find_free_ip();
+static uint32_t find_free_ip(int unique_id);
 
 /*
  * READ LEASE CONFIG
@@ -72,17 +72,17 @@ int read_lease_config(const config_t* config)
  * lease module and must not be freed by the caller.  Returns a null pointer if
  * a lease cannot be granted.
  */
-const struct lease* grant_lease(const uint8_t* hw_addr, unsigned int hw_addr_len)
+const struct lease* grant_lease(int unique_id)
 {
     struct lease* lease;
 
-    HASH_FIND(hh_hw, leases_hw_hash, hw_addr, hw_addr_len, lease);
+    HASH_FIND(hh_uid, leases_id_hash, &unique_id, sizeof(unique_id), lease);
     if(lease) {
         renew_lease(lease);
         return lease;
     }
 
-    uint32_t n_ip = find_free_ip();
+    uint32_t n_ip = find_free_ip(unique_id);
     if(!n_ip) {
         DEBUG_MSG("Denying lease request, out of IPs");
         return 0;
@@ -95,21 +95,18 @@ const struct lease* grant_lease(const uint8_t* hw_addr, unsigned int hw_addr_len
     }
 
     memset(lease, 0, sizeof(struct lease));
-    memcpy(lease->hw_addr, hw_addr, sizeof(lease->hw_addr));
+    lease->unique_id = unique_id;
     ipv4_to_ipaddr(n_ip, &lease->ip);
     lease->end = time(&lease->start) + LEASE_TIME_LIMIT;
 
     DL_APPEND(leases_head, lease);
     HASH_ADD(hh_ip, leases_ip_hash, ip, sizeof(lease->ip), lease);
-    HASH_ADD(hh_hw, leases_hw_hash, hw_addr, sizeof(lease->hw_addr), lease);
+    HASH_ADD(hh_uid, leases_id_hash, unique_id, sizeof(lease->unique_id), lease);
 
     char p_ip[INET6_ADDRSTRLEN];
     ipaddr_to_string(&lease->ip, p_ip, sizeof(p_ip));
-    
-    char p_hw_addr[100];
-    to_hex_string((const char*)hw_addr, hw_addr_len, p_hw_addr, sizeof(p_hw_addr));
 
-    DEBUG_MSG("Granted lease of %s for hw_addr %s", p_ip, p_hw_addr);
+    DEBUG_MSG("Granted lease of %s for node %d", p_ip, unique_id);
 
     return lease;
 }
@@ -127,15 +124,12 @@ void remove_stale_leases()
         if(now >= lease->end) {
             DL_DELETE(leases_head, lease);
             HASH_DELETE(hh_ip, leases_ip_hash, lease);
-            HASH_DELETE(hh_hw, leases_hw_hash, lease);
+            HASH_DELETE(hh_uid, leases_id_hash, lease);
 
             char p_ip[INET6_ADDRSTRLEN];
             ipaddr_to_string(&lease->ip, p_ip, sizeof(p_ip));
-            
-            char p_hw_addr[100];
-            to_hex_string((const char*)lease->hw_addr, sizeof(lease->hw_addr), p_hw_addr, sizeof(p_hw_addr));
 
-            DEBUG_MSG("Expiring lease of %s for hw_addr %s", p_ip, p_hw_addr);
+            DEBUG_MSG("Expiring lease of %s for node %d", p_ip, lease->unique_id);
 
             free(lease);
         }
@@ -156,10 +150,7 @@ static void renew_lease(struct lease* lease)
     char p_ip[INET6_ADDRSTRLEN];
     ipaddr_to_string(&lease->ip, p_ip, sizeof(p_ip));
 
-    char p_hw_addr[100];
-    to_hex_string((const char*)lease->hw_addr, sizeof(lease->hw_addr), p_hw_addr, sizeof(p_hw_addr));
-
-    DEBUG_MSG("Renewing lease of %s for hw_addr %s", p_ip, p_hw_addr);
+    DEBUG_MSG("Renewing lease of %s for node %d", p_ip, lease->unique_id);
 
     lease->end = time(&lease->start) + LEASE_TIME_LIMIT;
 }
@@ -173,36 +164,35 @@ static void renew_lease(struct lease* lease)
  *
  * Returns an IP in network byte order or 0 if one is unavailable.
  */
-static uint32_t find_free_ip()
+static uint32_t find_free_ip(int unique_id)
 {
-    // next IP to try, in host byte order
-    static uint32_t h_next_ip = 0;
-
     uint32_t start = 0;
     uint32_t end = 0;
 
     inet_pton(AF_INET, LEASE_RANGE_START, &start);
-    start = ntohl(start) >> (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE);
+    //start = ntohl(start) >> (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE);
+    start = ntohl(start);
 
     inet_pton(AF_INET, LEASE_RANGE_END, &end);
-    end = ntohl(end) >> (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE);
+    //end = ntohl(end) >> (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE);
+    end = ntohl(end);
 
-    // This is the case when find_free_ip() is called for the first time or if
-    // the lease ranges are ever changed.
-    if(h_next_ip < start || h_next_ip > end) {
-        h_next_ip = start;
+    uint32_t next_ip = unique_id;
+    if(next_ip < start || next_ip > end) {
+        next_ip = start;
     }
 
     // We will give up if we return to this IP after trying all the rest
-    uint32_t first_ip_tried = h_next_ip;
+    uint32_t first_ip_tried = next_ip;
 
     do {
-        uint32_t n_curr_ip = htonl(h_next_ip << 
-                (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE));
+        //uint32_t n_curr_ip = htonl(next_ip << 
+        //        (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE));
+        uint32_t n_curr_ip = htonl(next_ip);
         
-        h_next_ip++;
-        if(h_next_ip > end) {
-            h_next_ip = start;
+        next_ip++;
+        if(next_ip > end) {
+            next_ip = start;
         }
 
         struct lease* lease;
@@ -210,7 +200,7 @@ static uint32_t find_free_ip()
         if(!lease) {
             return n_curr_ip;
         }
-    } while(h_next_ip != first_ip_tried);
+    } while(next_ip != first_ip_tried);
 
     return 0;
 }

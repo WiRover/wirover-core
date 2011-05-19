@@ -3,6 +3,8 @@
 
 #include "interface.h"
 
+#define NETLINK_BUFFER_SIZE     4096
+
 struct rwlock;
 
 int init_interface_list();

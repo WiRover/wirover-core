@@ -65,8 +65,7 @@ int main(int argc, char* argv[])
 
     result = setup_virtual_interface(my_ip);
     if(result == -1) {
-        DEBUG_MSG("Fatal error: failed to bring up virtual interface");
-//        exit(1);
+        DEBUG_MSG("Failed to bring up virtual interface");
     }
     
     if(create_netlink_thread() == -1) {

@@ -192,15 +192,15 @@ static void handle_incoming(struct client* client)
  */
 static void handle_gateway_config(struct client* client, const char* packet, int length) {
     struct rchan_request* request = (struct rchan_request*)packet;
-
-    const struct lease* lease;
-    lease = grant_lease(request->hw_addr, sizeof(request->hw_addr));
-  
+    
     // Query the database for the unique id of the client
     char p_hw_addr[DB_UNIQUE_ID_LEN+1];
     to_hex_string((const char*)request->hw_addr, sizeof(request->hw_addr), p_hw_addr, sizeof(p_hw_addr));
     unsigned short unique_id = db_get_unique_id(p_hw_addr);
 
+    const struct lease* lease;
+    lease = grant_lease((int)unique_id);
+  
     struct rchan_response response;
     response.type = request->type;
     response.unique_id = htons(unique_id);
@@ -237,14 +237,14 @@ static void handle_gateway_config(struct client* client, const char* packet, int
  */
 static void handle_controller_config(struct client* client, const char* packet, int length) {
     struct rchan_request* request = (struct rchan_request*)packet;
-
-    const struct lease* lease;
-    lease = grant_lease(request->hw_addr, sizeof(request->hw_addr));
     
     // Query the database for the unique id of the client
     char p_hw_addr[DB_UNIQUE_ID_LEN+1];
     to_hex_string((const char*)request->hw_addr, sizeof(request->hw_addr), p_hw_addr, sizeof(p_hw_addr));
     unsigned short unique_id = db_get_unique_id(p_hw_addr);
+
+    const struct lease* lease;
+    lease = grant_lease((int)unique_id);
     
     char response_buffer[MTU];
     struct rchan_response* response = (struct rchan_response*)response_buffer;

@@ -212,7 +212,6 @@ void* ping_thread_func(void* arg)
 
         int time_remaining = ping_interval - (time(0) - last_ping);
         if(time_remaining <= 0) {
-            send_notification();
             // It is time to send out another round of pings.
             ping_all_interfaces(local_port);
             last_ping = time(0);
@@ -254,6 +253,8 @@ static int handle_incoming(int sockfd, int timeout)
             DEBUG_MSG("ioctl SIOCGSTAMP failed");
             gettimeofday(&recv_time, 0);
         }
+        
+        int notif_needed = 0;
 
         unsigned long diff = timeval_diff_usec(&send_time, &recv_time);
 
@@ -265,16 +266,24 @@ static int handle_incoming(int sockfd, int timeout)
 
             struct interface* ife = find_interface_by_index(interface_list, h_link_id);
             if(ife && send_time.tv_sec == ife->last_ping) {
-                //TODO: Do more stuff here
                 upgrade_read_lock(&interface_list_lock);
-                change_interface_state(ife, ACTIVE);
+
                 ife->avg_rtt = ema_update(ife->avg_rtt, (double)diff, 0.25);
+                if(ife->state == INACTIVE) {
+                    change_interface_state(ife, ACTIVE);
+                    notif_needed = 1;
+                }
+
                 downgrade_write_lock(&interface_list_lock);
 
                 DEBUG_MSG("Ping on %s rtt %d avg_rtt %f", ife->name, diff, ife->avg_rtt);
             }
 
             release_read_lock(&interface_list_lock);
+        }
+
+        if(notif_needed) {
+            send_notification();
         }
     }
 

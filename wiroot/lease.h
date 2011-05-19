@@ -12,7 +12,7 @@
 #define IPV4_ADDRESS_BITS   32
 
 struct lease {
-    uint8_t     hw_addr[ETH_ALEN];
+    int         unique_id;
     ipaddr_t    ip;
     time_t      start;
     time_t      end;
@@ -21,11 +21,11 @@ struct lease {
     struct lease*   next;
     struct lease*   prev;
     UT_hash_handle  hh_ip;
-    UT_hash_handle  hh_hw;
+    UT_hash_handle  hh_uid;
 };
 
 int read_lease_config(const config_t* config);
-const struct lease* grant_lease(const uint8_t* hw_addr, unsigned int hw_addr_len);
+const struct lease* grant_lease(int unique_id);
 void remove_stale_leases();
 
 #endif //_LEASE_H_
