@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <libconfig.h>
 #include <stropts.h>
 #include <unistd.h>
@@ -17,6 +18,7 @@
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
+#include "tunnel.h"
 
 static int send_ping(struct interface* ife, unsigned short src_port, unsigned int dest_port,
               const struct sockaddr* dest_addr, socklen_t dest_len);
@@ -144,21 +146,33 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
         return FAILURE;
     }
 
-    struct ping_packet pkt;
-    memset(&pkt, 0, sizeof(pkt));
-    pkt.seq_no = SPECIAL_SEQ_NO;
-    pkt.type = PING_PACKET_TYPE;
-    pkt.src_id = htons(get_unique_id());
-    pkt.link_id = htonl(ife->index);
+    char *buffer = malloc(PING_PACKET_SIZE);
+    if(!buffer) {
+        DEBUG_MSG("out of memory");
+        return FAILURE;
+    }
+
+    memset(buffer, 0, PING_PACKET_SIZE);
+
+    struct tunhdr *tunhdr = (struct tunhdr *)buffer;
+    tunhdr->flags = TUNFLAG_DONT_DECAP;
+
+    struct ping_packet *pkt = (struct ping_packet *)
+        (buffer + sizeof(struct tunhdr));
+    pkt->seq_no = SPECIAL_SEQ_NO;
+    pkt->type   = PING_PACKET_TYPE;
+    pkt->src_id = htons(get_unique_id());
+    pkt->link_id = htonl(ife->index);
    
     //Store a timestamp in the packet for calculating RTT.
     gettimeofday(&now, 0);
-    pkt.sent_sec = htonl(now.tv_sec);
-    pkt.sent_usec = htonl(now.tv_usec);
+    pkt->sent_sec  = htonl(now.tv_sec);
+    pkt->sent_usec = htonl(now.tv_usec);
 
-    bytes = sendto(sockfd, &pkt, sizeof(pkt), 0, dest_addr, dest_len);
+    bytes = sendto(sockfd, buffer, PING_PACKET_SIZE, 0, dest_addr, dest_len);
     if(bytes < 0) {
         ERROR_MSG("sending ping packet on %s failed", ife->name);
+        free(buffer);
         close(sockfd);
         return -1;
     }
@@ -170,6 +184,7 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
     ife->last_ping = now.tv_sec;
     downgrade_write_lock(&interface_list_lock);
 
+    free(buffer);
     close(sockfd);
     return 0;
 }

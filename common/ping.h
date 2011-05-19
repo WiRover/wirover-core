@@ -14,6 +14,8 @@ struct ping_packet {
     uint32_t    sent_usec;
 } __attribute__((__packed__));
 
+#define PING_PACKET_SIZE (sizeof(struct tunhdr) + sizeof(struct ping_packet))
+
 int start_ping_thread();
 
 #ifdef GATEWAY
