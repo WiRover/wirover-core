@@ -168,6 +168,35 @@ int virt_add_remote_link(const struct in_addr *priv_ip,
     return 0;
 }
 
+int virt_set_gateway_ip(const char *device, const struct in_addr *gw_ip)
+{
+    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if(sockfd < 0) {
+        ERROR_MSG("creating socket failed");
+        return FAILURE;
+    }
+    
+    struct gwaddr_req gwa_req;
+    memset(&gwa_req, 0, sizeof(gwa_req));
+    strncpy(gwa_req.ifname, device, sizeof(gwa_req.ifname));
+    gwa_req.family = AF_INET;
+    gwa_req.gwaddr_ip4 = gw_ip->s_addr;
+
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
+    ifr.ifr_data = &gwa_req;
+
+    if(ioctl(sockfd, SIOCVIRTSETGWADDR, &ifr) < 0) {
+        ERROR_MSG("SIOCVIRTSETGWADDR ioctl failed");
+        close(sockfd);
+        return FAILURE;
+    }
+
+    close(sockfd);
+    return 0;
+}
+
 int virt_set_proxy(const struct in_addr *priv_ip, unsigned short data_port)
 {
     int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
@@ -193,6 +222,5 @@ int virt_set_proxy(const struct in_addr *priv_ip, unsigned short data_port)
 
     close(sockfd);
     return 0;
-
 }
 

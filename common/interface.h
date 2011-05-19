@@ -30,7 +30,7 @@ struct interface {
     double            avg_rtt;
 
     // default gateway for routing if needed
-    char              gw_ip[INET6_ADDRSTRLEN];
+    struct in_addr    gateway_ip;
 
     struct interface* next;
     struct interface* prev;

@@ -17,6 +17,7 @@ const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_idle
 const unsigned int  CLIENT_TIMEOUT = 5;
 
 static void server_loop(int cchan_sock);
+static int find_gateway_ip(const char *device, struct in_addr *gw_ip);
 
 int main(int argc, char* argv[])
 {
@@ -37,7 +38,6 @@ int main(int argc, char* argv[])
     lease = obtain_lease(wiroot_ip, wiroot_port, base_port);
     if(!lease) {
         DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
-//        exit(1);
     }
 
     char p_ip[INET6_ADDRSTRLEN];
@@ -47,7 +47,6 @@ int main(int argc, char* argv[])
     result = setup_virtual_interface(p_ip);
     if(result == -1) {
         DEBUG_MSG("Fatal error: failed to bring up virtual interface");
-//        exit(1);
     }
 
     int cchan_sock = tcp_passive_open(base_port + CONTROL_CHANNEL_OFFSET, SOMAXCONN);
@@ -66,6 +65,13 @@ int main(int argc, char* argv[])
     const char* internal_if = get_internal_interface();
     if(kernel_enslave_device(internal_if) == FAILURE) {
         DEBUG_MSG("Failed to enslave device %s", internal_if);
+    }
+    
+    struct in_addr gateway_ip;
+    if(find_gateway_ip(internal_if, &gateway_ip) == 0) {
+        DEBUG_MSG("Found gateway 0x%x for %s", ntohl(gateway_ip.s_addr),
+                internal_if);
+        virt_set_gateway_ip(internal_if, &gateway_ip);
     }
 #endif
 
@@ -126,6 +132,54 @@ static void server_loop(int cchan_sock)
             }
         }
     }
+}
+
+/*
+ * Read the routing table for a default route containing the gateway IP address.
+ */
+static int find_gateway_ip(const char *device, struct in_addr *gw_ip)
+{
+    const char *delims = "\t ";
+
+    FILE *file = fopen("/proc/net/route", "r");
+    if(!file) {
+        ERROR_MSG("Failed to open /proc/net/route");
+        return -1;
+    }
+
+    char buffer[256];
+
+    // Skip the header line
+    fgets(buffer, sizeof(buffer), file);
+
+    char *saveptr = 0;
+
+    while(!feof(file) && fgets(buffer, sizeof(buffer), file)) {
+        buffer[sizeof(buffer) - 1] = 0;
+
+        char *dev_str = strtok_r(buffer, delims, &saveptr);
+        if(!device)
+            continue;
+
+        char *dest = strtok_r(0, delims, &saveptr);
+        if(!dest)
+            continue;
+
+        char *gateway = strtok_r(0, delims, &saveptr);
+        if(!gateway)
+            continue;
+
+        uint32_t dest_ip    = (uint32_t)strtoul(dest, 0, 16);
+        uint32_t gateway_ip = (uint32_t)strtoul(gateway, 0, 16);
+
+        if(strcmp(device, dev_str) == 0 && dest_ip == 0) {
+            gw_ip->s_addr = gateway_ip;
+            break;
+        }
+    }
+
+    fclose(file);
+    return 0;
 }
 
 

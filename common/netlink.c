@@ -24,6 +24,7 @@ static void* netlink_thread_func(void* arg);
 static void add_interface(struct interface* ife);
 static void delete_interface(struct interface* ife);
 static const char* read_dev_name(const char* __restrict__ buffer, char* __restrict__ dest, int destlen);
+static int  update_interface_gateways();
 
 struct interface*   interface_list = 0;
 struct rwlock       interface_list_lock = RWLOCK_INITIALIZER;
@@ -74,6 +75,8 @@ int init_interface_list()
         
         ifap = ifap->ifa_next;
     }
+
+    update_interface_gateways();
 
     release_write_lock(&interface_list_lock);
     freeifaddrs(ifap);
@@ -371,5 +374,58 @@ static const char* read_dev_name(const char* __restrict__ buffer, char* __restri
     }
 
     return &buffer[i];
+}
+
+/*
+ * Read the routing table for gateway IP addresses and update interface list.
+ *
+ * Locking: Assumes a write lock is held on the gateway list.
+ */
+static int update_interface_gateways()
+{
+    const char *delims = "\t ";
+
+    FILE *file = fopen("/proc/net/route", "r");
+    if(!file) {
+        ERROR_MSG("Failed to open /proc/net/route");
+        return -1;
+    }
+
+    char buffer[256];
+
+    // Skip the header line
+    fgets(buffer, sizeof(buffer), file);
+
+    char *saveptr = 0;
+
+    while(!feof(file) && fgets(buffer, sizeof(buffer), file)) {
+        buffer[sizeof(buffer) - 1] = 0;
+
+        char *device = strtok_r(buffer, delims, &saveptr);
+        if(!device)
+            continue;
+
+        char *dest = strtok_r(0, delims, &saveptr);
+        if(!dest)
+            continue;
+
+        char *gateway = strtok_r(0, delims, &saveptr);
+        if(!gateway)
+            continue;
+
+        uint32_t dest_ip    = (uint32_t)strtoul(dest, 0, 16);
+        uint32_t gateway_ip = (uint32_t)strtoul(gateway, 0, 16);
+
+        struct interface *ife = find_interface_by_name(interface_list, device);
+        if(ife && dest_ip == 0) {
+            ife->gateway_ip.s_addr = gateway_ip;
+            DEBUG_MSG("Found gateway 0x%x for %s", ntohl(gateway_ip), device);
+
+            virt_set_gateway_ip(device, &ife->gateway_ip);
+        }
+    }
+
+    fclose(file);
+    return 0;
 }
 
