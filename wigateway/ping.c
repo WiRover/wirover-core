@@ -254,8 +254,9 @@ static int handle_incoming(int sockfd, int timeout)
 
     bytes = recvfrom(sockfd, buffer, sizeof(buffer), 0,
             (struct sockaddr*)&addr, &addr_len);
-    if(bytes >= sizeof(struct ping_packet)) {
-        struct ping_packet* pkt = (struct ping_packet*)buffer;
+    if(bytes >= PING_PACKET_SIZE) {
+        struct ping_packet *pkt = (struct ping_packet *)
+            (buffer + sizeof(struct tunhdr));
 
         struct timeval send_time;
         send_time.tv_sec = ntohl(pkt->sent_sec);
