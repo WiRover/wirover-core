@@ -49,7 +49,7 @@ int send_notification()
         strncpy(dest->network, ife->network, sizeof(dest->network));
         dest->state = ife->state;
         dest->local_ip = ife->local_ip.s_addr;
-        dest->data_port = ife->data_port;
+        dest->data_port = htons(get_base_port());
 
         ife = ife->next;
         ife_ind++;

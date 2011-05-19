@@ -78,13 +78,14 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
         strncpy(ife->name, notif->if_info[i].ifname, sizeof(ife->name));
         strncpy(ife->network, notif->if_info[i].network, sizeof(ife->network));
         ife->state = notif->if_info[i].state;
+        ife->data_port = notif->if_info[i].data_port;
 
         if(ife->state == ACTIVE) {
             gw->active_interfaces++;
 
             virt_add_remote_link(&priv_ip, 
                 (struct in_addr *)&notif->if_info[i].local_ip, 
-                notif->if_info[i].data_port);
+                ife->data_port);
         }
 
         DL_APPEND(gw->head_interface, ife);
@@ -133,6 +134,7 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
         
         strncpy(ife->network, notif->if_info[i].network, sizeof(ife->network));
         ife->state = notif->if_info[i].state;
+        ife->data_port = notif->if_info[i].data_port;
 
         if(is_new) {
             DL_APPEND(gw->head_interface, ife);
@@ -143,7 +145,7 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
 
             virt_add_remote_link(&priv_ip, 
                 (struct in_addr *)&notif->if_info[i].local_ip, 
-                notif->if_info[i].data_port);
+                ife->data_port);
         }
     }
 
