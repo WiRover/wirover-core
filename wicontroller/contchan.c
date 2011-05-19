@@ -136,14 +136,14 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
 
         if(is_new) {
             DL_APPEND(gw->head_interface, ife);
-
-            virt_add_remote_link(&priv_ip, 
-                (struct in_addr *)&notif->if_info[i].local_ip, 
-                notif->if_info[i].data_port);
         }
 
         if(ife->state == ACTIVE) {
             gw->active_interfaces++;
+
+            virt_add_remote_link(&priv_ip, 
+                (struct in_addr *)&notif->if_info[i].local_ip, 
+                notif->if_info[i].data_port);
         }
     }
 

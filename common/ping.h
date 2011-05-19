@@ -1,7 +1,9 @@
 #ifndef _PING_H_
 #define _PING_H_
 
-#define PING_PACKET_TYPE  0x20
+#define PING_PACKET_TYPE    0x20
+
+#define USEC_PER_SEC        1000000
 
 struct ping_packet {
     uint32_t    seq_no;

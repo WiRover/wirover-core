@@ -259,7 +259,7 @@ static int handle_incoming(int sockfd, int timeout)
         unsigned long diff = timeval_diff_usec(&send_time, &recv_time);
 
         // If the ping response is older than timeout seconds, we just ignore it.
-        if((diff / 1000000) < timeout) {
+        if((diff / USEC_PER_SEC) < timeout) {
             unsigned int h_link_id = ntohl(pkt->link_id);
 
             obtain_read_lock(&interface_list_lock);
@@ -298,7 +298,7 @@ unsigned long timeval_diff_usec(const struct timeval* __restrict__ start,
 {
     unsigned long diff;
 
-    diff = (end->tv_sec - start->tv_sec) * 1000000;
+    diff = (end->tv_sec - start->tv_sec) * USEC_PER_SEC;
     diff += (end->tv_usec - start->tv_usec);
 
     return diff;

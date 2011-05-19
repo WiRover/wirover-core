@@ -34,5 +34,8 @@ int virt_add_remote_node(const struct in_addr *priv_ip,
 int virt_add_remote_link(const struct in_addr *priv_ip,
         const struct in_addr *pub_ip, unsigned short data_port);
 
+/* TODO: This should be part of the encap policy.  The ioctl is just a hack. */
+int virt_set_proxy(const struct in_addr *priv_ip, unsigned short data_port);
+
 #endif //_KERNEL_H_
 

@@ -57,9 +57,7 @@ int main(int argc, char* argv[])
             virt_add_remote_link((struct in_addr *)&priv_ip, 
                 (struct in_addr *)&pub_ip, lease->cinfo[0].base_port);
 
-            //if(kernel_set_controller(&caddr) == FAILURE) {
-            //    DEBUG_MSG("Failed to set controller in kernel module");
-            //}
+            virt_set_proxy((struct in_addr *)&priv_ip, lease->cinfo[0].base_port);
         }
     }
 

@@ -68,28 +68,6 @@ int setup_virtual_interface(const char *ip)
     return 0;
 }
 
-int kernel_set_controller(const struct sockaddr_in* addr)
-{
-    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-    if(sockfd < 0) {
-        ERROR_MSG("creating socket failed");
-        return FAILURE;
-    }
-    
-    struct ifreq ifr;
-    strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
-    memcpy(&ifr.ifr_addr, addr, sizeof(struct sockaddr_in));
-    
-    if(ioctl(sockfd, SIOCVIRTSETPROXY, &ifr) < 0) {
-        ERROR_MSG("SIOCVIRTSETPROXY ioctl failed");
-        close(sockfd);
-        return FAILURE;
-    }
-
-    close(sockfd);
-    return 0;
-}
-
 int kernel_enslave_device(const char* device)
 {
     int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
@@ -188,5 +166,33 @@ int virt_add_remote_link(const struct in_addr *priv_ip,
 
     close(fd);
     return 0;
+}
+
+int virt_set_proxy(const struct in_addr *priv_ip, unsigned short data_port)
+{
+    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if(sockfd < 0) {
+        ERROR_MSG("creating socket failed");
+        return FAILURE;
+    }
+    
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
+
+    struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
+    addr->sin_family = AF_INET;
+    memcpy(&addr->sin_addr, priv_ip, sizeof(struct in_addr));
+    addr->sin_port = data_port;
+    
+    if(ioctl(sockfd, SIOCVIRTSETPROXY, &ifr) < 0) {
+        ERROR_MSG("SIOCVIRTSETPROXY ioctl failed");
+        close(sockfd);
+        return FAILURE;
+    }
+
+    close(sockfd);
+    return 0;
+
 }
 
