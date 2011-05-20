@@ -179,6 +179,9 @@ static uint32_t find_free_ip(int unique_id)
 {
     static uint32_t dynamic_start = 0;
 
+    ipaddr_t check_ip;
+    memset(&check_ip, 0, sizeof(check_ip));
+
     /* First try making an IP address out of the unique ID.
      * Bit shift by one to avoid assigning a .255 address. */
     uint32_t next_ip = LEASE_RANGE_START + (unique_id << 1);
@@ -186,7 +189,9 @@ static uint32_t find_free_ip(int unique_id)
 
     struct lease *lease;
     if(next_ip >= LEASE_RANGE_START && next_ip <= LEASE_RANGE_END) {
-        HASH_FIND(hh_ip, leases_ip_hash, &n_ip, sizeof(n_ip), lease);
+        ipv4_to_ipaddr(n_ip, &check_ip);
+
+        HASH_FIND(hh_ip, leases_ip_hash, &check_ip, sizeof(check_ip), lease);
         if(!lease)
             return n_ip;
     }
@@ -201,8 +206,9 @@ static uint32_t find_free_ip(int unique_id)
 
     while(dynamic_start > LEASE_RANGE_START) {
         n_ip = htonl(dynamic_start);
+        ipv4_to_ipaddr(n_ip, &check_ip);
 
-        HASH_FIND(hh_ip, leases_ip_hash, &n_ip, sizeof(n_ip), lease);
+        HASH_FIND(hh_ip, leases_ip_hash, &check_ip, sizeof(check_ip), lease);
         if(!lease)
             return n_ip;
 
