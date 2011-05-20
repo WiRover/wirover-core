@@ -146,6 +146,9 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
             virt_add_remote_link(&priv_ip, 
                 (struct in_addr *)&notif->if_info[i].local_ip, 
                 ife->data_port);
+        } else {
+            virt_remove_remote_link(&priv_ip, 
+                    (struct in_addr *)&notif->if_info[i].local_ip);
         }
     }
 

@@ -168,6 +168,59 @@ int virt_add_remote_link(const struct in_addr *priv_ip,
     return 0;
 }
 
+
+int virt_remove_remote_node(const struct in_addr *priv_ip)
+{
+    struct virt_proc_remote_node node;
+    memset(&node, 0, sizeof(node));
+
+    node.op = VIRT_PROC_REMOTE_DELETE;
+    memcpy(&node.priv_ip, priv_ip, sizeof(node.priv_ip));
+
+    int fd = open("/proc/virtmod/remote/nodes", O_WRONLY);
+    if(fd < 0) {
+        ERROR_MSG("open /proc/virtmod/remote/nodes failed");
+        return -1;
+    }
+
+    int written = write(fd, &node, sizeof(node));
+    if(written < sizeof(node)) {
+        ERROR_MSG("write failed");
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+    return 0;
+}
+
+int virt_remove_remote_link(const struct in_addr *priv_ip,
+                const struct in_addr *pub_ip)
+{
+    struct virt_proc_remote_link link;
+    memset(&link, 0, sizeof(link));
+
+    link.op = VIRT_PROC_REMOTE_DELETE;
+    memcpy(&link.priv_ip, priv_ip, sizeof(link.priv_ip));
+    memcpy(&link.pub_ip, pub_ip, sizeof(link.pub_ip));
+
+    int fd = open("/proc/virtmod/remote/links", O_WRONLY);
+    if(fd < 0) {
+        ERROR_MSG("open /proc/virtmod/remote/links failed");
+        return -1;
+    }
+
+    int written = write(fd, &link, sizeof(link));
+    if(written < sizeof(link)) {
+        ERROR_MSG("write failed");
+        close(fd);
+        return -1;
+    }
+
+    close(fd);
+    return 0;
+}
+
 int virt_set_gateway_ip(const char *device, const struct in_addr *gw_ip)
 {
     int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
