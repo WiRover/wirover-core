@@ -188,7 +188,7 @@ static uint32_t find_free_ip(int unique_id)
     uint32_t n_ip = htonl(next_ip);
 
     struct lease *lease;
-    if(next_ip >= LEASE_RANGE_START && next_ip <= LEASE_RANGE_END) {
+    if(unique_id > 0 && next_ip >= LEASE_RANGE_START && next_ip <= LEASE_RANGE_END) {
         ipv4_to_ipaddr(n_ip, &check_ip);
 
         HASH_FIND(hh_ip, leases_ip_hash, &check_ip, sizeof(check_ip), lease);
@@ -199,12 +199,13 @@ static uint32_t find_free_ip(int unique_id)
     if(dynamic_start < LEASE_RANGE_START || dynamic_start > LEASE_RANGE_END) {
         dynamic_start = LEASE_RANGE_END;
        
-        // Avoid assigning a broadcast address.
-        if((dynamic_start & BROADCAST_MASK) == BROADCAST_MASK)
+        // Avoid assigning a broadcast address or an address that ends with zeros.
+        uint32_t ending_bits = dynamic_start & BROADCAST_MASK;
+        if(ending_bits == BROADCAST_MASK || ending_bits == 0)
             dynamic_start--;
     }
 
-    while(dynamic_start > LEASE_RANGE_START) {
+    while(dynamic_start >= LEASE_RANGE_START) {
         n_ip = htonl(dynamic_start);
         ipv4_to_ipaddr(n_ip, &check_ip);
 
@@ -214,8 +215,9 @@ static uint32_t find_free_ip(int unique_id)
 
         dynamic_start--;
 
-        // Avoid assigning a broadcast address.
-        if((dynamic_start & BROADCAST_MASK) == BROADCAST_MASK)
+        // Avoid assigning a broadcast address or an address that ends with zeros.
+        uint32_t ending_bits = dynamic_start & BROADCAST_MASK;
+        if(ending_bits == BROADCAST_MASK || ending_bits == 0)
             dynamic_start--;
     }
 
