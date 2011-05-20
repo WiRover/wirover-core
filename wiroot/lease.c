@@ -7,10 +7,12 @@
 #include "lease.h"
 #include "utlist.h"
 
+#define BROADCAST_MASK  0x000000FF
+
 // These default values will be overwritten by read_lease_config().
-static const char   *LEASE_RANGE_START  = "192.168.0.0";
-static const char   *LEASE_RANGE_END    = "192.168.255.255";
-static int          GATEWAY_SUBNET_SIZE = 32;
+static uint32_t     LEASE_RANGE_START   = 0xC0A80000;
+static uint32_t     LEASE_RANGE_END     = 0xC0A8FFFF;
+static uint32_t     LEASE_NETMASK       = 0xFFFF0000;
 static int          LEASE_TIME_LIMIT    = 86400;
 
 static struct lease* leases_head = 0;
@@ -34,26 +36,33 @@ int read_lease_config(const config_t* config)
         return 0;
     }
 
-    result = config_lookup_string(config, "lease.range-start", &LEASE_RANGE_START);
+    const char *lease_range_start = 0;
+    result = config_lookup_string(config, "lease.range-start", &lease_range_start);
     if(result == CONFIG_FALSE) {
         DEBUG_MSG("lease.range-start missing in config file");
+    } else {
+        inet_pton(AF_INET, lease_range_start, &LEASE_RANGE_START);
+        LEASE_RANGE_START = ntohl(LEASE_RANGE_START);
     }
     
-    result = config_lookup_string(config, "lease.range-end", &LEASE_RANGE_END);
+    const char *lease_range_end = 0;
+    result = config_lookup_string(config, "lease.range-end", &lease_range_end);
     if(result == CONFIG_FALSE) {
         DEBUG_MSG("lease.range-end missing in config file");
-    }
-
-    int subnet_size;
-    result = config_lookup_int(config, "lease.gateway-subnet-size", &subnet_size);
-    if(result == CONFIG_FALSE) {
-        DEBUG_MSG("lease.gateway-subnet-size missing in config file");
-    } else if(subnet_size < 0 || subnet_size > IPV4_ADDRESS_BITS) {
-        DEBUG_MSG("lease.gateway-subnet-size has invalid value (%d)", subnet_size);
     } else {
-        GATEWAY_SUBNET_SIZE = subnet_size;
+        inet_pton(AF_INET, lease_range_end, &LEASE_RANGE_END);
+        LEASE_RANGE_END = ntohl(LEASE_RANGE_END);
     }
     
+    const char *lease_netmask = 0;
+    result = config_lookup_string(config, "lease.range-netmask", &lease_netmask);
+    if(result == CONFIG_FALSE) {
+        DEBUG_MSG("lease.range-netmask missing in config file");
+    } else {
+        inet_pton(AF_INET, lease_netmask, &LEASE_NETMASK);
+        LEASE_NETMASK = ntohl(LEASE_NETMASK);
+    }
+
     result = config_lookup_int(config, "lease.time-limit", &LEASE_TIME_LIMIT);
     if(result == CONFIG_FALSE) {
         DEBUG_MSG("lease.time-limit missing in config file");
@@ -156,7 +165,9 @@ static void renew_lease(struct lease* lease)
 }
 
 /*
- * FIND FREE IP
+ * Finds a free IP address in the lease range.  Usually this will return
+ * a static IP based on the unique_id.  If this is not possible, we will
+ * search for a free IP starting from the end of the range.
  *
  * In most cases, this will return after one lookup.  Even in the worst case,
  * when the entire range is in use, this will likely take a fraction of a
@@ -166,42 +177,43 @@ static void renew_lease(struct lease* lease)
  */
 static uint32_t find_free_ip(int unique_id)
 {
-    uint32_t start = 0;
-    uint32_t end = 0;
+    static uint32_t dynamic_start = 0;
 
-    inet_pton(AF_INET, LEASE_RANGE_START, &start);
-    //start = ntohl(start) >> (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE);
-    start = ntohl(start);
+    /* First try making an IP address out of the unique ID.
+     * Bit shift by one to avoid assigning a .255 address. */
+    uint32_t next_ip = LEASE_RANGE_START + (unique_id << 1);
+    uint32_t n_ip = htonl(next_ip);
 
-    inet_pton(AF_INET, LEASE_RANGE_END, &end);
-    //end = ntohl(end) >> (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE);
-    end = ntohl(end);
-
-    uint32_t next_ip = start + unique_id;
-    if(next_ip < start || next_ip > end) {
-        next_ip = start;
+    struct lease *lease;
+    if(next_ip >= LEASE_RANGE_START && next_ip <= LEASE_RANGE_END) {
+        HASH_FIND(hh_ip, leases_ip_hash, &n_ip, sizeof(n_ip), lease);
+        if(!lease)
+            return n_ip;
     }
 
-    // We will give up if we return to this IP after trying all the rest
-    uint32_t first_ip_tried = next_ip;
+    if(dynamic_start < LEASE_RANGE_START || dynamic_start > LEASE_RANGE_END) {
+        dynamic_start = LEASE_RANGE_END;
+       
+        // Avoid assigning a broadcast address.
+        if((dynamic_start & BROADCAST_MASK) == BROADCAST_MASK)
+            dynamic_start--;
+    }
 
-    do {
-        //uint32_t n_curr_ip = htonl(next_ip << 
-        //        (IPV4_ADDRESS_BITS - GATEWAY_SUBNET_SIZE));
-        uint32_t n_curr_ip = htonl(next_ip);
-        
-        next_ip++;
-        if(next_ip > end) {
-            next_ip = start;
-        }
+    while(dynamic_start > LEASE_RANGE_START) {
+        n_ip = htonl(dynamic_start);
 
-        struct lease* lease;
-        HASH_FIND(hh_ip, leases_ip_hash, &n_curr_ip, sizeof(n_curr_ip), lease);
-        if(!lease) {
-            return n_curr_ip;
-        }
-    } while(next_ip != first_ip_tried);
+        HASH_FIND(hh_ip, leases_ip_hash, &n_ip, sizeof(n_ip), lease);
+        if(!lease)
+            return n_ip;
 
+        dynamic_start--;
+
+        // Avoid assigning a broadcast address.
+        if((dynamic_start & BROADCAST_MASK) == BROADCAST_MASK)
+            dynamic_start--;
+    }
+
+    DEBUG_MSG("out of IP addresses");
     return 0;
 }
 
