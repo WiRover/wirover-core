@@ -55,9 +55,9 @@ int read_lease_config(const config_t* config)
     }
     
     const char *lease_netmask = 0;
-    result = config_lookup_string(config, "lease.range-netmask", &lease_netmask);
+    result = config_lookup_string(config, "lease.netmask", &lease_netmask);
     if(result == CONFIG_FALSE) {
-        DEBUG_MSG("lease.range-netmask missing in config file");
+        DEBUG_MSG("lease.netmask missing in config file");
     } else {
         inet_pton(AF_INET, lease_netmask, &LEASE_NETMASK);
         LEASE_NETMASK = ntohl(LEASE_NETMASK);
