@@ -36,6 +36,7 @@ struct cchan_notification {
     uint8_t     type;
     ipaddr_t    priv_ip;
     uint16_t    unique_id;
+    int32_t     secret_word;
     uint8_t     interfaces;
     struct interface_info if_info[MAX_INTERFACES];
 } __attribute__((__packed__));
@@ -47,6 +48,7 @@ int process_notification(const char* packet, unsigned int pkt_len);
 
 #ifdef GATEWAY
 int send_notification();
+int32_t get_secret_word();
 #endif
 
 #endif //_CONTCHAN_H_

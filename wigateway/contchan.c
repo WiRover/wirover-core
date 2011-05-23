@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 
@@ -9,6 +10,13 @@
 #include "rwlock.h"
 #include "sockets.h"
 #include "kernel.h"
+
+/* The secret word is randomly generated and sent with each notification
+ * and ping packet.  The controller uses it to verify the origin of ping
+ * packets so that the public IP address can be trusted.
+ *
+ * TODO: May want separate secret words for each controller. */
+static int32_t secret_word = 0;
 
 int send_notification()
 {
@@ -35,6 +43,9 @@ int send_notification()
     notification.type = CCHAN_NOTIFICATION;
     get_private_ip(&notification.priv_ip);
     notification.unique_id = htons(get_unique_id());
+
+    secret_word = rand();
+    notification.secret_word = htonl(secret_word);
 
     obtain_read_lock(&interface_list_lock);
 
@@ -79,5 +90,10 @@ int send_notification()
 
     close(sockfd);
     return 0;
+}
+
+int32_t get_secret_word()
+{
+    return secret_word;
 }
 

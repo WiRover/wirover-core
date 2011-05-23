@@ -164,6 +164,7 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
     pkt->link_state = ife->state;
     pkt->src_id = htons(get_unique_id());
     pkt->link_id = htons(ife->index);
+    pkt->secret_word = htonl(get_secret_word());
    
     //Store a timestamp in the packet for calculating RTT.
     gettimeofday(&now, 0);

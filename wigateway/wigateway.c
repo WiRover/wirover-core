@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <time.h>
 #include <arpa/inet.h>
 
 #include "config.h"
@@ -20,6 +21,8 @@ int main(int argc, char* argv[])
 
     DEBUG_MSG("Starting wigateway version %d.%d",
               WIROVER_VERSION_MAJOR, WIROVER_VERSION_MINOR);
+
+    srand(time(0));
 
     const char* wiroot_ip = get_wiroot_ip();
     const unsigned short wiroot_port = get_wiroot_port();

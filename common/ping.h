@@ -11,6 +11,7 @@ struct ping_packet {
     int8_t      link_state;
     uint16_t    src_id;
     uint16_t    link_id;
+    int32_t     secret_word;
     uint32_t    sent_sec;
     uint32_t    sent_usec;
 } __attribute__((__packed__));

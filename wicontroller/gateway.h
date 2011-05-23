@@ -15,6 +15,8 @@ struct gateway {
 
     time_t              creation_time;
 
+    int32_t             secret_word;
+
     unsigned int        active_interfaces;
     struct interface*   head_interface;
 

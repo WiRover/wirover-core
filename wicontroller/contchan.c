@@ -62,6 +62,7 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
     struct gateway* gw = alloc_gateway();
     copy_ipaddr(&notif->priv_ip, &gw->private_ip);
     gw->unique_id = ntohs(notif->unique_id);
+    gw->secret_word = ntohl(notif->secret_word);
 
     struct in_addr priv_ip;
     ipaddr_to_ipv4(&notif->priv_ip, (uint32_t *)&priv_ip.s_addr);
@@ -106,6 +107,8 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
 static void update_gateway(struct gateway* gw, const struct cchan_notification* notif)
 {
     assert(gw && notif);
+
+    gw->secret_word = ntohl(notif->secret_word);
 
     struct interface* ife;
     DL_FOREACH(gw->head_interface, ife) {

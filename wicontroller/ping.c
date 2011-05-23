@@ -119,6 +119,15 @@ static int handle_incoming(int sockfd)
     if(!gw)
         return 0;
 
+    /* It is important to verify the identity of the ping sender.  Without this
+     * check, a malicious user could send a fake ping packet that would cause
+     * traffic to be redirected to the source address of the ping. */
+    if(gw->secret_word != ntohl(ping->secret_word)) {
+        DEBUG_MSG("Secret word mismatch for node %hu", node_id);
+        DEBUG_MSG("This may be due to a race condition or an imposter.");
+        return 0;
+    }
+
     unsigned short link_id = ntohs(ping->link_id);
     struct interface *ife = 
         find_interface_by_index(gw->head_interface, link_id);
@@ -134,10 +143,7 @@ static int handle_incoming(int sockfd)
     if(ife) {
         /* The main reason for this check is if the gateway is behind a NAT,
          * then the IP address and port that it sends in its notification are
-         * not the same as its public IP address and port.
-         *
-         * TODO: Think about security issues here such as a third-party 
-         * sending fake ping packets. */
+         * not the same as its public IP address and port. */
         if(memcmp(&ife->public_ip, &from_in->sin_addr, sizeof(struct in_addr)) ||
                 ife->data_port != from_in->sin_port) {
             struct in_addr private_ip;
@@ -166,9 +172,7 @@ static int handle_incoming(int sockfd)
         /* The main reason for adding missing links on ping packets is if
          * the controller is restarted (the list of links is cleared).  A more
          * 
-         * TODO: This is not secure.  A malicious user could send a fake
-         * ping packet that will establish a link to him and redirect traffic
-         * to him.  Try writing state to a file on exit and reading the file
+         * TODO: Instead, write state to a file on exit and read the file
          * on start up. */
         ife = alloc_interface();
         if(!ife) {
