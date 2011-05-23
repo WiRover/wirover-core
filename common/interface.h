@@ -22,7 +22,7 @@ struct interface {
     enum if_state     state;
 
     /* These are in network byte order. */
-    struct in_addr    local_ip;
+    struct in_addr    public_ip;
     uint16_t          data_port;
 
     time_t            last_ping;

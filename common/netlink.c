@@ -69,7 +69,7 @@ int init_interface_list()
             // TODO: Keep IPv6 address(es) as well
             if(ifap->ifa_addr->sa_family == AF_INET) {
                 struct sockaddr_in *sin = (struct sockaddr_in *)ifap->ifa_addr;
-                memcpy(&ife->local_ip, &sin->sin_addr, sizeof(struct sockaddr_in));
+                memcpy(&ife->public_ip, &sin->sin_addr, sizeof(struct sockaddr_in));
             }
         }
         
@@ -253,8 +253,6 @@ int handle_netlink_message(const char* msg, int msg_len)
 }
 
 /*
- * CHANGE INTERFACE STATE
- *
  * Sets the interface's state to the given state, and if there was a change
  * between ACTIVE and non-ACTIVE states, it makes the appropriate ioctl()
  * calls.

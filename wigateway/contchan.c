@@ -48,7 +48,7 @@ int send_notification()
         strncpy(dest->ifname, ife->name, sizeof(dest->ifname));
         strncpy(dest->network, ife->network, sizeof(dest->network));
         dest->state = ife->state;
-        dest->local_ip = ife->local_ip.s_addr;
+        dest->local_ip = ife->public_ip.s_addr;
         dest->data_port = htons(get_base_port());
 
         ife = ife->next;

@@ -10,12 +10,16 @@
 #include "config.h"
 #include "configuration.h"
 #include "debug.h"
+#include "gateway.h"
 #include "interface.h"
+#include "kernel.h"
 #include "netlink.h"
 #include "ping.h"
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
+#include "tunnel.h"
+#include "utlist.h"
 
 static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd);
@@ -84,21 +88,108 @@ void* ping_thread_func(void* arg)
 
 static int handle_incoming(int sockfd)
 {
-    struct sockaddr_storage addr;
-    socklen_t addr_len = sizeof(addr);
+    struct sockaddr_storage from;
+    socklen_t from_len = sizeof(from);
     char buffer[1024];
 
     int bytes_recvd = recvfrom(sockfd, buffer, sizeof(buffer), 0,
-            (struct sockaddr*)&addr, &addr_len);
+            (struct sockaddr*)&from, &from_len);
     if(bytes_recvd < 0) {
         ERROR_MSG("recvfrom failed (socket %d)", sockfd);
-    } else if(bytes_recvd >= sizeof(struct ping_packet)) {
-        //struct ping_packet* pkt = (struct ping_packet*)buffer;
+        return -1;
+    }
 
-        int bytes_sent = sendto(sockfd, buffer, bytes_recvd, 0,
-                (struct sockaddr*)&addr, addr_len);
-        if(bytes_sent < 0) {
-            ERROR_MSG("Failed to send ping response (socket %d)", sockfd);
+    int bytes_sent = sendto(sockfd, buffer, bytes_recvd, 0,
+            (struct sockaddr*)&from, from_len);
+    if(bytes_sent < 0) {
+        ERROR_MSG("Failed to send ping response (socket %d)", sockfd);
+    }
+
+    if(bytes_recvd < PING_PACKET_SIZE)
+        return 0;
+
+    struct ping_packet *ping = (struct ping_packet *)
+        (buffer + sizeof(struct tunhdr));
+
+    unsigned short node_id = ntohs(ping->src_id);
+    if(node_id == 0)
+        return 0;
+
+    struct gateway *gw = lookup_gateway_by_id(node_id);
+    if(!gw)
+        return 0;
+
+    unsigned short link_id = ntohs(ping->link_id);
+    struct interface *ife = 
+        find_interface_by_index(gw->head_interface, link_id);
+        
+    // TODO: Add IPv6 support
+    if(from.ss_family != AF_INET) {
+        DEBUG_MSG("Using IPv6 interfaces is not supported; fix this.");
+        return 0;
+    }
+
+    struct sockaddr_in *from_in = (struct sockaddr_in *)&from;
+
+    if(ife) {
+        /* The main reason for this check is if the gateway is behind a NAT,
+         * then the IP address and port that it sends in its notification are
+         * not the same as its public IP address and port.
+         *
+         * TODO: Think about security issues here such as a third-party 
+         * sending fake ping packets. */
+        if(memcmp(&ife->public_ip, &from_in->sin_addr, sizeof(struct in_addr)) ||
+                ife->data_port != from_in->sin_port) {
+            struct in_addr private_ip;
+            ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
+            
+            DEBUG_MSG("Changing node %hu link %hu from %x:%hu to %x:%hu",
+                    gw->unique_id, ife->index,
+                    ntohl(ife->public_ip.s_addr), ntohs(ife->data_port),
+                    ntohl(from_in->sin_addr.s_addr), ntohs(from_in->sin_port));
+
+            if(ife->state == ACTIVE)
+                gw->active_interfaces--;
+            virt_remove_remote_link(&private_ip, &ife->public_ip);
+
+            memcpy(&ife->public_ip, &from_in->sin_addr, sizeof(struct in_addr));
+            ife->data_port  = from_in->sin_port;
+            ife->state      = ping->link_state;
+
+            if(ife->state == ACTIVE) {
+                gw->active_interfaces++;
+                virt_add_remote_link(&private_ip, &from_in->sin_addr,
+                    from_in->sin_port);
+            }
+        }
+    } else {
+        /* The main reason for adding missing links on ping packets is if
+         * the controller is restarted (the list of links is cleared).  A more
+         * 
+         * TODO: This is not secure.  A malicious user could send a fake
+         * ping packet that will establish a link to him and redirect traffic
+         * to him.  Try writing state to a file on exit and reading the file
+         * on start up. */
+        ife = alloc_interface();
+        if(!ife) {
+            DEBUG_MSG("out of memory");
+            return 0;
+        }
+
+        // TODO: add interface name, and network name
+        memcpy(&ife->public_ip, &from_in->sin_addr, sizeof(struct in_addr));
+        ife->data_port = from_in->sin_port;
+        ife->state     = ping->link_state;
+
+        DL_APPEND(gw->head_interface, ife);
+
+        if(ife->state == ACTIVE) {
+            struct in_addr private_ip;
+            ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
+
+            gw->active_interfaces++;
+            virt_add_remote_link(&private_ip, &from_in->sin_addr, 
+                    from_in->sin_port);
         }
     }
 
