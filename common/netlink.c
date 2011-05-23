@@ -67,7 +67,8 @@ int init_interface_list()
             }
 
             // TODO: Keep IPv6 address(es) as well
-            if(ifap->ifa_addr->sa_family == AF_INET) {
+            // It seems ifap->ifa_addr can be null, not sure why.
+            if(ifap->ifa_addr && ifap->ifa_addr->sa_family == AF_INET) {
                 struct sockaddr_in *sin = (struct sockaddr_in *)ifap->ifa_addr;
                 memcpy(&ife->public_ip, &sin->sin_addr, sizeof(struct sockaddr_in));
             }
@@ -415,7 +416,7 @@ static int update_interface_gateways()
         uint32_t gateway_ip = (uint32_t)strtoul(gateway, 0, 16);
 
         struct interface *ife = find_interface_by_name(interface_list, device);
-        if(ife && dest_ip == 0) {
+        if(ife && dest_ip == 0 && gateway_ip != 0) {
             ife->gateway_ip.s_addr = gateway_ip;
             DEBUG_MSG("Found gateway 0x%x for %s", ntohl(gateway_ip), device);
 
