@@ -277,7 +277,7 @@ static int handle_incoming(int sockfd, int timeout)
 
         // If the ping response is older than timeout seconds, we just ignore it.
         if((diff / USEC_PER_SEC) < timeout) {
-            unsigned int h_link_id = ntohl(pkt->link_id);
+            unsigned short h_link_id = ntohs(pkt->link_id);
 
             obtain_read_lock(&interface_list_lock);
 
