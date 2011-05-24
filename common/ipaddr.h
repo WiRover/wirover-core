@@ -1,6 +1,8 @@
 #ifndef WIROVER_IPADDR_H
 #define WIROVER_IPADDR_H
 
+#include <sys/socket.h>
+
 // IPv6 addresses require 16 bytes in binary form.
 // For the text representation, use the constant INET6_ADDRSTRLEN.
 #define IPADDR_SIZE     16
@@ -14,6 +16,7 @@ typedef struct ipaddr   ipaddr_t;
 #define IPADDR_INITIALIZER { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }
 
 struct sockaddr;
+struct sockaddr_in;
 
 int     string_to_ipaddr(const char* addr, ipaddr_t* dest);
 int     ipaddr_to_string(const ipaddr_t* addr, char* dest, unsigned len);
@@ -21,6 +24,9 @@ int     sockaddr_to_ipaddr(const struct sockaddr*, ipaddr_t* dest);
 int     ipv4_to_ipaddr(uint32_t addr, ipaddr_t* dest);
 int     ipaddr_to_ipv4(const ipaddr_t* addr, uint32_t* dest);
 void    copy_ipaddr(const ipaddr_t* src, ipaddr_t* dest);
+
+int sockaddr_to_sockaddr_in(const struct sockaddr *src, 
+        socklen_t src_len, struct sockaddr_in *dst);
 
 #endif //WIROVER_IPADDR_H
 

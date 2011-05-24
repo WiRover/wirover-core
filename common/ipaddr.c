@@ -150,3 +150,32 @@ void copy_ipaddr(const ipaddr_t* src, ipaddr_t* dest)
     }
 }
 
+/* Copy from a generic sockaddr structure to a sockaddr_in structure.  If the
+ * source is already a sockaddr_in, then this always succeeds.  If the source
+ * is a sockaddr_in6, this is possible only if the address is an IPv4 mapped to
+ * IPv6 address.  Returns 0 on success and -1 on failure. */
+int sockaddr_to_sockaddr_in(const struct sockaddr *src,               
+                socklen_t src_len, struct sockaddr_in *dst)
+{
+    if(src->sa_family == AF_INET && src_len == sizeof(struct sockaddr_in)) {
+        memcpy(dst, src, sizeof(struct sockaddr_in));
+        return 0;
+    } else if(src->sa_family == AF_INET6 && 
+            src_len == sizeof(struct sockaddr_in6)) {
+        const struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)src;
+
+        if(memcmp(sin6->sin6_addr.s6_addr, IPV4_ON_IPV6_PREFIX, 
+                    sizeof(IPV4_ON_IPV6_PREFIX)) == 0) {
+            memset(dst, 0, sizeof(*dst));
+            dst->sin_family = AF_INET;
+            dst->sin_port   = sin6->sin6_port;
+            memcpy(&dst->sin_addr.s_addr, sin6->sin6_addr.s6_addr + 
+                    sizeof(IPV4_ON_IPV6_PREFIX), sizeof(dst->sin_addr.s_addr));
+            return 0;
+        }
+    }
+
+    return -1;
+}
+
+

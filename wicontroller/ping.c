@@ -6,6 +6,7 @@
 #include <linux/udp.h>
 #include <netinet/in.h>
 #include <sys/time.h>
+#include <netdb.h>
 
 #include "config.h"
 #include "configuration.h"
@@ -131,41 +132,44 @@ static int handle_incoming(int sockfd)
     unsigned short link_id = ntohs(ping->link_id);
     struct interface *ife = 
         find_interface_by_index(gw->head_interface, link_id);
-        
+
     // TODO: Add IPv6 support
-    if(from.ss_family != AF_INET) {
-        DEBUG_MSG("Using IPv6 interfaces is not supported; fix this.");
+    struct sockaddr_in from_in;
+    if(sockaddr_to_sockaddr_in((struct sockaddr *)&from, from_len, &from_in) < 0) {
+        char p_ip[INET6_ADDRSTRLEN];
+        getnameinfo((struct sockaddr *)&from, from_len, p_ip, sizeof(p_ip), 
+                0, 0, NI_NUMERICHOST);
+
+        DEBUG_MSG("Unable to add interface with address %s (IPv6?)", p_ip);
         return 0;
     }
-
-    struct sockaddr_in *from_in = (struct sockaddr_in *)&from;
-
+        
     if(ife) {
         /* The main reason for this check is if the gateway is behind a NAT,
          * then the IP address and port that it sends in its notification are
          * not the same as its public IP address and port. */
-        if(memcmp(&ife->public_ip, &from_in->sin_addr, sizeof(struct in_addr)) ||
-                ife->data_port != from_in->sin_port) {
+        if(memcmp(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr)) ||
+                ife->data_port != from_in.sin_port) {
             struct in_addr private_ip;
             ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
             
             DEBUG_MSG("Changing node %hu link %hu from %x:%hu to %x:%hu",
                     gw->unique_id, ife->index,
                     ntohl(ife->public_ip.s_addr), ntohs(ife->data_port),
-                    ntohl(from_in->sin_addr.s_addr), ntohs(from_in->sin_port));
+                    ntohl(from_in.sin_addr.s_addr), ntohs(from_in.sin_port));
 
             if(ife->state == ACTIVE)
                 gw->active_interfaces--;
             virt_remove_remote_link(&private_ip, &ife->public_ip);
 
-            memcpy(&ife->public_ip, &from_in->sin_addr, sizeof(struct in_addr));
-            ife->data_port  = from_in->sin_port;
+            memcpy(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr));
+            ife->data_port  = from_in.sin_port;
             ife->state      = ping->link_state;
 
             if(ife->state == ACTIVE) {
                 gw->active_interfaces++;
-                virt_add_remote_link(&private_ip, &from_in->sin_addr,
-                    from_in->sin_port);
+                virt_add_remote_link(&private_ip, &from_in.sin_addr,
+                    from_in.sin_port);
             }
         }
     } else {
@@ -181,8 +185,8 @@ static int handle_incoming(int sockfd)
         }
 
         // TODO: add interface name, and network name
-        memcpy(&ife->public_ip, &from_in->sin_addr, sizeof(struct in_addr));
-        ife->data_port = from_in->sin_port;
+        memcpy(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr));
+        ife->data_port = from_in.sin_port;
         ife->state     = ping->link_state;
 
         DL_APPEND(gw->head_interface, ife);
@@ -192,8 +196,8 @@ static int handle_incoming(int sockfd)
             ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
 
             gw->active_interfaces++;
-            virt_add_remote_link(&private_ip, &from_in->sin_addr, 
-                    from_in->sin_port);
+            virt_add_remote_link(&private_ip, &from_in.sin_addr, 
+                    from_in.sin_port);
         }
     }
 

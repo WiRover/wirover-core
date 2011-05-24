@@ -143,7 +143,7 @@ int udp_bind_open(unsigned short local_port, const char* device)
     hints.ai_family = AF_INET6;
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_protocol = IPPROTO_UDP;
-    hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV | AI_V4MAPPED | AI_ADDRCONFIG;
+    hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV | AI_ADDRCONFIG;
 
     struct addrinfo* results = 0;
     int err = getaddrinfo(0, port_str, &hints, &results);
