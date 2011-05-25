@@ -166,7 +166,6 @@ int handle_netlink_message(const char* msg, int msg_len)
     for(nh = (const struct nlmsghdr*)msg; NLMSG_OK(nh, msg_len); nh = NLMSG_NEXT(nh, msg_len)) {
         if(nh->nlmsg_type == RTM_NEWADDR) {
             struct ifaddrmsg* ifa = (struct ifaddrmsg*)NLMSG_DATA(nh);
-            //struct rtattr*    rth = IFA_RTA(ifa);
 
             char device[IFNAMSIZ];
             if_indextoname(ifa->ifa_index, device);
@@ -194,6 +193,19 @@ int handle_netlink_message(const char* msg, int msg_len)
                     upgrade_read_lock(&interface_list_lock);
                     add_interface(ife);
                     downgrade_write_lock(&interface_list_lock);
+                }
+            }
+
+            struct rtattr *rth = IFA_RTA(ifa);
+            int rth_len;
+
+            for(rth_len = IFA_PAYLOAD(nh); rth_len && RTA_OK(rth, rth_len); 
+                    rth = RTA_NEXT(rth, rth_len)) {
+                if(rth->rta_type == IFA_LOCAL) {
+                    // Copy the new IP address if it appears valid (non-zero)
+                    uint32_t new_ip = *(uint32_t *)RTA_DATA(rth);
+                    if(new_ip != 0)
+                        ife->public_ip.s_addr = new_ip;
                 }
             }
 

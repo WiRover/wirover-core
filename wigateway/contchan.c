@@ -4,6 +4,7 @@
 
 #include "config.h"
 #include "contchan.h"
+#include "configuration.h"
 #include "debug.h"
 #include "netlink.h"
 #include "rootchan.h"
