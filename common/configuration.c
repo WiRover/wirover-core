@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <fnmatch.h>
 
 #include "config.h"
 #include "configuration.h"
@@ -121,6 +122,39 @@ const char* get_internal_interface()
     }
 
     return interface;
+}
+
+int get_interface_priority(const char *ifname)
+{
+    const config_t *config = get_config();
+    if(!config)
+        goto default_priority;
+
+    config_setting_t *priority_list = config_lookup(config, "priorities");
+    if(!priority_list)
+        goto default_priority;
+
+    int list_size = config_setting_length(priority_list);
+
+    int i;
+    for(i = 0; i < list_size; i++) {
+        config_setting_t *curr_item = config_setting_get_elem(priority_list, i);
+        if(!curr_item)
+            continue;
+
+        const char *curr_ifname;
+        if(!config_setting_lookup_string(curr_item, "interface", &curr_ifname))
+            continue;
+
+        if(fnmatch(curr_ifname, ifname, 0) == 0) {
+            int curr_priority;
+            if(config_setting_lookup_int(curr_item, "priority", &curr_priority))
+                return curr_priority;
+        }
+    }
+
+default_priority:
+    return DEFAULT_INTERFACE_PRIORITY;
 }
 
 /*

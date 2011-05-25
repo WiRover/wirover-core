@@ -4,6 +4,7 @@
 #include <libconfig.h>
 
 #define MAX_CONFIG_PATH_LEN 256
+#define DEFAULT_INTERFACE_PRIORITY 0
 
 #if defined(CONTROLLER)
 #define CONFIG_FILENAME "wicontroller.conf"
@@ -21,6 +22,7 @@ unsigned short  get_wiroot_port();
 unsigned short  get_base_port();
 unsigned int    get_ping_interval();
 const char*     get_internal_interface();
+int             get_interface_priority(const char *ifname);
 
 #endif //_CONFIGURATION_H_
 

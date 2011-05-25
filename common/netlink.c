@@ -11,6 +11,7 @@
 
 #include "config.h"
 #include "contchan.h"
+#include "configuration.h"
 #include "debug.h"
 #include "interface.h"
 #include "netlink.h"
@@ -53,6 +54,10 @@ int init_interface_list()
 
             ife = find_interface_by_name(interface_list, ifap->ifa_name);
             if(!ife) {
+                int priority = get_interface_priority(ifap->ifa_name);
+                if(priority < 0)
+                    continue;
+
                 ife = alloc_interface();
                 if(!ife)
                     continue;
@@ -62,6 +67,8 @@ int init_interface_list()
 
                 // Set to INACTIVE until connectivity is confirmed
                 ife->state = INACTIVE;
+
+                ife->priority = priority;
 
                 add_interface(ife);
             }
@@ -173,16 +180,20 @@ int handle_netlink_message(const char* msg, int msg_len)
                 change_interface_state(ife, INACTIVE);
                 downgrade_write_lock(&interface_list_lock);
             } else {
-                ife = alloc_interface();
-                assert(ife);
+                int priority = get_interface_priority(device);
+                if(priority >= 0) {
+                    ife = alloc_interface();
+                    assert(ife);
 
-                ife->index = ifa->ifa_index;
-                strncpy(ife->name, device, sizeof(ife->name));
-                ife->state = INACTIVE;
+                    ife->index = ifa->ifa_index;
+                    strncpy(ife->name, device, sizeof(ife->name));
+                    ife->state = INACTIVE;
+                    ife->priority = priority;
 
-                upgrade_read_lock(&interface_list_lock);
-                add_interface(ife);
-                downgrade_write_lock(&interface_list_lock);
+                    upgrade_read_lock(&interface_list_lock);
+                    add_interface(ife);
+                    downgrade_write_lock(&interface_list_lock);
+                }
             }
 
             ping_interface(ife);
