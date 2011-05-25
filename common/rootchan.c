@@ -28,7 +28,7 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
     timeout.tv_sec  = RCHAN_CONNECT_TIMEOUT_SEC;
     timeout.tv_usec = 0;
 
-    sockfd = tcp_active_open(wiroot_ip, wiroot_port, &timeout);
+    sockfd = tcp_active_open(wiroot_ip, wiroot_port, 0, &timeout);
     if(sockfd == -1) {
         DEBUG_MSG("failed to connect to wiroot server");
         return 0;

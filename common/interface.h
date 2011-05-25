@@ -52,6 +52,8 @@ struct interface* find_interface_by_index(struct interface* head, unsigned int i
 struct interface* find_interface_by_name(struct interface* head, const char* name);
 struct interface* find_interface_by_network(struct interface* head, const char* network);
 
+struct interface *find_active_interface(struct interface *head);
+
 double ema_update(double old_val, double new_val, double new_weight);
 
 #endif //_INTERFACE_H_

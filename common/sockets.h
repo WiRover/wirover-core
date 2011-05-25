@@ -23,7 +23,7 @@ struct timeval;
 //SOMAXCONN is a good value for backlog
 int tcp_passive_open(unsigned short local_port, int backlog);
 int tcp_active_open(const char* remote_addr, unsigned short remote_port,
-        struct timeval *timeout);
+        const char *device, struct timeval *timeout);
 int udp_bind_open(unsigned short local_port, const char* device);
 
 int set_nonblock(int sockfd, int enable);

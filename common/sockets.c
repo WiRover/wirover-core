@@ -85,7 +85,7 @@ free_and_return:
  * TCP ACTIVE OPEN
  */
 int tcp_active_open(const char* remote_addr, unsigned short remote_port,
-        struct timeval *timeout)
+        const char *device, struct timeval *timeout)
 {
     int sockfd;
     int rtn;
@@ -94,6 +94,14 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
     if(sockfd < 0) {
         ERROR_MSG("failed creating socket");
         return -1;
+    }
+    
+    if(device) {
+        // Bind socket to device
+        if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, device, IFNAMSIZ) < 0) {
+            ERROR_MSG("SO_BINDTODEVICE failed");
+            goto close_and_return;
+        }
     }
 
     struct addrinfo hints;
@@ -115,7 +123,8 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
     // null, so this assert should never be triggered
     assert(results != 0 && results->ai_addr != 0);
 
-    set_nonblock(sockfd, NONBLOCKING);
+    if(timeout)
+        set_nonblock(sockfd, NONBLOCKING);
     
     rtn = connect(sockfd, results->ai_addr, results->ai_addrlen);
     if(rtn == -1 && errno != EINPROGRESS) {
@@ -123,22 +132,24 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
         goto close_and_return;
     }
 
-    fd_set write_set;
-    FD_ZERO(&write_set);
-    FD_SET(sockfd, &write_set);
+    if(timeout) {
+        fd_set write_set;
+        FD_ZERO(&write_set);
+        FD_SET(sockfd, &write_set);
 
-    // sockfd will become writable if connect finishes before timeout
-    rtn = select(sockfd + 1, 0, &write_set, 0, timeout);
-    if(rtn < 0) {
-        if(errno != EINTR)
-            ERROR_MSG("select");
-        goto close_and_return;
-    } else if(rtn == 0) {
-        DEBUG_MSG("connect timed out");
-        goto close_and_return;
+        // sockfd will become writable if connect finishes before timeout
+        rtn = select(sockfd + 1, 0, &write_set, 0, timeout);
+        if(rtn < 0) {
+            if(errno != EINTR)
+                ERROR_MSG("select");
+            goto close_and_return;
+        } else if(rtn == 0) {
+            DEBUG_MSG("connect timed out");
+            goto close_and_return;
+        }
+
+        set_nonblock(sockfd, BLOCKING);
     }
-
-    set_nonblock(sockfd, BLOCKING);
 
     return sockfd;
 

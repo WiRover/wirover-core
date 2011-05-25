@@ -83,10 +83,6 @@ int main(int argc, char* argv[])
             DEBUG_MSG("Cannot continue due to ping thread failure");
             exit(1);
         }
-
-        if(send_notification() == FAILURE) {
-            DEBUG_MSG("Failed to send notification to controller.");
-        }
     }
 
     wait_for_netlink_thread();

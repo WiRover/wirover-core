@@ -32,14 +32,25 @@ int send_notification()
     const unsigned short controller_port =
             get_controller_base_port() + CONTROL_CHANNEL_OFFSET;
 
+    obtain_read_lock(&interface_list_lock);
+
+    struct interface *bind_ife = find_active_interface(interface_list);
+    if(!bind_ife) {
+        DEBUG_MSG("Cannot send notification, no active interfaces");
+        release_read_lock(&interface_list_lock);
+        return FAILURE;
+    }
+
     struct timeval timeout;
     timeout.tv_sec  = CCHAN_CONNECT_TIMEOUT_SEC;
     timeout.tv_usec = 0;
 
-    sockfd = tcp_active_open(controller_ip, controller_port, &timeout);
+    sockfd = tcp_active_open(controller_ip, controller_port, 
+            bind_ife->name, &timeout);
     if(sockfd == -1) {
         DEBUG_MSG("Failed to open control channel with controller %s:%d",
                   controller_ip, controller_port);
+        release_read_lock(&interface_list_lock);
         return FAILURE;
     }
 
@@ -51,8 +62,6 @@ int send_notification()
 
     secret_word = rand();
     notification.secret_word = htonl(secret_word);
-
-    obtain_read_lock(&interface_list_lock);
 
     int ife_ind = 0;
     struct interface* ife = interface_list;

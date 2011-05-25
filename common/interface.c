@@ -84,6 +84,19 @@ struct interface* find_interface_by_network(struct interface* head, const char* 
     return 0;
 }
 
+struct interface *find_active_interface(struct interface *head)
+{
+    while(head) {
+        if(head->state == ACTIVE)
+            return head;
+
+        assert(head != head->next);
+        head = head->next;
+    }
+
+    return 0;
+}
+
 /*
  * EMA UPDATE
  *
