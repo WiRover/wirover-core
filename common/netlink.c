@@ -56,11 +56,11 @@ int init_interface_list()
             if(!ife) {
                 int priority = get_interface_priority(ifap->ifa_name);
                 if(priority < 0)
-                    continue;
+                    goto next_ifap;
 
                 ife = alloc_interface();
                 if(!ife)
-                    continue;
+                    goto next_ifap;
 
                 ife->index = if_nametoindex(ifap->ifa_name);
                 strncpy(ife->name, ifap->ifa_name, sizeof(ife->name));
@@ -81,6 +81,7 @@ int init_interface_list()
             }
         }
         
+next_ifap:
         ifap = ifap->ifa_next;
     }
 
