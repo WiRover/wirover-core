@@ -118,7 +118,8 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
     set_nonblock(sockfd, NONBLOCKING);
     
     rtn = connect(sockfd, results->ai_addr, results->ai_addrlen);
-    if(rtn == -1) {
+    if(rtn == -1 && errno != EINPROGRESS) {
+        ERROR_MSG("connect");
         goto close_and_return;
     }
 
@@ -136,6 +137,8 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
         DEBUG_MSG("connect timed out");
         goto close_and_return;
     }
+
+    set_nonblock(sockfd, BLOCKING);
 
     return sockfd;
 

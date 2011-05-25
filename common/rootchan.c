@@ -174,7 +174,6 @@ const struct lease_info* get_lease_info()
 unsigned short get_controller_base_port()
 {
     if(!latest_lease || latest_lease->controllers == 0) {
-        DEBUG_MSG("There are no controllers.");
         return FAILURE;
     }
 
@@ -190,7 +189,6 @@ unsigned short get_controller_base_port()
 int get_controller_ip(char* dest, int dest_len)
 {
     if(!latest_lease || latest_lease->controllers == 0) {
-        DEBUG_MSG("There are no controllers.");
         return FAILURE;
     }
 

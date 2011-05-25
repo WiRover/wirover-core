@@ -66,7 +66,8 @@ int ping_all_interfaces(unsigned short src_port)
     int pings_sent = 0;
 
     char controller_ip[INET6_ADDRSTRLEN];
-    get_controller_ip(controller_ip, sizeof(controller_ip));
+    if(get_controller_ip(controller_ip, sizeof(controller_ip)) < 0)
+        return FAILURE;
 
     const unsigned short controller_port = 
             get_controller_base_port() + DATA_CHANNEL_OFFSET;

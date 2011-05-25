@@ -36,10 +36,7 @@ int main(int argc, char* argv[])
     strncpy(my_ip, DEFAULT_VIRT_ADDRESS, sizeof(my_ip));
 
     const struct lease_info* lease = obtain_lease(wiroot_ip, wiroot_port, base_port);
-    if(lease == 0) {
-        DEBUG_MSG("Failed to obtain a lease from wiroot server.");
-        DEBUG_MSG("We will use the IP address %s and NAT mode.", DEFAULT_VIRT_ADDRESS);
-    } else {
+    if(lease) {
         ipaddr_to_string(&lease->priv_ip, my_ip, sizeof(my_ip));
         DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease->unique_id);
         DEBUG_MSG("There are %d controllers available.", lease->controllers);
@@ -62,6 +59,9 @@ int main(int argc, char* argv[])
 
             virt_set_proxy((struct in_addr *)&priv_ip, lease->cinfo[0].base_port);
         }
+    } else {
+        DEBUG_MSG("Failed to obtain a lease from wiroot server.");
+        DEBUG_MSG("We will use the IP address %s and NAT mode.", DEFAULT_VIRT_ADDRESS);
     }
 
     result = setup_virtual_interface(my_ip);
@@ -78,13 +78,15 @@ int main(int argc, char* argv[])
         DEBUG_MSG("Failed to initialize interface list");
     }
 
-    if(start_ping_thread() == FAILURE) {
-        DEBUG_MSG("Cannot continue due to ping thread failure");
-        exit(1);
-    }
+    if(lease) {
+        if(start_ping_thread() == FAILURE) {
+            DEBUG_MSG("Cannot continue due to ping thread failure");
+            exit(1);
+        }
 
-    if(send_notification() == FAILURE) {
-        DEBUG_MSG("Failed to send notification to controller.");
+        if(send_notification() == FAILURE) {
+            DEBUG_MSG("Failed to send notification to controller.");
+        }
     }
 
     wait_for_netlink_thread();
