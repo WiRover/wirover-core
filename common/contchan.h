@@ -19,9 +19,11 @@
 #include "interface.h"
 #include "ipaddr.h"
 
-#define MAX_INTERFACES    6
 
+#define MAX_INTERFACES    6
 #define CCHAN_NOTIFICATION         0x10
+
+#define CCHAN_CONNECT_TIMEOUT_SEC  5
 
 struct interface_info {
     char        ifname[IFNAMSIZ];

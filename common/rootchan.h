@@ -17,6 +17,8 @@
 #define RCHAN_CONTROLLER_CONFIG    0x02
 #define RCHAN_SHUTDOWN             0x03
 
+#define RCHAN_CONNECT_TIMEOUT_SEC  5
+
 struct controller_info {
     ipaddr_t    priv_ip;
     ipaddr_t    pub_ip;

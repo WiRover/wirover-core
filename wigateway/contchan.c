@@ -31,7 +31,11 @@ int send_notification()
     const unsigned short controller_port =
             get_controller_base_port() + CONTROL_CHANNEL_OFFSET;
 
-    sockfd = tcp_active_open(controller_ip, controller_port);
+    struct timeval timeout;
+    timeout.tv_sec  = CCHAN_CONNECT_TIMEOUT_SEC;
+    timeout.tv_usec = 0;
+
+    sockfd = tcp_active_open(controller_ip, controller_port, &timeout);
     if(sockfd == -1) {
         DEBUG_MSG("Failed to open control channel with controller %s:%d",
                   controller_ip, controller_port);
