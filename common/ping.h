@@ -2,8 +2,8 @@
 #define _PING_H_
 
 #define PING_PACKET_TYPE    0x20
-
 #define USEC_PER_SEC        1000000
+#define PING_LOSS_THRESHOLD 4
 
 struct ping_packet {
     uint32_t    seq_no;

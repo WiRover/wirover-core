@@ -26,6 +26,7 @@ static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd, int timeout);
 unsigned long timeval_diff_usec(const struct timeval* __restrict__ start,
                                 const struct timeval* __restrict__ end);
+static void mark_inactive_interfaces();
 
 static int          running;
 static pthread_t    ping_thread;
@@ -160,7 +161,7 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
 
     struct ping_packet *pkt = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
-    pkt->seq_no = SPECIAL_SEQ_NO;
+    pkt->seq_no = htonl(ife->next_ping_seq_no++);
     pkt->type   = PING_PACKET_TYPE;
     pkt->link_state = ife->state;
     pkt->src_id = htons(get_unique_id());
@@ -230,6 +231,8 @@ void* ping_thread_func(void* arg)
 
         int time_remaining = ping_interval - (time(0) - last_ping);
         if(time_remaining <= 0) {
+            mark_inactive_interfaces();
+
             // It is time to send out another round of pings.
             ping_all_interfaces(local_port);
             last_ping = time(0);
@@ -293,6 +296,8 @@ static int handle_incoming(int sockfd, int timeout)
                     notif_needed = 1;
                 }
 
+                ife->last_ping_seq_no = ntohl(pkt->seq_no);
+
                 downgrade_write_lock(&interface_list_lock);
 
                 DEBUG_MSG("Ping on %s rtt %d avg_rtt %f", ife->name, diff, ife->avg_rtt);
@@ -323,4 +328,38 @@ unsigned long timeval_diff_usec(const struct timeval* __restrict__ start,
     return diff;
 }
 
+static void mark_inactive_interfaces()
+{
+    int notif_needed = 0;
+
+    obtain_read_lock(&interface_list_lock);
+
+    struct interface* curr_ife = interface_list;
+    while(curr_ife) {
+        if(curr_ife->state == ACTIVE) {
+            int32_t losses = (int32_t)curr_ife->next_ping_seq_no -
+                (int32_t)curr_ife->last_ping_seq_no - 1;
+
+            if(losses >= PING_LOSS_THRESHOLD) {
+                DEBUG_MSG("Marking %s INACTIVE after %d ping losses",
+                        curr_ife->name, losses);
+                
+                upgrade_read_lock(&interface_list_lock);
+                change_interface_state(curr_ife, INACTIVE);
+                downgrade_write_lock(&interface_list_lock);
+
+                notif_needed = 1;
+            }
+        }
+
+        assert(curr_ife != curr_ife->next);
+        curr_ife = curr_ife->next;
+    }
+
+    release_read_lock(&interface_list_lock);
+
+    if(notif_needed) {
+        send_notification();
+    }
+}
 

@@ -28,6 +28,9 @@ struct interface {
 
     time_t            last_ping;
 
+    uint32_t    next_ping_seq_no;
+    uint32_t    last_ping_seq_no;
+
     double            avg_rtt;
 
     // default gateway for routing if needed
