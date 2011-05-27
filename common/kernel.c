@@ -19,7 +19,7 @@ int setup_virtual_interface(const char *ip)
 {
     int sockfd;
     struct addrinfo hints;
-    struct addrinfo* ainfo;
+    struct addrinfo *ainfo = 0;
     int result;
 
     /* TODO: struct ifreq only has space for a sockaddr, so only IPv4
@@ -29,7 +29,7 @@ int setup_virtual_interface(const char *ip)
     hints.ai_flags = AI_NUMERICHOST;
 
     result = getaddrinfo(ip, 0, &hints, &ainfo);
-    if(result != 0) {
+    if(result != 0 || !ainfo) {
         DEBUG_MSG("getaddrinfo() failed - %s", gai_strerror(result));
         return -1;
     }
