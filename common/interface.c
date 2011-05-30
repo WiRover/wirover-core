@@ -97,6 +97,60 @@ struct interface *find_active_interface(struct interface *head)
     return 0;
 }
 
+int count_active_interfaces(const struct interface *head)
+{
+    int num_active = 0;
+
+    while(head) {
+        if(head->state == ACTIVE)
+            num_active++;
+
+        assert(head != head->next);
+        head = head->next;
+    }
+
+    return num_active;
+}
+
+/*
+ * Creates an array containing information about every active interface.  This
+ * is useful for performing an action that would otherwise require the
+ * interface list to be locked for a long period of time.
+ *
+ * Returns the number of active interfaces or -1 on memory allocation failure.
+ * A return value of > 0 implies that *out points to an array of interface_copy
+ * structures.  Remember to free it.
+ */
+int copy_active_interfaces(const struct interface *head, struct interface_copy **out)
+{
+    assert(head && out);
+
+    int num_active = count_active_interfaces(head);
+    if(num_active == 0)
+        return 0;
+
+    unsigned alloc_size = sizeof(struct interface_copy) * num_active;
+    *out = malloc(alloc_size);
+    if(!*out) {
+        DEBUG_MSG("out of memory");
+        return -1;
+    }
+
+    memset(*out, 0, alloc_size);
+    
+    int i = 0;
+    while(head && i < num_active) {
+        if(head->state == ACTIVE) {
+            strncpy((*out)[i].name, head->name, IFNAMSIZ);
+            i++;
+        }
+
+        head = head->next;
+    }
+    
+    return num_active;
+}
+
 /*
  * EMA UPDATE
  *

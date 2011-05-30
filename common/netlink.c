@@ -271,7 +271,7 @@ int handle_netlink_message(const char* msg, int msg_len)
 
     const struct lease_info* lease = get_lease_info();
     if(should_notify && lease != 0) {
-        send_notification(lease);
+        send_notification(1);
     }
 
     return 0;

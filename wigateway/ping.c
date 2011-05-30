@@ -307,7 +307,7 @@ static int handle_incoming(int sockfd, int timeout)
         }
 
         if(notif_needed) {
-            send_notification();
+            send_notification(1);
         }
     }
 
@@ -359,7 +359,7 @@ static void mark_inactive_interfaces()
     release_read_lock(&interface_list_lock);
 
     if(notif_needed) {
-        send_notification();
+        send_notification(1);
     }
 }
 

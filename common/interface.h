@@ -40,9 +40,8 @@ struct interface {
     struct interface* prev;
 };
 
-struct interface_iterator {
-    struct interface* curr;
-    struct interface* next;
+struct interface_copy {
+    char    name[IFNAMSIZ];
 };
 
 struct interface* alloc_interface();
@@ -55,7 +54,10 @@ struct interface* find_interface_by_index(struct interface* head, unsigned int i
 struct interface* find_interface_by_name(struct interface* head, const char* name);
 struct interface* find_interface_by_network(struct interface* head, const char* network);
 
+int count_active_interfaces(const struct interface *head);
+
 struct interface *find_active_interface(struct interface *head);
+int copy_active_interfaces(const struct interface *head, struct interface_copy **out);
 
 double ema_update(double old_val, double new_val, double new_weight);
 

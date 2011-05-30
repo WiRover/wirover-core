@@ -19,7 +19,47 @@
  * TODO: May want separate secret words for each controller. */
 static int32_t secret_word = 0;
 
-int send_notification()
+static int _send_notification(const char *ifname);
+
+int send_notification(int max_tries)
+{
+    assert(max_tries > 0);
+
+    int i;
+    for(i = 0; i < max_tries; i++) {
+        obtain_read_lock(&interface_list_lock);
+
+        struct interface_copy *active_list;
+        int num_active = copy_active_interfaces(interface_list, &active_list);
+
+        release_read_lock(&interface_list_lock);
+
+        if(num_active <= 0) {
+            if(num_active == 0)
+                DEBUG_MSG("Cannot send notification, no ACTIVE interfaces");
+            return -1;
+        }
+
+        int j;
+        for(j = 0; j < num_active; j++) {
+            int res = _send_notification(active_list[j].name);
+            if(res == 0) {
+                free(active_list);
+                return 0;
+            }
+        }
+
+        free(active_list);
+    }
+
+    return -1;
+}
+
+/*
+ * Makes a single attempt at sending a notification.  The socket is bound
+ * to the given interface.
+ */
+static int _send_notification(const char *ifname)
 {
     int sockfd;
 
@@ -32,25 +72,15 @@ int send_notification()
     const unsigned short controller_port =
             get_controller_base_port() + CONTROL_CHANNEL_OFFSET;
 
-    obtain_read_lock(&interface_list_lock);
-
-    struct interface *bind_ife = find_active_interface(interface_list);
-    if(!bind_ife) {
-        DEBUG_MSG("Cannot send notification, no active interfaces");
-        release_read_lock(&interface_list_lock);
-        return FAILURE;
-    }
-
     struct timeval timeout;
     timeout.tv_sec  = CCHAN_CONNECT_TIMEOUT_SEC;
     timeout.tv_usec = 0;
 
     sockfd = tcp_active_open(controller_ip, controller_port, 
-            bind_ife->name, &timeout);
+            ifname, &timeout);
     if(sockfd == -1) {
         DEBUG_MSG("Failed to open control channel with controller %s:%d",
                   controller_ip, controller_port);
-        release_read_lock(&interface_list_lock);
         return FAILURE;
     }
 
@@ -62,6 +92,8 @@ int send_notification()
 
     secret_word = rand();
     notification.secret_word = htonl(secret_word);
+
+    obtain_read_lock(&interface_list_lock);
 
     int ife_ind = 0;
     struct interface* ife = interface_list;
@@ -79,9 +111,9 @@ int send_notification()
         ife = ife->next;
         ife_ind++;
     }
-
-    release_read_lock(&interface_list_lock);
     
+    release_read_lock(&interface_list_lock);
+
     notification.interfaces = ife_ind;
     
     const size_t notification_len = MIN_NOTIFICATION_LEN +

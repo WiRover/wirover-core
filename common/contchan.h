@@ -49,7 +49,7 @@ int process_notification(const char* packet, unsigned int pkt_len);
 #endif
 
 #ifdef GATEWAY
-int send_notification();
+int send_notification(int max_tries);
 int32_t get_secret_word();
 #endif
 
