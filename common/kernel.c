@@ -250,25 +250,27 @@ int virt_set_gateway_ip(const char *device, const struct in_addr *gw_ip)
     return 0;
 }
 
-int virt_set_proxy(const struct in_addr *priv_ip, unsigned short data_port)
+int virt_add_vroute(uint32_t dest, uint32_t netmask, uint32_t node_ip)
 {
     int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
     if(sockfd < 0) {
         ERROR_MSG("creating socket failed");
         return FAILURE;
     }
+
+    struct vroute_req vroute_req;
+    memset(&vroute_req, 0, sizeof(vroute_req));
+    vroute_req.dest = dest;
+    vroute_req.netmask = netmask;
+    vroute_req.node_ip = node_ip;
     
     struct ifreq ifr;
     memset(&ifr, 0, sizeof(ifr));
     strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
+    ifr.ifr_data = &vroute_req;
 
-    struct sockaddr_in *addr = (struct sockaddr_in *)&ifr.ifr_addr;
-    addr->sin_family = AF_INET;
-    memcpy(&addr->sin_addr, priv_ip, sizeof(struct in_addr));
-    addr->sin_port = data_port;
-    
-    if(ioctl(sockfd, SIOCVIRTSETPROXY, &ifr) < 0) {
-        ERROR_MSG("SIOCVIRTSETPROXY ioctl failed");
+    if(ioctl(sockfd, SIOCVIRTADDVROUTE, &ifr) < 0) {
+        ERROR_MSG("SIOCVIRTADDVROUTE ioctl failed");
         close(sockfd);
         return FAILURE;
     }
@@ -276,4 +278,34 @@ int virt_set_proxy(const struct in_addr *priv_ip, unsigned short data_port)
     close(sockfd);
     return 0;
 }
+
+int virt_delete_vroute(uint32_t dest, uint32_t netmask, uint32_t node_ip)
+{
+    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if(sockfd < 0) {
+        ERROR_MSG("creating socket failed");
+        return FAILURE;
+    }
+
+    struct vroute_req vroute_req;
+    memset(&vroute_req, 0, sizeof(vroute_req));
+    vroute_req.dest = dest;
+    vroute_req.netmask = netmask;
+    vroute_req.node_ip = node_ip;
+    
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
+    ifr.ifr_data = &vroute_req;
+
+    if(ioctl(sockfd, SIOCVIRTDELVROUTE, &ifr) < 0) {
+        ERROR_MSG("SIOCVIRTDELVROUTE ioctl failed");
+        close(sockfd);
+        return FAILURE;
+    }
+
+    close(sockfd);
+    return 0;
+}
+
 

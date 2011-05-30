@@ -57,7 +57,8 @@ int main(int argc, char* argv[])
             virt_add_remote_link((struct in_addr *)&priv_ip, 
                 (struct in_addr *)&pub_ip, lease->cinfo[0].base_port);
 
-            virt_set_proxy((struct in_addr *)&priv_ip, lease->cinfo[0].base_port);
+            // Add a default vroute that directs all traffic to the controller
+            virt_add_vroute(0, 0, priv_ip);
         }
     } else {
         DEBUG_MSG("Failed to obtain a lease from wiroot server.");

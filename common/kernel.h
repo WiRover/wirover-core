@@ -4,8 +4,9 @@
 #define SIOCVIRTENSLAVE   (SIOCDEVPRIVATE + 0)
 #define SIOCVIRTRELEASE   (SIOCDEVPRIVATE + 1)
 #define SIOCVIRTSETHWADDR (SIOCDEVPRIVATE + 2)
-#define SIOCVIRTSETPROXY  (SIOCDEVPRIVATE + 3)
 #define SIOCVIRTSETGWADDR (SIOCDEVPRIVATE + 4)
+#define SIOCVIRTADDVROUTE (SIOCDEVPRIVATE + 5)
+#define SIOCVIRTDELVROUTE (SIOCDEVPRIVATE + 6)
 
 #define VIRT_PROC_REMOTE_ADD     0
 #define VIRT_PROC_REMOTE_DELETE  1
@@ -37,6 +38,12 @@ struct gwaddr_req {
 #define gwaddr_ip6 nl_u.ip6_u
 };
 
+struct vroute_req {
+    __be32 dest;
+    __be32 netmask;
+    __be32 node_ip;
+};
+
 int setup_virtual_interface(const char *ip);
 
 int kernel_set_controller(const struct sockaddr_in* addr);
@@ -54,8 +61,8 @@ int virt_remove_remote_link(const struct in_addr *priv_ip,
 
 int virt_set_gateway_ip(const char *device, const struct in_addr *gw_ip);
 
-/* TODO: This should be part of the encap policy.  The ioctl is just a hack. */
-int virt_set_proxy(const struct in_addr *priv_ip, unsigned short data_port);
+int virt_add_vroute(uint32_t dest, uint32_t netmask, uint32_t node_ip);
+int virt_delete_vroute(uint32_t dest, uint32_t netmask, uint32_t node_ip);
 
 #endif //_KERNEL_H_
 
