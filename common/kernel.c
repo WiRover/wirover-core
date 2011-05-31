@@ -9,6 +9,7 @@
 
 #include "debug.h"
 #include "kernel.h"
+#include "tunnel.h"
 
 const char* VIRT_DEVICE = "virt0";
 
@@ -60,6 +61,15 @@ int setup_virtual_interface(const char *ip)
     result = ioctl(sockfd, SIOCSIFFLAGS, &master_ifr);
     if(result < 0) {
         ERROR_MSG("SIOCSIFFLAGS ioctl failed");
+        close(sockfd);
+        return -1;
+    }
+
+    master_ifr.ifr_mtu = VIRT_MTU;
+
+    result = ioctl(sockfd, SIOCSIFMTU, &master_ifr);
+    if(result < 0) {
+        ERROR_MSG("SIOCSIFMTU ioctl failed");
         close(sockfd);
         return -1;
     }

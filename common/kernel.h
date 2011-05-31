@@ -11,6 +11,10 @@
 #define VIRT_PROC_REMOTE_ADD     0
 #define VIRT_PROC_REMOTE_DELETE  1
 
+// TODO: Check MTU of every enslaved device.  We need to use the minimum MTU.
+// IP (no options) + UDP header is 28 bytes.
+#define VIRT_MTU (1500 - 28 - sizeof(struct tunhdr))
+
 struct virt_proc_remote_node {
     unsigned op;
     struct in_addr priv_ip;
@@ -46,7 +50,6 @@ struct vroute_req {
 
 int setup_virtual_interface(const char *ip);
 
-int kernel_set_controller(const struct sockaddr_in* addr);
 int kernel_enslave_device(const char* device);
 int kernel_release_device(const char* device);
 
