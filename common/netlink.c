@@ -68,6 +68,7 @@ int init_interface_list()
                 // Set to INACTIVE until connectivity is confirmed
                 ife->state = INACTIVE;
 
+                ife->data_port = htons(get_base_port());
                 ife->priority = priority;
 
                 add_interface(ife);
