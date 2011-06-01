@@ -290,8 +290,15 @@ int change_interface_state(struct interface* ife, enum if_state state)
 
 #ifdef WITH_KERNEL
         if(kernel_enslave_device(ife->name) == FAILURE) {
-            DEBUG_MSG("Failed to enslave device");
+            DEBUG_MSG("Failed to enslave device %s", ife->name);
             return FAILURE;
+        }
+
+        if(ife->gateway_ip.s_addr) {
+            if(virt_set_gateway_ip(ife->name, &ife->gateway_ip) < 0) {
+                DEBUG_MSG("Failed to set gateway IP for device %s", ife->name);
+                return FAILURE;
+            }
         }
 #endif
     } else if(ife->state == ACTIVE && state != ACTIVE) {
@@ -444,8 +451,6 @@ static int update_interface_gateways()
         if(ife && dest_ip == 0 && gateway_ip != 0) {
             ife->gateway_ip.s_addr = gateway_ip;
             DEBUG_MSG("Found gateway 0x%x for %s", ntohl(gateway_ip), device);
-
-            virt_set_gateway_ip(device, &ife->gateway_ip);
         }
     }
 
