@@ -43,6 +43,7 @@ void __debug_msg(const char* file, int line, const char* func, const char* msg, 
     }
 
     printf("\t%s (line %d): %s() -- %s\n", split_file, line, func, buffer);
+    fflush(stdout);
 }
 
 void __error_msg(const char* file, int line, const char* func, const char* msg, ...)
@@ -67,6 +68,7 @@ void __error_msg(const char* file, int line, const char* func, const char* msg, 
 
     printf("\tERROR_MSG: %s (line %d): %s() -- %s: %s - Error #(%d)\n", split_file,
            line, func, buffer, strerror(errno), errno);
+    fflush(stdout);
 }
 #endif //DEBUG_PRINT
 
