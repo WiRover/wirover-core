@@ -81,13 +81,12 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
         ife->state = notif->if_info[i].state;
         ife->index = ntohl(notif->if_info[i].link_id);
         ife->data_port = notif->if_info[i].data_port;
+        ife->public_ip.s_addr = notif->if_info[i].local_ip;
 
         if(ife->state == ACTIVE) {
             gw->active_interfaces++;
 
-            virt_add_remote_link(&priv_ip, 
-                (struct in_addr *)&notif->if_info[i].local_ip, 
-                ife->data_port);
+            virt_add_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
         }
 
         DL_APPEND(gw->head_interface, ife);
@@ -120,11 +119,6 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
     struct in_addr priv_ip;
     ipaddr_to_ipv4(&notif->priv_ip, (uint32_t *)&priv_ip.s_addr);
 
-    struct in_addr netmask;
-    netmask.s_addr = 0xFFFFFFFF;
-
-    virt_add_remote_node(&priv_ip, &netmask);
-
     int i;
     for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
         int is_new = 0;
@@ -133,13 +127,15 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
         if(!ife) {
             is_new = 1;
             ife = alloc_interface();
+            
             strncpy(ife->name, notif->if_info[i].ifname, sizeof(ife->name));
+            ife->public_ip.s_addr = notif->if_info[i].local_ip;
+            ife->data_port = notif->if_info[i].data_port;
         }
         
         strncpy(ife->network, notif->if_info[i].network, sizeof(ife->network));
         ife->state = notif->if_info[i].state;
         ife->index = ntohl(notif->if_info[i].link_id);
-        ife->data_port = notif->if_info[i].data_port;
 
         if(is_new) {
             DL_APPEND(gw->head_interface, ife);
@@ -148,12 +144,10 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
         if(ife->state == ACTIVE) {
             gw->active_interfaces++;
 
-            virt_add_remote_link(&priv_ip, 
-                (struct in_addr *)&notif->if_info[i].local_ip, 
-                ife->data_port);
-        } else {
-            virt_remove_remote_link(&priv_ip, 
-                    (struct in_addr *)&notif->if_info[i].local_ip);
+            if(is_new)
+                virt_add_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
+        } else if(!is_new) {
+            virt_remove_remote_link(&priv_ip, &ife->public_ip);
         }
     }
 
