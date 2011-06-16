@@ -67,7 +67,7 @@ int main(int argc, char* argv[])
         }
         
         ipaddr_to_ipv4(&lease->priv_ip, &my_priv_ip);
-        my_netmask = ~((2 << lease->priv_subnet_size) - 1);
+        my_netmask = htonl(~((1 << lease->priv_subnet_size) - 1));
     } else {
         DEBUG_MSG("Failed to obtain a lease from wiroot server.");
         DEBUG_MSG("We will use the IP address %s and NAT mode.", DEFAULT_VIRT_ADDRESS);

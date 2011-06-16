@@ -48,7 +48,7 @@ int main(int argc, char* argv[])
     DEBUG_MSG("Obtained lease of %s", p_ip);
 
     ipaddr_to_ipv4(&lease->priv_ip, &priv_ip);
-    priv_netmask = ~((2 << lease->priv_subnet_size) - 1);
+    priv_netmask = htonl(~((1 << lease->priv_subnet_size) - 1));
 
     result = setup_virtual_interface(priv_ip, priv_netmask);
     if(result == -1) {
