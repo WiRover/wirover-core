@@ -165,7 +165,7 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
     pkt->type   = PING_PACKET_TYPE;
     pkt->link_state = ife->state;
     pkt->src_id = htons(get_unique_id());
-    pkt->link_id = htons(ife->index);
+    pkt->link_id = htonl(ife->index);
     pkt->secret_word = htonl(get_secret_word());
    
     //Store a timestamp in the packet for calculating RTT.
@@ -282,7 +282,7 @@ static int handle_incoming(int sockfd, int timeout)
 
         // If the ping response is older than timeout seconds, we just ignore it.
         if((diff / USEC_PER_SEC) < timeout) {
-            unsigned short h_link_id = ntohs(pkt->link_id);
+            unsigned h_link_id = ntohl(pkt->link_id);
 
             obtain_read_lock(&interface_list_lock);
 

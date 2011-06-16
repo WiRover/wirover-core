@@ -26,6 +26,7 @@
 #define CCHAN_CONNECT_TIMEOUT_SEC  5
 
 struct interface_info {
+    uint32_t    link_id;
     char        ifname[IFNAMSIZ];
     char        network[NETWORK_NAME_LENGTH];
     uint8_t     state;

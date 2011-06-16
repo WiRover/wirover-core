@@ -129,7 +129,7 @@ static int handle_incoming(int sockfd)
         return 0;
     }
 
-    unsigned short link_id = ntohs(ping->link_id);
+    unsigned link_id = ntohl(ping->link_id);
     struct interface *ife = 
         find_interface_by_index(gw->head_interface, link_id);
 
@@ -188,6 +188,7 @@ static int handle_incoming(int sockfd)
         memcpy(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr));
         ife->data_port = from_in.sin_port;
         ife->state     = ping->link_state;
+        ife->index     = ntohl(ping->link_id);
 
         DL_APPEND(gw->head_interface, ife);
 

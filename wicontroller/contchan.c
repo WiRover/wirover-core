@@ -79,6 +79,7 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
         strncpy(ife->name, notif->if_info[i].ifname, sizeof(ife->name));
         strncpy(ife->network, notif->if_info[i].network, sizeof(ife->network));
         ife->state = notif->if_info[i].state;
+        ife->index = ntohl(notif->if_info[i].link_id);
         ife->data_port = notif->if_info[i].data_port;
 
         if(ife->state == ACTIVE) {
@@ -137,6 +138,7 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
         
         strncpy(ife->network, notif->if_info[i].network, sizeof(ife->network));
         ife->state = notif->if_info[i].state;
+        ife->index = ntohl(notif->if_info[i].link_id);
         ife->data_port = notif->if_info[i].data_port;
 
         if(is_new) {
