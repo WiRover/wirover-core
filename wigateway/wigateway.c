@@ -13,7 +13,8 @@
 
 // The virtual interface will use this IP address if we are unable to obtain a
 // private IP from the root server.
-const char* DEFAULT_VIRT_ADDRESS = "172.31.25.1";
+#define DEFAULT_VIRT_ADDRESS    "172.31.25.1"
+#define DEFAULT_NETMASK         "255.255.255.0"
 
 int main(int argc, char* argv[])
 {
@@ -32,11 +33,15 @@ int main(int argc, char* argv[])
         exit(1);
     } 
 
-    char my_ip[INET6_ADDRSTRLEN];
-    strncpy(my_ip, DEFAULT_VIRT_ADDRESS, sizeof(my_ip));
+    uint32_t my_priv_ip = 0;
+    inet_pton(AF_INET, DEFAULT_VIRT_ADDRESS, &my_priv_ip);
+
+    uint32_t my_netmask = 0;
+    inet_pton(AF_INET, DEFAULT_NETMASK, &my_netmask);
 
     const struct lease_info* lease = obtain_lease(wiroot_ip, wiroot_port, base_port);
     if(lease) {
+        char my_ip[INET6_ADDRSTRLEN];
         ipaddr_to_string(&lease->priv_ip, my_ip, sizeof(my_ip));
         DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease->unique_id);
         DEBUG_MSG("There are %d controllers available.", lease->controllers);
@@ -60,12 +65,15 @@ int main(int argc, char* argv[])
             // Add a default vroute that directs all traffic to the controller
             virt_add_vroute(0, 0, priv_ip);
         }
+        
+        ipaddr_to_ipv4(&lease->priv_ip, &my_priv_ip);
+        my_netmask = ~((2 << lease->priv_subnet_size) - 1);
     } else {
         DEBUG_MSG("Failed to obtain a lease from wiroot server.");
         DEBUG_MSG("We will use the IP address %s and NAT mode.", DEFAULT_VIRT_ADDRESS);
     }
 
-    result = setup_virtual_interface(my_ip);
+    result = setup_virtual_interface(my_priv_ip, my_netmask);
     if(result == -1) {
         DEBUG_MSG("Failed to bring up virtual interface");
     }

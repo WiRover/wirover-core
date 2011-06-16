@@ -40,11 +40,17 @@ int main(int argc, char* argv[])
         DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
     }
 
+    uint32_t priv_ip = 0;
+    uint32_t priv_netmask = 0;
     char p_ip[INET6_ADDRSTRLEN];
+
     ipaddr_to_string(&lease->priv_ip, p_ip, sizeof(p_ip));
     DEBUG_MSG("Obtained lease of %s", p_ip);
 
-    result = setup_virtual_interface(p_ip);
+    ipaddr_to_ipv4(&lease->priv_ip, &priv_ip);
+    priv_netmask = ~((2 << lease->priv_subnet_size) - 1);
+
+    result = setup_virtual_interface(priv_ip, priv_netmask);
     if(result == -1) {
         DEBUG_MSG("Fatal error: failed to bring up virtual interface");
     }

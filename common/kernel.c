@@ -14,44 +14,47 @@
 const char* VIRT_DEVICE = "virt0";
 
 /*
- * SETUP VIRTUAL INTERFACE
+ * Bring up the virtual interface and set its IP address, netmask, and MTU.
  */
-int setup_virtual_interface(const char *ip)
+int setup_virtual_interface(__be32 ip, __be32 netmask)
 {
     int sockfd;
-    struct addrinfo hints;
-    struct addrinfo *ainfo = 0;
     int result;
 
-    /* TODO: struct ifreq only has space for a sockaddr, so only IPv4
-     * addresses can be added with the current code. */
-    memset(&hints, 0, sizeof(struct addrinfo));
-    hints.ai_family = AF_INET;
-    hints.ai_flags = AI_NUMERICHOST;
-
-    result = getaddrinfo(ip, 0, &hints, &ainfo);
-    if(result != 0 || !ainfo) {
-        DEBUG_MSG("getaddrinfo() failed - %s", gai_strerror(result));
-        return -1;
-    }
-
-    sockfd = socket(ainfo->ai_family, SOCK_DGRAM, IPPROTO_IP);
+    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
     if(sockfd < 0) {
         ERROR_MSG("creating socket failed");
-        freeaddrinfo(ainfo);
         return -1;
     }
     
     struct ifreq master_ifr;
     memset(&master_ifr, 0, sizeof(struct ifreq));
-    memcpy(&master_ifr.ifr_addr, ainfo->ai_addr, ainfo->ai_addrlen);
-    strncpy(master_ifr.ifr_name, VIRT_DEVICE, IFNAMSIZ);
 
-    freeaddrinfo(ainfo);
+    struct sockaddr_in *addr = (struct sockaddr_in *)&master_ifr.ifr_addr;
+    addr->sin_family = AF_INET;
+    addr->sin_addr.s_addr = ip;
+    strncpy(master_ifr.ifr_name, VIRT_DEVICE, IFNAMSIZ);
 
     result = ioctl(sockfd, SIOCSIFADDR, &master_ifr);
     if(result < 0) {
         ERROR_MSG("SIOCSIFADDR ioctl failed");
+        close(sockfd);
+        return -1;
+    }
+
+    addr->sin_family = AF_INET;
+    addr->sin_addr.s_addr = netmask;
+
+    result = ioctl(sockfd, SIOCSIFNETMASK, &master_ifr);
+    if(result < 0) {
+        ERROR_MSG("SIOCSIFNETMASK ioctl failed");
+        close(sockfd);
+        return -1;
+    }
+
+    result = ioctl(sockfd, SIOCGIFFLAGS, &master_ifr);
+    if(result < 0) {
+        ERROR_MSG("SIOCGIFFLAGS ioctl failed");
         close(sockfd);
         return -1;
     }

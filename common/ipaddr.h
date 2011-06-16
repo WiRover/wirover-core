@@ -5,13 +5,13 @@
 
 // IPv6 addresses require 16 bytes in binary form.
 // For the text representation, use the constant INET6_ADDRSTRLEN.
-#define IPADDR_SIZE     16
+#define IPADDR_SIZE 16
 
 struct ipaddr {
-    unsigned char   addr[IPADDR_SIZE];
+    unsigned char addr[IPADDR_SIZE];
 } __attribute__((__packed__));
 
-typedef struct ipaddr   ipaddr_t;
+typedef struct ipaddr ipaddr_t;
 
 #define IPADDR_INITIALIZER { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }
 

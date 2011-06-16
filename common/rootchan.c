@@ -87,6 +87,7 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
     }
 
     copy_ipaddr(&response.priv_ip, &lease->priv_ip);
+    lease->priv_subnet_size = response.priv_subnet_size;
     lease->unique_id = ntohs(response.unique_id);
     lease->controllers = response.controllers;
 

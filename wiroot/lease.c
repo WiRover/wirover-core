@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
@@ -12,7 +13,7 @@
 // These default values will be overwritten by read_lease_config().
 static uint32_t     LEASE_RANGE_START   = 0xC0A80000;
 static uint32_t     LEASE_RANGE_END     = 0xC0A8FFFF;
-static uint32_t     LEASE_NETMASK       = 0xFFFF0000;
+static uint8_t      LEASE_SUBNET_SIZE   = 16;
 static int          LEASE_TIME_LIMIT    = 86400;
 
 static struct lease* leases_head = 0;
@@ -54,13 +55,14 @@ int read_lease_config(const config_t* config)
         LEASE_RANGE_END = ntohl(LEASE_RANGE_END);
     }
     
-    const char *lease_netmask = 0;
-    result = config_lookup_string(config, "lease.netmask", &lease_netmask);
+    int subnet_size = 0;
+    result = config_lookup_int(config, "lease.subnet-size", &subnet_size);
     if(result == CONFIG_FALSE) {
-        DEBUG_MSG("lease.netmask missing in config file");
+        DEBUG_MSG("lease.subnet-size missing in config file");
+    } else if(subnet_size <= 0 || subnet_size > UCHAR_MAX) {
+        DEBUG_MSG("Invalid value for lease.subnet-size (%d)", subnet_size);
     } else {
-        inet_pton(AF_INET, lease_netmask, &LEASE_NETMASK);
-        LEASE_NETMASK = ntohl(LEASE_NETMASK);
+        LEASE_SUBNET_SIZE = subnet_size;
     }
 
     result = config_lookup_int(config, "lease.time-limit", &LEASE_TIME_LIMIT);
@@ -143,6 +145,11 @@ void remove_stale_leases()
             free(lease);
         }
     }
+}
+
+uint8_t get_lease_subnet_size()
+{
+    return LEASE_SUBNET_SIZE;
 }
 
 /*

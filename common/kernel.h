@@ -49,7 +49,7 @@ struct vroute_req {
     __be32 node_ip;
 };
 
-int setup_virtual_interface(const char *ip);
+int setup_virtual_interface(__be32 ip, __be32 netmask);
 
 int kernel_enslave_device(const char* device);
 int kernel_release_device(const char* device);

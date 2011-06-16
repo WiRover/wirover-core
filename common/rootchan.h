@@ -37,6 +37,7 @@ struct rchan_request {
 struct rchan_response {
     uint8_t     type;
     ipaddr_t    priv_ip;
+    uint8_t     priv_subnet_size;
     uint32_t    lease_time;
     uint16_t    unique_id;
     uint8_t     controllers;
@@ -47,6 +48,7 @@ struct rchan_response {
 
 struct lease_info {
     ipaddr_t    priv_ip;
+    uint8_t     priv_subnet_size;
     uint32_t    time_limit;
     uint16_t    unique_id;
 

@@ -27,6 +27,7 @@ struct lease {
 int read_lease_config(const config_t* config);
 const struct lease* grant_lease(int unique_id);
 void remove_stale_leases();
+uint8_t get_lease_subnet_size();
 
 #endif //_LEASE_H_
 
