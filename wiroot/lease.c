@@ -8,8 +8,6 @@
 #include "lease.h"
 #include "utlist.h"
 
-#define BROADCAST_MASK  0x000000FF
-
 // These default values will be overwritten by read_lease_config().
 static uint32_t     LEASE_RANGE_START   = 0xC0A80000;
 static uint32_t     LEASE_RANGE_END     = 0xC0A8FFFF;
@@ -185,17 +183,18 @@ static void renew_lease(struct lease* lease)
 static uint32_t find_free_ip(int unique_id)
 {
     static uint32_t dynamic_start = 0;
+    const uint32_t broadcast_mask = (1 << LEASE_SUBNET_SIZE) - 1;
 
     ipaddr_t check_ip;
     memset(&check_ip, 0, sizeof(check_ip));
 
-    /* First try making an IP address out of the unique ID.
-     * Bit shift by one to avoid assigning a .255 address. */
-    uint32_t next_ip = LEASE_RANGE_START + (unique_id << 1);
+    /* First, try to make an IP address out of the unique ID. */
+    uint32_t next_ip = LEASE_RANGE_START + unique_id;
     uint32_t n_ip = htonl(next_ip);
 
     struct lease *lease;
-    if(unique_id > 0 && next_ip >= LEASE_RANGE_START && next_ip <= LEASE_RANGE_END) {
+    if(unique_id > 0 && unique_id < broadcast_mask &&
+            next_ip >= LEASE_RANGE_START && next_ip <= LEASE_RANGE_END) {
         ipv4_to_ipaddr(n_ip, &check_ip);
 
         HASH_FIND(hh_ip, leases_ip_hash, &check_ip, sizeof(check_ip), lease);
@@ -207,8 +206,8 @@ static uint32_t find_free_ip(int unique_id)
         dynamic_start = LEASE_RANGE_END;
        
         // Avoid assigning a broadcast address or an address that ends with zeros.
-        uint32_t ending_bits = dynamic_start & BROADCAST_MASK;
-        if(ending_bits == BROADCAST_MASK || ending_bits == 0)
+        uint32_t ending_bits = dynamic_start & broadcast_mask;
+        if(ending_bits == broadcast_mask || ending_bits == 0)
             dynamic_start--;
     }
 
@@ -223,8 +222,8 @@ static uint32_t find_free_ip(int unique_id)
         dynamic_start--;
 
         // Avoid assigning a broadcast address or an address that ends with zeros.
-        uint32_t ending_bits = dynamic_start & BROADCAST_MASK;
-        if(ending_bits == BROADCAST_MASK || ending_bits == 0)
+        uint32_t ending_bits = dynamic_start & broadcast_mask;
+        if(ending_bits == broadcast_mask || ending_bits == 0)
             dynamic_start--;
     }
 
