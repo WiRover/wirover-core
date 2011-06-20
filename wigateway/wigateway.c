@@ -16,6 +16,8 @@
 #define DEFAULT_VIRT_ADDRESS    "172.31.25.1"
 #define DEFAULT_NETMASK         "255.255.255.0"
 
+#define VIRT_DEVICE             "virt0"
+
 int main(int argc, char* argv[])
 {
     int result;
@@ -88,6 +90,11 @@ int main(int argc, char* argv[])
             DEBUG_MSG("Cannot continue due to ping thread failure");
             exit(1);
         }
+    }
+
+    if(add_route(0, 0, 0, VIRT_DEVICE) < 0) {
+        DEBUG_MSG("add_route failed");
+        exit(1);
     }
 
     wait_for_netlink_thread();

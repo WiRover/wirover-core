@@ -6,6 +6,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <net/route.h>
 
 #include "debug.h"
 #include "kernel.h"
@@ -319,4 +320,97 @@ int virt_delete_vroute(uint32_t dest, uint32_t netmask, uint32_t node_ip)
     return 0;
 }
 
+int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device)
+{
+    struct rtentry rt;
+    char dev_buf[IFNAMSIZ];
+
+    memset(&rt, 0, sizeof(rt));
+    memset(dev_buf, 0, sizeof(dev_buf));
+
+    rt.rt_flags = RTF_UP;
+
+    rt.rt_dst.sa_family = AF_INET;
+    struct in_addr *addr_dst = &((struct sockaddr_in *)&rt.rt_dst)->sin_addr;
+    addr_dst->s_addr = dest;
+
+    rt.rt_genmask.sa_family = AF_INET;
+    struct in_addr *netmask_dst = &((struct sockaddr_in *)&rt.rt_genmask)->sin_addr;
+    netmask_dst->s_addr = netmask;
+
+    if(gateway) {
+        rt.rt_flags |= RTF_GATEWAY;
+
+        rt.rt_gateway.sa_family = AF_INET;
+        struct in_addr *gw_dst = &((struct sockaddr_in *)&rt.rt_gateway)->sin_addr;
+        gw_dst->s_addr = gateway;
+    }
+
+    if(device) {
+        strncpy(dev_buf, device, sizeof(dev_buf));
+        rt.rt_dev = dev_buf;
+    }
+
+    int skfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if(skfd < 0) {
+        ERROR_MSG("creating socket failed");
+        return -1;
+    }
+
+    int rtn = ioctl(skfd, SIOCADDRT, &rt);
+    if(rtn == -1) {
+        ERROR_MSG("ioctl SIOCADDRT failed");
+        close(skfd);
+        return -1;
+    }
+
+    close(skfd);
+    return 0;
+}
+
+int delete_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device)
+{
+    struct rtentry rt;
+    char dev_buf[IFNAMSIZ];
+
+    memset(&rt, 0, sizeof(rt));
+    memset(dev_buf, 0, sizeof(dev_buf));
+
+    rt.rt_dst.sa_family = AF_INET;
+    struct in_addr *addr_dst = &((struct sockaddr_in *)&rt.rt_dst)->sin_addr;
+    addr_dst->s_addr = dest;
+
+    rt.rt_genmask.sa_family = AF_INET;
+    struct in_addr *netmask_dst = &((struct sockaddr_in *)&rt.rt_genmask)->sin_addr;
+    netmask_dst->s_addr = netmask;
+
+    if(gateway) {
+        rt.rt_flags |= RTF_GATEWAY;
+
+        rt.rt_gateway.sa_family = AF_INET;
+        struct in_addr *gw_dst = &((struct sockaddr_in *)&rt.rt_gateway)->sin_addr;
+        gw_dst->s_addr = gateway;
+    }
+
+    if(device) {
+        strncpy(dev_buf, device, sizeof(dev_buf));
+        rt.rt_dev = dev_buf;
+    }
+
+    int skfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if(skfd < 0) {
+        ERROR_MSG("creating socket failed");
+        return -1;
+    }
+
+    int rtn = ioctl(skfd, SIOCDELRT, &rt);
+    if(rtn == -1) {
+        ERROR_MSG("ioctl SIOCDELRT failed");
+        close(skfd);
+        return -1;
+    }
+
+    close(skfd);
+    return 0;
+}
 

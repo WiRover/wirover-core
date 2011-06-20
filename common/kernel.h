@@ -66,5 +66,8 @@ int virt_set_gateway_ip(const char *device, const struct in_addr *gw_ip);
 int virt_add_vroute(uint32_t dest, uint32_t netmask, uint32_t node_ip);
 int virt_delete_vroute(uint32_t dest, uint32_t netmask, uint32_t node_ip);
 
+int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device);
+int delete_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device);
+
 #endif //_KERNEL_H_
 
