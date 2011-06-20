@@ -360,7 +360,9 @@ int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device)
 
     int rtn = ioctl(skfd, SIOCADDRT, &rt);
     if(rtn == -1) {
-        ERROR_MSG("ioctl SIOCADDRT failed");
+        if(errno != EEXIST)
+            ERROR_MSG("ioctl SIOCADDRT failed");
+
         close(skfd);
         return -errno;
     }
