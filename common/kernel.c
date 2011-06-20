@@ -1,5 +1,6 @@
 #include <netdb.h>
 #include <stropts.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <linux/if.h>
@@ -354,14 +355,14 @@ int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device)
     int skfd = socket(AF_INET, SOCK_DGRAM, 0);
     if(skfd < 0) {
         ERROR_MSG("creating socket failed");
-        return -1;
+        return -errno;
     }
 
     int rtn = ioctl(skfd, SIOCADDRT, &rt);
     if(rtn == -1) {
         ERROR_MSG("ioctl SIOCADDRT failed");
         close(skfd);
-        return -1;
+        return -errno;
     }
 
     close(skfd);
@@ -400,14 +401,14 @@ int delete_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device
     int skfd = socket(AF_INET, SOCK_DGRAM, 0);
     if(skfd < 0) {
         ERROR_MSG("creating socket failed");
-        return -1;
+        return -errno;
     }
 
     int rtn = ioctl(skfd, SIOCDELRT, &rt);
     if(rtn == -1) {
         ERROR_MSG("ioctl SIOCDELRT failed");
         close(skfd);
-        return -1;
+        return -errno;
     }
 
     close(skfd);

@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <errno.h>
 #include <time.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -113,7 +114,10 @@ int main(int argc, char* argv[])
 
         if(state == GATEWAY_LEASE_OBTAINED) {
             if(find_active_interface(interface_list)) {
-                if(add_route(0, 0, 0, VIRT_DEVICE) < 0) {
+                result = add_route(0, 0, 0, VIRT_DEVICE);
+
+                // EEXIST means the route was already present -> not a failure
+                if(result < 0 && result != -EEXIST) {
                     DEBUG_MSG("add_route failed");
                     exit(1);
                 }
