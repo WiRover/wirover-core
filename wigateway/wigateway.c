@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
 #include <arpa/inet.h>
 
 #include "config.h"
@@ -18,6 +19,15 @@
 
 #define VIRT_DEVICE             "virt0"
 
+#define RETRY_DELAY             5
+
+enum {
+    GATEWAY_START,
+    GATEWAY_LEASE_OBTAINED,
+    GATEWAY_PING_SUCCEEDED,
+    GATEWAY_NOTIFICATION_SUCCEEDED,
+};
+
 int main(int argc, char* argv[])
 {
     int result;
@@ -32,72 +42,96 @@ int main(int argc, char* argv[])
         exit(1);
     } 
 
-    uint32_t my_priv_ip = 0;
-    inet_pton(AF_INET, DEFAULT_VIRT_ADDRESS, &my_priv_ip);
+    uint32_t private_ip = 0;
+    inet_pton(AF_INET, DEFAULT_VIRT_ADDRESS, &private_ip);
 
-    uint32_t my_netmask = 0;
-    inet_pton(AF_INET, DEFAULT_NETMASK, &my_netmask);
+    uint32_t private_netmask = 0;
+    inet_pton(AF_INET, DEFAULT_NETMASK, &private_netmask);
 
-    const struct lease_info* lease = obtain_lease(wiroot_ip, wiroot_port, base_port);
-    if(lease) {
-        char my_ip[INET6_ADDRSTRLEN];
-        ipaddr_to_string(&lease->priv_ip, my_ip, sizeof(my_ip));
-        DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease->unique_id);
-        DEBUG_MSG("There are %d controllers available.", lease->controllers);
 
-        if(lease->controllers > 0) {
-            char cont_ip[INET6_ADDRSTRLEN];
-            ipaddr_to_string(&lease->cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
-            DEBUG_MSG("First controller is at: %s", cont_ip);
+    int state = GATEWAY_START;
+    const struct lease_info *lease = 0;
 
-            uint32_t priv_ip;
-            uint32_t pub_ip;
+    while(1) {
+        if(state == GATEWAY_START) {
+            lease = obtain_lease(wiroot_ip, wiroot_port, base_port);
+            if(lease) {
+                char my_ip[INET6_ADDRSTRLEN];
+                ipaddr_to_string(&lease->priv_ip, my_ip, sizeof(my_ip));
+                DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease->unique_id);
+                DEBUG_MSG("There are %d controllers available.", lease->controllers);
 
-            ipaddr_to_ipv4(&lease->cinfo[0].priv_ip, &priv_ip);
-            ipaddr_to_ipv4(&lease->cinfo[0].pub_ip, &pub_ip);
+                ipaddr_to_ipv4(&lease->priv_ip, &private_ip);
+                private_netmask = htonl(~((1 << lease->priv_subnet_size) - 1));
+            
+                result = setup_virtual_interface(private_ip, private_netmask);
+                if(result == -1) {
+                    DEBUG_MSG("Failed to bring up virtual interface");
+                    exit(1);
+                }
+            
+                if(create_netlink_thread() == -1) {
+                    DEBUG_MSG("Failed to create netlink thread");
+                    exit(1);
+                }
+            
+                result = init_interface_list();
+                if(result == -1) {
+                    DEBUG_MSG("Failed to initialize interface list");
+                }
 
-            virt_add_remote_node((struct in_addr *)&priv_ip);
-            virt_add_remote_link((struct in_addr *)&priv_ip, 
-                (struct in_addr *)&pub_ip, lease->cinfo[0].base_port);
+                if(lease->controllers > 0) {
+                    char cont_ip[INET6_ADDRSTRLEN];
+                    ipaddr_to_string(&lease->cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
+                    DEBUG_MSG("First controller is at: %s", cont_ip);
 
-            // Add a default vroute that directs all traffic to the controller
-            virt_add_vroute(0, 0, priv_ip);
+                    uint32_t priv_ip;
+                    uint32_t pub_ip;
+
+                    ipaddr_to_ipv4(&lease->cinfo[0].priv_ip, &priv_ip);
+                    ipaddr_to_ipv4(&lease->cinfo[0].pub_ip, &pub_ip);
+
+                    virt_add_remote_node((struct in_addr *)&priv_ip);
+                    virt_add_remote_link((struct in_addr *)&priv_ip, 
+                        (struct in_addr *)&pub_ip, lease->cinfo[0].base_port);
+                
+                    // Add a default vroute that directs all traffic to the controller
+                    virt_add_vroute(0, 0, priv_ip);
+
+                    if(start_ping_thread() == FAILURE) {
+                        DEBUG_MSG("Failed to start ping thread");
+                        exit(1);
+                    }
+                } else {
+                    DEBUG_MSG("Cannot continue without a controller");
+                    exit(1);
+                }
+                
+                state = GATEWAY_LEASE_OBTAINED;
+            }
         }
-        
-        ipaddr_to_ipv4(&lease->priv_ip, &my_priv_ip);
-        my_netmask = htonl(~((1 << lease->priv_subnet_size) - 1));
-    } else {
-        DEBUG_MSG("Failed to obtain a lease from wiroot server.");
-        DEBUG_MSG("We will use the IP address %s and NAT mode.", DEFAULT_VIRT_ADDRESS);
-    }
 
-    result = setup_virtual_interface(my_priv_ip, my_netmask);
-    if(result == -1) {
-        DEBUG_MSG("Failed to bring up virtual interface");
-    }
-    
-    if(create_netlink_thread() == -1) {
-        DEBUG_MSG("Failed to create netlink thread");
-    }
-    
-    result = init_interface_list();
-    if(result == -1) {
-        DEBUG_MSG("Failed to initialize interface list");
-    }
-
-    if(lease) {
-        if(start_ping_thread() == FAILURE) {
-            DEBUG_MSG("Cannot continue due to ping thread failure");
-            exit(1);
+        if(state == GATEWAY_LEASE_OBTAINED) {
+            if(find_active_interface(interface_list)) {
+                if(add_route(0, 0, 0, VIRT_DEVICE) < 0) {
+                    DEBUG_MSG("add_route failed");
+                    exit(1);
+                }
+                
+                state = GATEWAY_PING_SUCCEEDED;
+            }
         }
-    }
 
-    if(add_route(0, 0, 0, VIRT_DEVICE) < 0) {
-        DEBUG_MSG("add_route failed");
-        exit(1);
-    }
+        if(state == GATEWAY_PING_SUCCEEDED) {
+            if(send_notification(1) == 0) {
+                // TODO: Set default policy to encap
 
-    wait_for_netlink_thread();
+                state = GATEWAY_NOTIFICATION_SUCCEEDED;
+            }
+        }
+
+        sleep(RETRY_DELAY);
+    }
 
     return 0;
 }
