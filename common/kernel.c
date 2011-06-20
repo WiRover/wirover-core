@@ -126,15 +126,13 @@ int kernel_release_device(const char* device)
 }
 
 
-int virt_add_remote_node(const struct in_addr *priv_ip,   
-                const struct in_addr *netmask)
+int virt_add_remote_node(const struct in_addr *priv_ip)
 {
     struct virt_proc_remote_node node;
     memset(&node, 0, sizeof(node));
 
     node.op = VIRT_PROC_REMOTE_ADD;
     memcpy(&node.priv_ip, priv_ip, sizeof(node.priv_ip));
-    memcpy(&node.netmask, netmask, sizeof(node.netmask));
 
     int fd = open("/proc/virtmod/remote/nodes", O_WRONLY);
     if(fd < 0) {

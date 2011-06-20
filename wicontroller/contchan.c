@@ -67,10 +67,7 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
     struct in_addr priv_ip;
     ipaddr_to_ipv4(&notif->priv_ip, (uint32_t *)&priv_ip.s_addr);
 
-    struct in_addr netmask;
-    netmask.s_addr = 0xFFFFFFFF;
-
-    virt_add_remote_node(&priv_ip, &netmask);
+    virt_add_remote_node(&priv_ip);
 
     int i;
     for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {

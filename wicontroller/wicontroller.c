@@ -24,9 +24,6 @@ int main(int argc, char* argv[])
     struct lease_info* lease;
     int result;
 
-    DEBUG_MSG("Starting wicontroller version %d.%d",
-              WIROVER_VERSION_MAJOR, WIROVER_VERSION_MINOR);
-
     const char* wiroot_ip = get_wiroot_ip();
     const unsigned short wiroot_port = get_wiroot_port();
     unsigned short base_port = get_base_port();

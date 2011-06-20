@@ -19,7 +19,6 @@
 struct virt_proc_remote_node {
     unsigned op;
     struct in_addr priv_ip;
-    struct in_addr netmask;
 };
 
 struct virt_proc_remote_link {
@@ -54,8 +53,7 @@ int setup_virtual_interface(__be32 ip, __be32 netmask);
 int kernel_enslave_device(const char* device);
 int kernel_release_device(const char* device);
 
-int virt_add_remote_node(const struct in_addr *priv_ip, 
-        const struct in_addr *netmask);
+int virt_add_remote_node(const struct in_addr *priv_ip);
 int virt_add_remote_link(const struct in_addr *priv_ip,
         const struct in_addr *pub_ip, unsigned short data_port);
 

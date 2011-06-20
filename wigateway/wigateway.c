@@ -20,9 +20,6 @@ int main(int argc, char* argv[])
 {
     int result;
 
-    DEBUG_MSG("Starting wigateway version %d.%d",
-              WIROVER_VERSION_MAJOR, WIROVER_VERSION_MINOR);
-
     srand(time(0));
 
     const char* wiroot_ip = get_wiroot_ip();
@@ -53,12 +50,11 @@ int main(int argc, char* argv[])
 
             uint32_t priv_ip;
             uint32_t pub_ip;
-            uint32_t netmask = 0xffffffff;
 
             ipaddr_to_ipv4(&lease->cinfo[0].priv_ip, &priv_ip);
             ipaddr_to_ipv4(&lease->cinfo[0].pub_ip, &pub_ip);
 
-            virt_add_remote_node((struct in_addr *)&priv_ip, (struct in_addr *)&netmask);
+            virt_add_remote_node((struct in_addr *)&priv_ip);
             virt_add_remote_link((struct in_addr *)&priv_ip, 
                 (struct in_addr *)&pub_ip, lease->cinfo[0].base_port);
 
