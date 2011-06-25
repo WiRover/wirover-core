@@ -152,6 +152,48 @@ int copy_active_interfaces(const struct interface *head, struct interface_copy *
 }
 
 /*
+ * Creates an array containing information about every interface.  This is
+ * useful for performing an action that would otherwise require the interface
+ * list to be locked for a long period of time.
+ *
+ * Returns the number of interfaces or -1 on memory allocation failure.  A
+ * return value of > 0 implies that *out points to an array of interface_copy
+ * structures.  Remember to free it.
+ */
+int copy_all_interfaces(const struct interface *head, struct interface_copy **out)
+{
+    assert(head && out);
+
+    int n = 0;
+    const struct interface *tmp = head;
+    while(tmp) {
+        n++;
+
+        assert(tmp != tmp->next);
+        tmp = tmp->next;
+    }
+
+    unsigned alloc_size = sizeof(struct interface_copy) * n;
+    *out = malloc(alloc_size);
+    if(!*out) {
+        DEBUG_MSG("out of memory");
+        return -1;
+    }
+
+    memset(*out, 0, alloc_size);
+    
+    int i = 0;
+    while(head && i < n) {
+        strncpy((*out)[i].name, head->name, IFNAMSIZ);
+        i++;
+
+        head = head->next;
+    }
+    
+    return n;
+}
+
+/*
  * EMA UPDATE
  *
  * Performs an exponential moving average.  If the old value is NaN, then it is

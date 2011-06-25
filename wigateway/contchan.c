@@ -90,7 +90,8 @@ static int _send_notification(const char *ifname)
     get_private_ip(&notification.priv_ip);
     notification.unique_id = htons(get_unique_id());
 
-    secret_word = rand();
+    if(secret_word == 0)
+        secret_word = rand();
     notification.secret_word = htonl(secret_word);
 
     obtain_read_lock(&interface_list_lock);

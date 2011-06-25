@@ -42,13 +42,22 @@ int main(int argc, char* argv[])
         DEBUG_MSG("You must fix the config file.");
         exit(1);
     } 
+            
+    if(create_netlink_thread() == -1) {
+        DEBUG_MSG("Failed to create netlink thread");
+        exit(1);
+    }
+
+    if(init_interface_list() == -1) {
+        DEBUG_MSG("Failed to initialize interface list");
+        exit(1);
+    }
 
     uint32_t private_ip = 0;
     inet_pton(AF_INET, DEFAULT_VIRT_ADDRESS, &private_ip);
 
     uint32_t private_netmask = 0;
     inet_pton(AF_INET, DEFAULT_NETMASK, &private_netmask);
-
 
     int state = GATEWAY_START;
     const struct lease_info *lease = 0;
@@ -64,21 +73,11 @@ int main(int argc, char* argv[])
 
                 ipaddr_to_ipv4(&lease->priv_ip, &private_ip);
                 private_netmask = htonl(~((1 << lease->priv_subnet_size) - 1));
-            
+                
                 result = setup_virtual_interface(private_ip, private_netmask);
                 if(result == -1) {
                     DEBUG_MSG("Failed to bring up virtual interface");
                     exit(1);
-                }
-            
-                if(create_netlink_thread() == -1) {
-                    DEBUG_MSG("Failed to create netlink thread");
-                    exit(1);
-                }
-            
-                result = init_interface_list();
-                if(result == -1) {
-                    DEBUG_MSG("Failed to initialize interface list");
                 }
 
                 if(lease->controllers > 0) {

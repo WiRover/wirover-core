@@ -10,29 +10,80 @@
 
 #include "configuration.h"
 #include "debug.h"
+#include "interface.h"
+#include "netlink.h"
 #include "rootchan.h"
+#include "rwlock.h"
 #include "sockets.h"
+
+static int _obtain_lease(const char* wiroot_ip, unsigned short wiroot_port,
+        const struct rchan_request *request, 
+        const char *interface, struct rchan_response *response);
 
 static struct lease_info* latest_lease = 0;
 
 /*
  * OBTAIN LEASE
  */
+
+/*
+ * Attempt to obtain a lease from the root server.  This will use any available
+ * interface.  Returns a lease_info structure if successful, otherwise it returns
+ * null.
+ *
+ * TODO: If the controller maintains a list of local interfaces, then the
+ * implementations for the gateway and controller can be merged.
+ */
+#ifdef CONTROLLER
 struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_port, unsigned short base_port)
 {
-    int sockfd;
-    int bytes;
     int result;
-    
-    struct timeval timeout;
-    timeout.tv_sec  = RCHAN_CONNECT_TIMEOUT_SEC;
-    timeout.tv_usec = 0;
 
-    sockfd = tcp_active_open(wiroot_ip, wiroot_port, 0, &timeout);
-    if(sockfd == -1) {
-        DEBUG_MSG("failed to connect to wiroot server");
+    struct rchan_request request;
+    request.type = RCHAN_CONTROLLER_CONFIG;
+    request.latitude = NAN;
+    request.longitude = NAN;
+    request.base_port = htons(base_port);
+
+    const char* internal_if = get_internal_interface();
+    if(!internal_if) {
+        DEBUG_MSG("get_internal_interface() returned null");
         return 0;
     }
+
+    result = get_device_mac(internal_if, request.hw_addr, sizeof(request.hw_addr));
+    if(result == -1) {
+        DEBUG_MSG("get_device_mac() failed");
+        return 0;
+    }
+
+    struct rchan_response response;
+    if(_obtain_lease(wiroot_ip, wiroot_port, &request, 
+                internal_if, &response) < 0) {
+        DEBUG_MSG("Failed to obtain lease");
+        return 0;
+    }
+
+    struct lease_info* lease;
+    lease = (struct lease_info*)malloc(sizeof(struct lease_info));
+    ASSERT_OR_ELSE(lease) {
+        DEBUG_MSG("out of memory");
+        return 0;
+    }
+
+    copy_ipaddr(&response.priv_ip, &lease->priv_ip);
+    lease->priv_subnet_size = response.priv_subnet_size;
+    lease->unique_id = ntohs(response.unique_id);
+    lease->controllers = 0;
+    lease->cinfo = 0;
+    
+    latest_lease = lease;
+    return lease;
+}
+#else /* GATEWAY */
+struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_port, unsigned short base_port)
+{
+    int result;
 
     struct rchan_request request;
 #ifdef CONTROLLER
@@ -46,43 +97,54 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
 
     const char* internal_if = get_internal_interface();
     if(!internal_if) {
-        close(sockfd);
+        DEBUG_MSG("get_internal_interface() returned null");
         return 0;
     }
 
     result = get_device_mac(internal_if, request.hw_addr, sizeof(request.hw_addr));
     if(result == -1) {
         DEBUG_MSG("get_device_mac() failed");
-        close(sockfd);
         return 0;
     }
 
-    bytes = send(sockfd, &request, sizeof(struct rchan_request), 0);
-    if(bytes <= 0) {
-        ERROR_MSG("error sending lease request");
-        close(sockfd);
+    obtain_read_lock(&interface_list_lock);
+
+    struct interface_copy *iface_list;
+    int num_ifaces = copy_all_interfaces(interface_list, &iface_list);
+
+    release_read_lock(&interface_list_lock);
+
+    if(num_ifaces <= 0) {
+        if(num_ifaces == 0)
+            DEBUG_MSG("Cannot request lease, no interfaces available");
         return 0;
     }
 
+    int i;
+    int lease_obtained = 0;
     struct rchan_response response;
-    bytes = recv(sockfd, &response, sizeof(response), 0);
-    if(bytes <= 0) {
-        ERROR_MSG("error receiving lease response");
-        close(sockfd);
-        return 0;
-    } else if(bytes < MIN_RESPONSE_LEN) {
-        DEBUG_MSG("lease response was too small to be valid");
-        close(sockfd);
-        return 0;
+
+    for(i = 0; i < num_ifaces; i++) {
+        const char *ifname = iface_list[i].name;
+
+        if(_obtain_lease(wiroot_ip, wiroot_port, &request, 
+                    ifname, &response) == 0) {
+            lease_obtained = 1;
+            break;
+        }
     }
 
-    close(sockfd);
+    free(iface_list);
+
+    if(!lease_obtained) {
+        DEBUG_MSG("Failed to obtain lease, %d interfaces tried", num_ifaces);
+        return 0;
+    }
 
     struct lease_info* lease;
     lease = (struct lease_info*)malloc(sizeof(struct lease_info));
     ASSERT_OR_ELSE(lease) {
         DEBUG_MSG("out of memory");
-        close(sockfd);
         return 0;
     }
 
@@ -109,6 +171,51 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
 
     latest_lease = lease;
     return lease;
+}
+#endif /* CONTROLLER/GATEWAY */
+
+/*
+ * Attempt to obtain a lease from the root server.  This will bind to the given
+ * interface if interface is not null.  If successful, it returns 0 and fills
+ * in the response, otherwise it returns -1 and the contents of response are
+ * undefined.
+ */
+static int _obtain_lease(const char* wiroot_ip, unsigned short wiroot_port,
+        const struct rchan_request *request, 
+        const char *interface, struct rchan_response *response)
+{ 
+    int result;
+
+    struct timeval timeout;
+    timeout.tv_sec  = RCHAN_CONNECT_TIMEOUT_SEC;
+    timeout.tv_usec = 0;
+
+    int sockfd = tcp_active_open(wiroot_ip, wiroot_port, interface, &timeout);
+    if(sockfd == -1) {
+        DEBUG_MSG("failed to connect to wiroot server");
+        return -1;
+    }
+
+    result = send(sockfd, &request, sizeof(struct rchan_request), 0);
+    if(result <= 0) {
+        ERROR_MSG("error sending lease request");
+        close(sockfd);
+        return -1;
+    }
+
+    result = recv(sockfd, response, sizeof(*response), 0);
+    if(result <= 0) {
+        ERROR_MSG("error receiving lease response");
+        close(sockfd);
+        return -1;
+    } else if(result < MIN_RESPONSE_LEN) {
+        DEBUG_MSG("lease response was too small to be valid");
+        close(sockfd);
+        return -1;
+    }
+
+    close(sockfd);
+    return 0;
 }
 
 /*
