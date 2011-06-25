@@ -196,14 +196,14 @@ static int _obtain_lease(const char* wiroot_ip, unsigned short wiroot_port,
         return -1;
     }
 
-    result = send(sockfd, &request, sizeof(struct rchan_request), 0);
+    result = send(sockfd, request, sizeof(struct rchan_request), 0);
     if(result <= 0) {
         ERROR_MSG("error sending lease request");
         close(sockfd);
         return -1;
     }
 
-    result = recv(sockfd, response, sizeof(*response), 0);
+    result = recv(sockfd, response, sizeof(struct rchan_response), 0);
     if(result <= 0) {
         ERROR_MSG("error receiving lease response");
         close(sockfd);

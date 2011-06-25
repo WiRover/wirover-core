@@ -81,7 +81,7 @@ int init_interface_list()
                 memcpy(&ife->public_ip, &sin->sin_addr, sizeof(struct sockaddr_in));
             }
         }
-        
+
 next_ifap:
         ifap = ifap->ifa_next;
     }
@@ -197,29 +197,30 @@ int handle_netlink_message(const char* msg, int msg_len)
                 }
             }
 
-            struct rtattr *rth = IFA_RTA(ifa);
-            int rth_len;
+            if(ife) {
+                struct rtattr *rth = IFA_RTA(ifa);
+                int rth_len;
 
-            for(rth_len = IFA_PAYLOAD(nh); rth_len && RTA_OK(rth, rth_len); 
-                    rth = RTA_NEXT(rth, rth_len)) {
-                if(rth->rta_type == IFA_LOCAL) {
-                    // Copy the new IP address if it appears valid (non-zero)
-                    uint32_t new_ip = *(uint32_t *)RTA_DATA(rth);
-                    if(new_ip != 0)
-                        ife->public_ip.s_addr = new_ip;
+                for(rth_len = IFA_PAYLOAD(nh); rth_len && RTA_OK(rth, rth_len); 
+                        rth = RTA_NEXT(rth, rth_len)) {
+                    if(rth->rta_type == IFA_LOCAL) {
+                        // Copy the new IP address if it appears valid (non-zero)
+                        uint32_t new_ip = *(uint32_t *)RTA_DATA(rth);
+                        if(new_ip != 0)
+                            ife->public_ip.s_addr = new_ip;
+                    }
                 }
+
+                ping_interface(ife);
+                should_notify = 1;
             }
 
-            ping_interface(ife);
             release_read_lock(&interface_list_lock);
-
-            should_notify = 1;
         } else if(nh->nlmsg_type == RTM_DELADDR) {
             struct ifaddrmsg* ifa = (struct ifaddrmsg*)NLMSG_DATA(nh);
             //struct rtattr*    rth = IFA_RTA(ifa);
 
             DEBUG_MSG("Received RTM_DELADDR for device %d", ifa->ifa_index);
-
 /*
             obtain_read_lock(&interface_list_lock);
             ife = find_interface_by_index(interface_list, ifa->ifi_index);
@@ -242,7 +243,7 @@ int handle_netlink_message(const char* msg, int msg_len)
                 release_write_lock(&interface_list_lock);
             }
 
-            should_notify = 1; */
+            should_notify = 1;*/
         } else if(nh->nlmsg_type == RTM_DELLINK) {
             struct ifinfomsg* ifa = (struct ifinfomsg*)NLMSG_DATA(nh);
 
