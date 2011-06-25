@@ -122,10 +122,17 @@ static int handle_incoming(int sockfd)
 
     /* It is important to verify the identity of the ping sender.  Without this
      * check, a malicious user could send a fake ping packet that would cause
-     * traffic to be redirected to the source address of the ping. */
+     * traffic to be redirected to the source address of the ping.
+     *
+     * A secret_word of zero is a special case, since the gateway may use it to
+     * check connectivity before the control channel has been established.  Of
+     * course, it still cannot be trusted, but the warning message is
+     * suppressed in that case.*/
     if(gw->secret_word != ntohl(ping->secret_word)) {
-        DEBUG_MSG("Secret word mismatch for node %hu", node_id);
-        DEBUG_MSG("This may be due to a race condition or an imposter.");
+        if(ping->secret_word != 0) {
+            DEBUG_MSG("Secret word mismatch for node %hu", node_id);
+            DEBUG_MSG("This may be due to a race condition or an imposter.");
+        }
         return 0;
     }
 
