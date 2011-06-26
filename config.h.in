@@ -21,5 +21,9 @@
 // user-level code is used.
 #define WITH_KERNEL 1
 
+/* Default timeouts for removing a remote link or node. */
+#define DEFAULT_LINK_TIMEOUT 30
+#define DEFAULT_NODE_TIMEOUT 300
+
 #endif //_CONFIG_H_
 

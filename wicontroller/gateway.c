@@ -4,7 +4,7 @@
 #include "gateway.h"
 #include "netlink.h"
 
-static struct gateway* gateway_id_hash = 0;
+struct gateway* gateway_id_hash = 0;
 
 /*
  * ALLOC GATEWAY

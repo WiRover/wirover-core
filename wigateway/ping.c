@@ -181,11 +181,11 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
         return -1;
     }
 
-    // This last_ping timestamp will be compared to the timestamp in the ping
+    // This last_ping_time timestamp will be compared to the timestamp in the ping
     // response packet to make sure the response is for the most recent
     // request.
     upgrade_read_lock(&interface_list_lock);
-    ife->last_ping = now.tv_sec;
+    ife->last_ping_time = now.tv_sec;
     downgrade_write_lock(&interface_list_lock);
 
     free(buffer);
@@ -209,7 +209,7 @@ void* ping_thread_func(void* arg)
     set_nonblock(sockfd, NONBLOCKING);
 
     ping_all_interfaces(local_port);
-    time_t last_ping = time(0);
+    time_t last_ping_time = time(0);
 
     unsigned int next_timeout = ping_interval;
     while(1) {
@@ -229,13 +229,13 @@ void* ping_thread_func(void* arg)
             ERROR_MSG("select failed for ping socket (%d)", sockfd);
         }
 
-        int time_remaining = ping_interval - (time(0) - last_ping);
+        int time_remaining = ping_interval - (time(0) - last_ping_time);
         if(time_remaining <= 0) {
             mark_inactive_interfaces();
 
             // It is time to send out another round of pings.
             ping_all_interfaces(local_port);
-            last_ping = time(0);
+            last_ping_time = time(0);
         } else {
             next_timeout = time_remaining;
         }
@@ -287,7 +287,7 @@ static int handle_incoming(int sockfd, int timeout)
             obtain_read_lock(&interface_list_lock);
 
             struct interface* ife = find_interface_by_index(interface_list, h_link_id);
-            if(ife && send_time.tv_sec == ife->last_ping) {
+            if(ife && send_time.tv_sec == ife->last_ping_time) {
                 upgrade_read_lock(&interface_list_lock);
 
                 ife->avg_rtt = ema_update(ife->avg_rtt, (double)diff, 0.25);

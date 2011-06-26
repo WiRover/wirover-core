@@ -20,10 +20,12 @@
 #include "rwlock.h"
 #include "sockets.h"
 #include "tunnel.h"
+#include "uthash.h"
 #include "utlist.h"
 
 static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd);
+static void remove_stale_links(int link_timeout, int node_timeout);
 
 static int          running;
 static pthread_t    ping_thread;
@@ -56,8 +58,26 @@ int start_ping_thread()
 
 void* ping_thread_func(void* arg)
 {
-    const unsigned short    base_port = get_base_port();
+    const unsigned short base_port = get_base_port();
     int sockfd;
+
+    int link_timeout = DEFAULT_LINK_TIMEOUT;
+    int node_timeout = DEFAULT_NODE_TIMEOUT;
+
+    const config_t *config = get_config();
+    if(config) {
+        config_lookup_int(config, "link-timeout", &link_timeout);
+        if(link_timeout <= 0) {
+            DEBUG_MSG("Invalid value for link-timeout (%d)", link_timeout);
+            link_timeout = DEFAULT_LINK_TIMEOUT;
+        }
+
+        config_lookup_int(config, "node-timeout", &node_timeout);
+        if(node_timeout <= 0) {
+            DEBUG_MSG("Invalid value for node-timeout (%d)", node_timeout);
+            node_timeout = DEFAULT_NODE_TIMEOUT;
+        }
+    }
 
     sockfd = udp_bind_open(base_port, 0);
     if(sockfd == FAILURE) {
@@ -68,18 +88,27 @@ void* ping_thread_func(void* arg)
     // We never want reads to hold up the thread.
     set_nonblock(sockfd, NONBLOCKING);
 
+    int timeout_sec = (link_timeout < node_timeout) ? 
+        link_timeout : node_timeout;
+
     while(1) {
+        struct timeval timeout;
+        timeout.tv_sec = timeout_sec;
+        timeout.tv_usec = 0;
+
         fd_set read_set;
         FD_ZERO(&read_set);
         FD_SET(sockfd, &read_set);
 
-        int result = select(sockfd+1, &read_set, 0, 0, 0);
+        int result = select(sockfd+1, &read_set, 0, 0, &timeout);
         if(result > 0 && FD_ISSET(sockfd, &read_set)) {
             // Most likely we have an incoming ping request.
             handle_incoming(sockfd);
         } else if(result < 0) {
             ERROR_MSG("select failed for ping socket (%d)", sockfd);
         }
+
+        remove_stale_links(link_timeout, node_timeout);
     }
 
     close(sockfd);
@@ -135,6 +164,8 @@ static int handle_incoming(int sockfd)
         }
         return 0;
     }
+
+    gw->last_ping_time = time(0);
 
     unsigned link_id = ntohl(ping->link_id);
     struct interface *ife = 
@@ -209,6 +240,52 @@ static int handle_incoming(int sockfd)
         }
     }
 
+    ife->last_ping_time = time(0);
+
     return 0;
+}
+
+static void remove_stale_links(int link_timeout, int node_timeout)
+{
+    time_t now = time(0);
+
+    struct gateway *gw;
+    struct gateway *tmp_gw;
+
+    HASH_ITER(hh_id, gateway_id_hash, gw, tmp_gw) {
+        struct interface *ife;
+        struct interface *tmp_ife;
+
+        int num_ifaces = 0;
+                
+        struct in_addr private_ip;
+        ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
+
+        DL_FOREACH_SAFE(gw->head_interface, ife, tmp_ife) {
+            if((now - ife->last_ping_time) >= link_timeout) {
+                if(ife->state == ACTIVE)
+                    gw->active_interfaces--;
+
+                virt_remove_remote_link(&private_ip, &ife->public_ip);
+                
+                DEBUG_MSG("Removed node %hu link %hu due to timeout",
+                        gw->unique_id, ife->index);
+
+                DL_DELETE(gw->head_interface, ife);
+                free(ife);
+            } else {
+                num_ifaces++;
+            }
+        }
+
+        if(num_ifaces == 0 && (now - gw->last_ping_time) >= node_timeout) {
+            virt_remove_remote_node(&private_ip);
+
+            DEBUG_MSG("Removed node %hu due to timeout", gw->unique_id);
+
+            HASH_DELETE(hh_id, gateway_id_hash, gw);
+            free(gw);
+        }
+    }
 }
 
