@@ -54,11 +54,12 @@ struct interface* find_interface_by_index(struct interface* head, unsigned int i
 struct interface* find_interface_by_name(struct interface* head, const char* name);
 struct interface* find_interface_by_network(struct interface* head, const char* network);
 
+int count_all_interfaces(const struct interface *head);
 int count_active_interfaces(const struct interface *head);
 
 struct interface *find_active_interface(struct interface *head);
-int copy_active_interfaces(const struct interface *head, struct interface_copy **out);
 int copy_all_interfaces(const struct interface *head, struct interface_copy **out);
+int copy_active_interfaces(const struct interface *head, struct interface_copy **out);
 
 double ema_update(double old_val, double new_val, double new_weight);
 
