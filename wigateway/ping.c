@@ -24,8 +24,8 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
               const struct sockaddr* dest_addr, socklen_t dest_len);
 static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd, int timeout);
-static int send_second_response(int sockfd, const char *buffer, int len,
-        const struct sockaddr *to, socklen_t to_len);
+static int send_second_response(const struct interface *ife, 
+        const char *buffer, int len, const struct sockaddr *to, socklen_t to_len);
 static void mark_inactive_interfaces();
 
 static int          running;
@@ -143,7 +143,7 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
     int bytes;
 
     //sockfd = udp_raw_open(ife->name);
-    sockfd = udp_bind_open(src_port, ife->name);
+    sockfd = udp_bind_open(ntohs(ife->data_port), ife->name);
     if(sockfd == FAILURE) {
         return FAILURE;
     }
@@ -274,19 +274,30 @@ static int handle_incoming(int sockfd, int timeout)
         gettimeofday(&recv_time, 0);
     }
 
+    struct ping_packet *pkt = (struct ping_packet *)
+            (buffer + sizeof(struct tunhdr));
+
+    unsigned link_id = ntohl(pkt->link_id);
+
+    // TODO: interface_list is supposed to be locked, but I do not want to wait
+    // for a lock before sending the response packet
+
+    struct interface* ife = find_interface_by_index(interface_list, link_id);
+    if(!ife) {
+        DEBUG_MSG("Ping response for unknown interface %u", link_id);
+        return 0;
+    }
+
     // TODO: Verify identity of sender before sending the response.  This is
     // really important because a malicious host could trick us into sending
     // him our secret_word.
     
-    if(send_second_response(sockfd, buffer, bytes, 
+    if(send_second_response(ife, buffer, bytes, 
                 (struct sockaddr *)&addr, addr_len) < 0) {
         ERROR_MSG("send_second_response failed");
     }
 
     int notif_needed = 0;
-
-    struct ping_packet *pkt = (struct ping_packet *)
-            (buffer + sizeof(struct tunhdr));
 
     uint32_t send_ts = ntohl(pkt->sender_ts);
     uint32_t recv_ts = timeval_to_usec(&recv_time);
@@ -294,29 +305,16 @@ static int handle_incoming(int sockfd, int timeout)
 
     // If the ping response is older than timeout seconds, we just ignore it.
     if((diff / USEC_PER_SEC) < timeout) {
-        unsigned h_link_id = ntohl(pkt->link_id);
-
-        obtain_read_lock(&interface_list_lock);
-
-        struct interface* ife = find_interface_by_index(interface_list, h_link_id);
-        if(ife) {
-            upgrade_read_lock(&interface_list_lock);
-
-            ife->avg_rtt = ema_update(ife->avg_rtt, (double)diff, 0.25);
-            if(ife->state == INACTIVE) {
-                change_interface_state(ife, ACTIVE);
-                notif_needed = 1;
-            }
-
-            ife->last_ping_seq_no = ntohl(pkt->seq_no);
-
-            downgrade_write_lock(&interface_list_lock);
-
-            DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f", 
-                    ife->name, ife->network, diff, ife->avg_rtt);
+        ife->avg_rtt = ema_update(ife->avg_rtt, (double)diff, 0.25);
+        if(ife->state == INACTIVE) {
+            change_interface_state(ife, ACTIVE);
+            notif_needed = 1;
         }
 
-        release_read_lock(&interface_list_lock);
+        ife->last_ping_seq_no = ntohl(pkt->seq_no);
+
+        DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f", 
+                ife->name, ife->network, diff, ife->avg_rtt);
     }
 
     if(notif_needed) {
@@ -332,10 +330,15 @@ static int handle_incoming(int sockfd, int timeout)
  *
  * Assumes the buffer is at least MIN_PING_PACKET_SIZE in length.
  */
-static int send_second_response(int sockfd, const char *buffer, int len,
-        const struct sockaddr *to, socklen_t to_len)
+static int send_second_response(const struct interface *ife, 
+        const char *buffer, int len, const struct sockaddr *to, socklen_t to_len)
 {
     assert(len >= MIN_PING_PACKET_SIZE);
+    
+    int sockfd = udp_bind_open(ntohs(ife->data_port), ife->name);
+    if(sockfd < 0) {
+        return -1;
+    }
 
     char response_buffer[MIN_PING_PACKET_SIZE];
     memcpy(response_buffer, buffer, MIN_PING_PACKET_SIZE);
@@ -348,7 +351,16 @@ static int send_second_response(int sockfd, const char *buffer, int len,
     ping->secret_word = get_secret_word();
     ping->sender_ts = 0;
 
-    return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
+    int result = sendto(sockfd, response_buffer, 
+            MIN_PING_PACKET_SIZE, 0, to, to_len);
+    if(result < 0) {
+        ERROR_MSG("sendto failed");
+        close(sockfd);
+        return -1;
+    }
+
+    close(sockfd);
+    return 0;
 }
 
 static void mark_inactive_interfaces()

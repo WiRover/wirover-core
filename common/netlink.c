@@ -192,6 +192,8 @@ int handle_netlink_message(const char* msg, int msg_len)
                     ife->state = INACTIVE;
                     ife->priority = priority;
 
+                    ife->data_port = htons(get_base_port());
+
                     upgrade_read_lock(&interface_list_lock);
                     add_interface(ife);
                     downgrade_write_lock(&interface_list_lock);
