@@ -13,9 +13,9 @@ struct gateway {
     ipaddr_t       private_ip;
     unsigned short unique_id;
 
-    time_t  creation_time;
-    int32_t secret_word;
-    time_t  last_ping_time;
+    time_t   creation_time;
+    uint32_t secret_word; // in network byte order
+    time_t   last_ping_time;
 
     unsigned int        active_interfaces;
     struct interface*   head_interface;

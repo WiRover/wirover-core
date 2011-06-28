@@ -17,7 +17,7 @@
  * packets so that the public IP address can be trusted.
  *
  * TODO: May want separate secret words for each controller. */
-static int32_t secret_word = 0;
+static uint32_t secret_word = 0;
 
 static int _send_notification(const char *ifname);
 
@@ -92,7 +92,7 @@ static int _send_notification(const char *ifname)
 
     if(secret_word == 0)
         secret_word = rand();
-    notification.secret_word = htonl(secret_word);
+    notification.secret_word = secret_word;
 
     obtain_read_lock(&interface_list_lock);
 
@@ -140,7 +140,10 @@ static int _send_notification(const char *ifname)
     return 0;
 }
 
-int32_t get_secret_word()
+/*
+ * Return secret_word in network byte order.
+ */
+uint32_t get_secret_word()
 {
     return secret_word;
 }

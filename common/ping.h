@@ -27,7 +27,7 @@ struct ping_packet {
     int8_t   link_state;
     uint16_t src_id;
     uint32_t link_id;
-    int32_t  secret_word;
+    uint32_t secret_word;
     uint32_t sender_ts;
     uint32_t receiver_ts;
 

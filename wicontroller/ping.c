@@ -203,7 +203,7 @@ static int ping_request_type(const char *buffer, int len)
      * used during the startup procedure before the control channel has been
      * established.  A non-zero secret word must match or the ping packet is
      * dropped. */
-    if(ping->secret_word && gw && gw->secret_word != ntohl(ping->secret_word)) {
+    if(ping->secret_word && gw && ping->secret_word != gw->secret_word) {
         DEBUG_MSG("Secret word mismatch for node %hu", node_id);
         return -1;
     } else if(ping->secret_word && !gw) {
@@ -255,7 +255,7 @@ static void process_ping_request(char *buffer, int len,
     if(!gw)
         return;
 
-    if(ping->secret_word == 0 || gw->secret_word != ping->secret_word)
+    if(ping->secret_word == 0 || ping->secret_word != gw->secret_word)
         return;
 
     gw->last_ping_time = time(0);
@@ -352,7 +352,7 @@ static void process_ping_response(char *buffer, int len,
     if(!gw)
         return;
 
-    if(ping->secret_word == 0 || gw->secret_word != ping->secret_word)
+    if(ping->secret_word == 0 || ping->secret_word != gw->secret_word)
         return;
 
     gw->last_ping_time = time(0);

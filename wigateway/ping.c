@@ -166,7 +166,7 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
     pkt->link_state = ife->state;
     pkt->src_id = htons(get_unique_id());
     pkt->link_id = htonl(ife->index);
-    pkt->secret_word = htonl(get_secret_word());
+    pkt->secret_word = get_secret_word();
    
     //Store a timestamp in the packet for calculating RTT.
     pkt->sender_ts = htonl(timeval_to_usec(0));
@@ -344,7 +344,7 @@ static int send_second_response(int sockfd, const char *buffer, int len,
 
     ping->type = PING_SECOND_RESPONSE;
     ping->src_id = htons(get_unique_id());
-    ping->secret_word = htonl(get_secret_word());
+    ping->secret_word = get_secret_word();
     ping->sender_ts = 0;
 
     return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
