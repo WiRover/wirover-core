@@ -187,7 +187,7 @@ static int ping_request_type(const char *buffer, int len)
     if(len < MIN_PING_PACKET_SIZE)
         return -1;
     
-    struct ping_packet *ping = (struct ping_packet *)
+    const struct ping_packet *ping = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
 
     /* node_id == 0 is invalid, gateway should have received a non-zero id from
@@ -207,8 +207,9 @@ static int ping_request_type(const char *buffer, int len)
         DEBUG_MSG("Secret word mismatch for node %hu", node_id);
         return -1;
     } else if(ping->secret_word && !gw) {
+        // This can happen if the controller was restarted.
+        // TODO: Inform the gateway that it must send a new notification.
         DEBUG_MSG("Unrecognized gateway (%hu)", node_id);
-        return -1;
     }
 
     return (int)ping->type;
@@ -266,10 +267,9 @@ static void process_ping_request(char *buffer, int len,
 
     // TODO: Add IPv6 support
     struct sockaddr_in from_in;
-    if(sockaddr_to_sockaddr_in((struct sockaddr *)&from, from_len, &from_in) < 0) {
+    if(sockaddr_to_sockaddr_in(from, from_len, &from_in) < 0) {
         char p_ip[INET6_ADDRSTRLEN];
-        getnameinfo((struct sockaddr *)&from, from_len, p_ip, sizeof(p_ip), 
-                0, 0, NI_NUMERICHOST);
+        getnameinfo(from, from_len, p_ip, sizeof(p_ip), 0, 0, NI_NUMERICHOST);
 
         DEBUG_MSG("Unable to add interface with address %s (IPv6?)", p_ip);
         return;
@@ -365,7 +365,7 @@ static void process_ping_response(char *buffer, int len,
         return;
     }
 
-    uint32_t send_ts = ntohl(ping->sender_ts);
+    uint32_t send_ts = ntohl(ping->receiver_ts);
     uint32_t recv_ts = timeval_to_usec(recv_time);
     long rtt = (long)recv_ts - (long)send_ts;
 
