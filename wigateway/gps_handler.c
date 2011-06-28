@@ -172,9 +172,8 @@ void *gps_thread_func(void *arg)
             continue;
         }
 #elif (GPSD_API_MAJOR_VERSION == 5)
-        res = gps_waiting(&session, GPS_DATA_TIMEOUT);
-        if(res < 0) {
-            DEBUG_MSG("gps_waiting: %s", gps_errstr(res));
+        if(!gps_waiting(&session, GPS_DATA_TIMEOUT * SECS_TO_USECS)) {
+            ERROR_MSG("gps_waiting failed");
             disconnect_from_gpsd();
             continue;
         }
