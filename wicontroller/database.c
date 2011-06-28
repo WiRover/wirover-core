@@ -82,6 +82,9 @@ void close_database()
 
 int db_update_gps(struct gateway *gw, struct gps_payload *gps)
 {
+    if(!database)
+        return -1;
+
     const time_t now = time(0);
     if(now == gw->last_gps_time) {
         // Avoid adding a duplicate.
@@ -116,6 +119,9 @@ unlock_and_return:
 
 int db_update_pings(struct gateway *gw, struct interface *ife, int rtt)
 {
+    if(!database)
+        return -1;
+
     const time_t now = time(0);
     if(now == gw->last_gps_time) {
         // Avoid adding a duplicate.

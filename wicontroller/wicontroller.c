@@ -5,6 +5,7 @@
 
 #include "configuration.h"
 #include "contchan.h"
+#include "database.h"
 #include "debug.h"
 #include "ping.h"
 #include "rootchan.h"
@@ -35,6 +36,10 @@ int main(int argc, char* argv[])
     lease = obtain_lease(wiroot_ip, wiroot_port, base_port);
     if(!lease) {
         DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
+    }
+
+    if(init_database() < 0) {
+        DEBUG_MSG("Failed to initialize database connection");
     }
 
     uint32_t priv_ip = 0;
