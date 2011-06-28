@@ -25,6 +25,14 @@
 
 static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd);
+static int ping_request_type(const char *buffer, int len);
+static int send_response(int sockfd, const char *buffer, int len,
+        const struct sockaddr *to, socklen_t to_len);
+static void process_ping_request(char *buffer, int len, 
+        const struct sockaddr *from, socklen_t from_len);
+static void process_ping_response(char *buffer, int len, 
+        const struct sockaddr *from, socklen_t from_len,
+        const struct timeval *recv_time);
 static void remove_stale_links(int link_timeout, int node_timeout);
 
 static int          running;
@@ -120,7 +128,8 @@ static int handle_incoming(int sockfd)
 {
     struct sockaddr_storage from;
     socklen_t from_len = sizeof(from);
-    char buffer[1024];
+    char buffer[MAX_PING_PACKET_SIZE];
+    struct timeval recv_time;
 
     int bytes_recvd = recvfrom(sockfd, buffer, sizeof(buffer), 0,
             (struct sockaddr*)&from, &from_len);
@@ -129,41 +138,125 @@ static int handle_incoming(int sockfd)
         return -1;
     }
 
-    int bytes_sent = sendto(sockfd, buffer, bytes_recvd, 0,
-            (struct sockaddr*)&from, from_len);
-    if(bytes_sent < 0) {
-        ERROR_MSG("Failed to send ping response (socket %d)", sockfd);
+    int type = ping_request_type(buffer, bytes_recvd);
+
+    switch(type) {
+        case PING_REQUEST:
+        case PING_REQUEST_WITH_GPS:
+            if(send_response(sockfd, buffer, bytes_recvd, 
+                        (struct sockaddr *)&from, from_len) < 0) {
+                ERROR_MSG("Failed to send ping response");
+                return 0;
+            }
+
+            process_ping_request(buffer, bytes_recvd, 
+                    (struct sockaddr *)&from, from_len);
+            break;
+        case PING_SECOND_RESPONSE:
+            // The receive timestamp recorded by the kernel will be more accurate
+            // than if we call gettimeofday() at this point.
+            if(ioctl(sockfd, SIOCGSTAMP, &recv_time) == -1) {
+                DEBUG_MSG("ioctl SIOCGSTAMP failed");
+                gettimeofday(&recv_time, 0);
+            }
+                    
+            process_ping_response(buffer, bytes_recvd,
+                    (struct sockaddr *)&from, from_len, &recv_time);
+            break;
+        default:
+            break;
     }
 
-    if(bytes_recvd < PING_PACKET_SIZE)
-        return 0;
+    return 0;
+}
 
+/*
+ * Do minimal preprocessing to determing the type of ping packet
+ * and whether it is valid or not.
+ *
+ * Returns -1 if the ping packet is invalid, otherwise returns
+ * one of the following:
+ *
+ * PING_REQUEST
+ * PING_REQUEST_WITH_GPS
+ * PING_RESPONSE
+ * PING_SECOND_RESPONSE
+ */
+static int ping_request_type(const char *buffer, int len)
+{
+    if(len < MIN_PING_PACKET_SIZE)
+        return -1;
+    
+    struct ping_packet *ping = (struct ping_packet *)
+        (buffer + sizeof(struct tunhdr));
+
+    /* node_id == 0 is invalid, gateway should have received a non-zero id from
+     * the root server. */
+    unsigned short node_id = ntohs(ping->src_id);
+    if(node_id == 0)
+        return -1;
+
+    struct gateway *gw = lookup_gateway_by_id(node_id);
+
+    /* This verifies the identity of the ping sender.  A secret_word of zero is
+     * acceptable, but the sender will not be trusted in that case.  Zero is
+     * used during the startup procedure before the control channel has been
+     * established.  A non-zero secret word must match or the ping packet is
+     * dropped. */
+    if(ping->secret_word && gw && gw->secret_word != ntohl(ping->secret_word)) {
+        DEBUG_MSG("Secret word mismatch for node %hu", node_id);
+        return -1;
+    } else if(ping->secret_word && !gw) {
+        DEBUG_MSG("Unrecognized gateway (%hu)", node_id);
+        return -1;
+    }
+
+    return (int)ping->type;
+}
+
+/*
+ * Send a ping response.
+ *
+ * Assumes the buffer is at least MIN_PING_PACKET_SIZE in length.
+ */
+static int send_response(int sockfd, const char *buffer, int len,
+        const struct sockaddr *to, socklen_t to_len)
+{
+    assert(len >= MIN_PING_PACKET_SIZE);
+
+    char response_buffer[MIN_PING_PACKET_SIZE];
+    memcpy(response_buffer, buffer, MIN_PING_PACKET_SIZE);
+
+    struct ping_packet *ping = (struct ping_packet *)
+        (response_buffer + sizeof(struct tunhdr));
+
+    ping->type = PING_RESPONSE;
+    ping->src_id = htons(get_unique_id());
+    ping->receiver_ts = htonl(timeval_to_usec(0));
+
+    return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
+}
+
+/*
+ * Use the ping packet to update the list of links for a gateway.  If the link
+ * is absent in our list, we can add it as an active interface, or if the link
+ * was present but with a different IP address, we can update it.  The latter
+ * case is especially relevent when the gateway is behind a NAT.
+ */
+static void process_ping_request(char *buffer, int len, 
+        const struct sockaddr *from, socklen_t from_len)
+{
     struct ping_packet *ping = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
 
     unsigned short node_id = ntohs(ping->src_id);
-    if(node_id == 0)
-        return 0;
 
     struct gateway *gw = lookup_gateway_by_id(node_id);
     if(!gw)
-        return 0;
+        return;
 
-    /* It is important to verify the identity of the ping sender.  Without this
-     * check, a malicious user could send a fake ping packet that would cause
-     * traffic to be redirected to the source address of the ping.
-     *
-     * A secret_word of zero is a special case, since the gateway may use it to
-     * check connectivity before the control channel has been established.  Of
-     * course, it still cannot be trusted, but the warning message is
-     * suppressed in that case.*/
-    if(gw->secret_word != ntohl(ping->secret_word)) {
-        if(ping->secret_word != 0) {
-            DEBUG_MSG("Secret word mismatch for node %hu", node_id);
-            DEBUG_MSG("This may be due to a race condition or an imposter.");
-        }
-        return 0;
-    }
+    if(ping->secret_word == 0 || gw->secret_word != ping->secret_word)
+        return;
 
     gw->last_ping_time = time(0);
 
@@ -179,7 +272,7 @@ static int handle_incoming(int sockfd)
                 0, 0, NI_NUMERICHOST);
 
         DEBUG_MSG("Unable to add interface with address %s (IPv6?)", p_ip);
-        return 0;
+        return;
     }
         
     if(ife) {
@@ -212,14 +305,14 @@ static int handle_incoming(int sockfd)
         }
     } else {
         /* The main reason for adding missing links on ping packets is if
-         * the controller is restarted (the list of links is cleared).  A more
+         * the controller is restarted (the list of links is cleared).
          * 
          * TODO: Instead, write state to a file on exit and read the file
          * on start up. */
         ife = alloc_interface();
         if(!ife) {
             DEBUG_MSG("out of memory");
-            return 0;
+            return;
         }
 
         // TODO: add interface name, and network name
@@ -241,8 +334,42 @@ static int handle_incoming(int sockfd)
     }
 
     ife->last_ping_time = time(0);
+}
 
-    return 0;
+/*
+ * Use the ping response do determine link RTT.
+ */
+static void process_ping_response(char *buffer, int len, 
+        const struct sockaddr *from, socklen_t from_len,
+        const struct timeval *recv_time)
+{
+    struct ping_packet *ping = (struct ping_packet *)
+        (buffer + sizeof(struct tunhdr));
+
+    unsigned short node_id = ntohs(ping->src_id);
+
+    struct gateway *gw = lookup_gateway_by_id(node_id);
+    if(!gw)
+        return;
+
+    if(ping->secret_word == 0 || gw->secret_word != ping->secret_word)
+        return;
+
+    gw->last_ping_time = time(0);
+
+    unsigned link_id = ntohl(ping->link_id);
+    struct interface *ife = 
+        find_interface_by_index(gw->head_interface, link_id);
+    if(!ife) {
+        DEBUG_MSG("Ping response from missing interface on node %hu", node_id);
+        return;
+    }
+
+    uint32_t send_ts = ntohl(ping->sender_ts);
+    uint32_t recv_ts = timeval_to_usec(recv_time);
+    long rtt = (long)recv_ts - (long)send_ts;
+
+    DEBUG_MSG("Ping from node %hu link %d rtt %lu", node_id, link_id, rtt);
 }
 
 static void remove_stale_links(int link_timeout, int node_timeout)

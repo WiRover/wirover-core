@@ -24,8 +24,8 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
               const struct sockaddr* dest_addr, socklen_t dest_len);
 static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd, int timeout);
-unsigned long timeval_diff_usec(const struct timeval* __restrict__ start,
-                                const struct timeval* __restrict__ end);
+static int send_second_response(int sockfd, const char *buffer, int len,
+        const struct sockaddr *to, socklen_t to_len);
 static void mark_inactive_interfaces();
 
 static int          running;
@@ -148,13 +148,13 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
         return FAILURE;
     }
 
-    char *buffer = malloc(PING_PACKET_SIZE);
+    char *buffer = malloc(MAX_PING_PACKET_SIZE);
     if(!buffer) {
         DEBUG_MSG("out of memory");
         return FAILURE;
     }
 
-    memset(buffer, 0, PING_PACKET_SIZE);
+    memset(buffer, 0, MAX_PING_PACKET_SIZE);
 
     struct tunhdr *tunhdr = (struct tunhdr *)buffer;
     tunhdr->flags = TUNFLAG_DONT_DECAP;
@@ -162,18 +162,17 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
     struct ping_packet *pkt = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
     pkt->seq_no = htonl(ife->next_ping_seq_no++);
-    pkt->type   = PING_PACKET_TYPE;
+    pkt->type   = PING_REQUEST;
     pkt->link_state = ife->state;
     pkt->src_id = htons(get_unique_id());
     pkt->link_id = htonl(ife->index);
     pkt->secret_word = htonl(get_secret_word());
    
     //Store a timestamp in the packet for calculating RTT.
-    gettimeofday(&now, 0);
-    pkt->sent_sec  = htonl(now.tv_sec);
-    pkt->sent_usec = htonl(now.tv_usec);
+    pkt->sender_ts = htonl(timeval_to_usec(0));
+    pkt->receiver_ts = 0;
 
-    bytes = sendto(sockfd, buffer, PING_PACKET_SIZE, 0, dest_addr, dest_len);
+    bytes = sendto(sockfd, buffer, MAX_PING_PACKET_SIZE, 0, dest_addr, dest_len);
     if(bytes < 0) {
         ERROR_MSG("sending ping packet on %s failed", ife->name);
         free(buffer);
@@ -256,76 +255,99 @@ static int handle_incoming(int sockfd, int timeout)
     int bytes;
     struct sockaddr_storage addr;
     socklen_t addr_len = sizeof(addr);
-    char buffer[1024];
+    char buffer[MAX_PING_PACKET_SIZE];
 
     bytes = recvfrom(sockfd, buffer, sizeof(buffer), 0,
             (struct sockaddr*)&addr, &addr_len);
-    if(bytes >= PING_PACKET_SIZE) {
-        struct ping_packet *pkt = (struct ping_packet *)
+    if(bytes < 0) {
+        ERROR_MSG("recvfrom failed");
+        return -1;
+    } else if(bytes < MIN_PING_PACKET_SIZE) {
+        DEBUG_MSG("Incoming packet was too small (%d bytes)", bytes);
+    }
+
+    // The receive timestamp recorded by the kernel will be more accurate
+    // than if we call gettimeofday() at this point.
+    struct timeval recv_time;
+    if(ioctl(sockfd, SIOCGSTAMP, &recv_time) == -1) {
+        DEBUG_MSG("ioctl SIOCGSTAMP failed");
+        gettimeofday(&recv_time, 0);
+    }
+
+    // TODO: Verify identity of sender before sending the response.  This is
+    // really important because a malicious host could trick us into sending
+    // him our secret_word.
+    
+    if(send_second_response(sockfd, buffer, bytes, 
+                (struct sockaddr *)&addr, addr_len) < 0) {
+        ERROR_MSG("send_second_response failed");
+    }
+
+    int notif_needed = 0;
+
+    struct ping_packet *pkt = (struct ping_packet *)
             (buffer + sizeof(struct tunhdr));
 
-        struct timeval send_time;
-        send_time.tv_sec = ntohl(pkt->sent_sec);
-        send_time.tv_usec = ntohl(pkt->sent_usec);
+    uint32_t send_ts = ntohl(pkt->sender_ts);
+    uint32_t recv_ts = timeval_to_usec(&recv_time);
+    long diff = (long)recv_ts - (long)send_ts;
 
-        // The receive timestamp recorded by the kernel will be more accurate
-        // than if we call gettimeofday() at this point.
-        struct timeval recv_time;
-        if(ioctl(sockfd, SIOCGSTAMP, &recv_time) == -1) {
-            DEBUG_MSG("ioctl SIOCGSTAMP failed");
-            gettimeofday(&recv_time, 0);
-        }
-        
-        int notif_needed = 0;
+    // If the ping response is older than timeout seconds, we just ignore it.
+    if((diff / USEC_PER_SEC) < timeout) {
+        unsigned h_link_id = ntohl(pkt->link_id);
 
-        unsigned long diff = timeval_diff_usec(&send_time, &recv_time);
+        obtain_read_lock(&interface_list_lock);
 
-        // If the ping response is older than timeout seconds, we just ignore it.
-        if((diff / USEC_PER_SEC) < timeout) {
-            unsigned h_link_id = ntohl(pkt->link_id);
+        struct interface* ife = find_interface_by_index(interface_list, h_link_id);
+        if(ife) {
+            upgrade_read_lock(&interface_list_lock);
 
-            obtain_read_lock(&interface_list_lock);
-
-            struct interface* ife = find_interface_by_index(interface_list, h_link_id);
-            if(ife && send_time.tv_sec == ife->last_ping_time) {
-                upgrade_read_lock(&interface_list_lock);
-
-                ife->avg_rtt = ema_update(ife->avg_rtt, (double)diff, 0.25);
-                if(ife->state == INACTIVE) {
-                    change_interface_state(ife, ACTIVE);
-                    notif_needed = 1;
-                }
-
-                ife->last_ping_seq_no = ntohl(pkt->seq_no);
-
-                downgrade_write_lock(&interface_list_lock);
-
-                DEBUG_MSG("Ping on %s rtt %d avg_rtt %f", ife->name, diff, ife->avg_rtt);
+            ife->avg_rtt = ema_update(ife->avg_rtt, (double)diff, 0.25);
+            if(ife->state == INACTIVE) {
+                change_interface_state(ife, ACTIVE);
+                notif_needed = 1;
             }
 
-            release_read_lock(&interface_list_lock);
+            ife->last_ping_seq_no = ntohl(pkt->seq_no);
+
+            downgrade_write_lock(&interface_list_lock);
+
+            DEBUG_MSG("Ping on %s rtt %d avg_rtt %f", ife->name, diff, ife->avg_rtt);
         }
 
-        if(notif_needed) {
-            send_notification(1);
-        }
+        release_read_lock(&interface_list_lock);
+    }
+
+    if(notif_needed) {
+        send_notification(1);
     }
 
     return 0;
 }
 
 /*
- * TIMEVAL DIFF USEC
+ * Send a response back to the controller.  This allows the controller
+ * to measure RTT as well.
+ *
+ * Assumes the buffer is at least MIN_PING_PACKET_SIZE in length.
  */
-unsigned long timeval_diff_usec(const struct timeval* __restrict__ start,
-                                const struct timeval* __restrict__ end)
+static int send_second_response(int sockfd, const char *buffer, int len,
+        const struct sockaddr *to, socklen_t to_len)
 {
-    unsigned long diff;
+    assert(len >= MIN_PING_PACKET_SIZE);
 
-    diff = (end->tv_sec - start->tv_sec) * USEC_PER_SEC;
-    diff += (end->tv_usec - start->tv_usec);
+    char response_buffer[MIN_PING_PACKET_SIZE];
+    memcpy(response_buffer, buffer, MIN_PING_PACKET_SIZE);
 
-    return diff;
+    struct ping_packet *ping = (struct ping_packet *)
+            (response_buffer + sizeof(struct tunhdr));
+
+    ping->type = PING_SECOND_RESPONSE;
+    ping->src_id = htons(get_unique_id());
+    ping->secret_word = htonl(get_secret_word());
+    ping->sender_ts = 0;
+
+    return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
 }
 
 static void mark_inactive_interfaces()
