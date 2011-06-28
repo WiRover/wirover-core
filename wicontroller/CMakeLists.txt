@@ -3,6 +3,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCONTROLLER")
 add_executable(wicontroller
     wicontroller.c
     contchan.c
+    database.c
     gateway.c
     ping.c
     ${COMMON}/configuration.c
@@ -15,7 +16,7 @@ add_executable(wicontroller
     ${COMMON}/kernel.c
 )
 
-target_link_libraries(wicontroller pthread config)
+target_link_libraries(wicontroller pthread config mysqlclient)
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wicontroller DESTINATION /usr/bin)
 install(FILES wicontroller.conf DESTINATION /etc)

@@ -20,6 +20,10 @@ struct gateway {
     unsigned int        active_interfaces;
     struct interface*   head_interface;
 
+    // The following are for the database:
+    time_t   last_gps_time;
+    unsigned last_gps_row_id;
+
     UT_hash_handle      hh_id;
 };
 

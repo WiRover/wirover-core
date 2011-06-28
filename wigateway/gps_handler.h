@@ -1,9 +1,6 @@
 #ifndef GPS_HANDLER_H
 #define GPS_HANDLER_H
 
-// Invalidate GPS data after 5 seconds
-#define GPS_DATA_TIMEOUT    5
-
 /* Forward declarations */
 struct gps_fix_t;
 struct gps_data_t;

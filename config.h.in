@@ -32,5 +32,8 @@
  * No new lines please. */
 #define NETWORK_NAME_PATH    "/var/lib/wirover/networks"
 
+/* Invalidate GPS data after 5 seconds */
+#define GPS_DATA_TIMEOUT 5
+
 #endif //_CONFIG_H_
 

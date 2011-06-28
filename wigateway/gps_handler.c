@@ -20,6 +20,7 @@
 #include <netinet/ip.h>
 #include <gps.h>
 
+#include "config.h"
 #include "debug.h"
 #include "gps_handler.h"
 #include "ping.h"

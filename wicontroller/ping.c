@@ -10,6 +10,7 @@
 
 #include "config.h"
 #include "configuration.h"
+#include "database.h"
 #include "debug.h"
 #include "gateway.h"
 #include "interface.h"
@@ -339,6 +340,7 @@ static void process_ping_request(char *buffer, int len,
     if(ping->type == PING_REQUEST_WITH_GPS && len >= PING_WITH_GPS_SIZE) {
         DEBUG_MSG("Node %hu gps %f, %f", node_id,
                 ping->gps.latitude, ping->gps.longitude);
+        db_update_gps(gw, &ping->gps);
     }
 }
 
@@ -377,6 +379,7 @@ static void process_ping_response(char *buffer, int len,
 
     DEBUG_MSG("Ping from node %hu link %d (%s) rtt %lu", node_id, link_id, 
             ife->network, rtt);
+    db_update_pings(gw, ife, rtt);
 }
 
 static void remove_stale_links(int link_timeout, int node_timeout)
