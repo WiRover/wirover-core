@@ -15,6 +15,7 @@ struct gateway* alloc_gateway()
     assert(gw);
     
     gw->creation_time = time(0);
+    gw->last_ping_time = gw->creation_time;
     gw->active_interfaces = 0;
     gw->head_interface = 0;
 

@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "debug.h"
 #include "interface.h"
@@ -21,6 +22,9 @@ struct interface* alloc_interface()
 
     memset(ife, 0, sizeof(*ife));
     ife->avg_rtt = NAN;
+
+    // Prevent early timeouts
+    ife->last_ping_time = time(0);
 
     return ife;
 }
