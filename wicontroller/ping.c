@@ -315,11 +315,12 @@ static void process_ping_request(char *buffer, int len,
             return;
         }
 
-        // TODO: add interface name, and network name
+        ife->index = ntohl(ping->link_id);
+        strncpy(ife->name, "unknown", sizeof(ife->name));
+        strncpy(ife->network, "unknown", sizeof(ife->network));
         memcpy(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr));
         ife->data_port = from_in.sin_port;
-        ife->state     = ping->link_state;
-        ife->index     = ntohl(ping->link_id);
+        ife->state = ping->link_state;
 
         DL_APPEND(gw->head_interface, ife);
 
@@ -369,7 +370,8 @@ static void process_ping_response(char *buffer, int len,
     uint32_t recv_ts = timeval_to_usec(recv_time);
     long rtt = (long)recv_ts - (long)send_ts;
 
-    DEBUG_MSG("Ping from node %hu link %d rtt %lu", node_id, link_id, rtt);
+    DEBUG_MSG("Ping from node %hu link %d (%s) rtt %lu", node_id, link_id, 
+            ife->network, rtt);
 }
 
 static void remove_stale_links(int link_timeout, int node_timeout)

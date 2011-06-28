@@ -25,5 +25,12 @@
 #define DEFAULT_LINK_TIMEOUT 30
 #define DEFAULT_NODE_TIMEOUT 300
 
+/* The network name is a descriptive name for an interface such as "verizon" or
+ * "sprint" as opposed to interface names such as "ppp0" or "ppp1".  The
+ * network name is used for data collection.  Each file under this path should
+ * take the name of an interface and have only the network name as its content.
+ * No new lines please. */
+#define NETWORK_NAME_PATH    "/var/lib/wirover/networks"
+
 #endif //_CONFIG_H_
 

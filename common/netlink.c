@@ -24,7 +24,6 @@
 static void* netlink_thread_func(void* arg);
 static void add_interface(struct interface* ife);
 static void delete_interface(struct interface* ife);
-static const char* read_dev_name(const char* __restrict__ buffer, char* __restrict__ dest, int destlen);
 static int  update_interface_gateways();
 
 struct interface*   interface_list = 0;
@@ -64,6 +63,7 @@ int init_interface_list()
 
                 ife->index = if_nametoindex(ifap->ifa_name);
                 strncpy(ife->name, ifap->ifa_name, sizeof(ife->name));
+                read_network_name(ife->name, ife->network, sizeof(ife->network));
 
                 // Set to INACTIVE until connectivity is confirmed
                 ife->state = INACTIVE;
@@ -188,6 +188,7 @@ int handle_netlink_message(const char* msg, int msg_len)
 
                     ife->index = ifa->ifa_index;
                     strncpy(ife->name, device, sizeof(ife->name));
+                    read_network_name(ife->name, ife->network, sizeof(ife->network));
                     ife->state = INACTIVE;
                     ife->priority = priority;
 
@@ -316,6 +317,33 @@ int change_interface_state(struct interface* ife, enum if_state state)
     return 0;
 }
 
+/*
+ * The network name is a descriptive name for an interface such as "verizon" or
+ * "sprint" as opposed to interface names such as "ppp0" or "ppp1".  The
+ * network name is used for data collection.  This will attempt to read the
+ * network name for an interface from a file (by default in
+ * /var/lib/wirover/networks).  If successful, the network name is copied into
+ * dest, otherwise ifname is copied into dest.
+ */
+void read_network_name(const char * __restrict__ ifname, 
+        char * __restrict__ dest, int destlen)
+{
+    char filename[256];
+    snprintf(filename, sizeof(filename), NETWORK_NAME_PATH "/%s", ifname);
+
+    FILE *file = fopen(filename, "r");
+    if(!file) {
+        strncpy(dest, ifname, destlen);
+        return;
+    }
+
+    if(!fgets(dest, destlen, file)) {
+        strncpy(dest, ifname, destlen);
+    }
+
+    fclose(file);
+}
+
 static void* netlink_thread_func(void* arg)
 {
     int sockfd;
@@ -379,33 +407,6 @@ static void delete_interface(struct interface* ife)
     DEBUG_MSG("Deleting interface %s", ife->name);
     DL_DELETE(interface_list, ife);
     free(ife);
-}
-
-/*
- * Reads the device name from a line from /proc/net/dev.
- *
- * Returns a pointer to the next character after the name.
- */
-static const char* read_dev_name(const char* __restrict__ buffer, char* __restrict__ dest, int destlen)
-{
-    memset(dest, 0, destlen);
-
-    int i = 0;
-    while(isspace(buffer[i])) {
-        i++;
-    }
-
-    // Hit the end of the string -- this would be very unusual.
-    if(buffer[i] == 0) {
-        return &buffer[i];
-    }
-
-    int j = 0;
-    while(isalnum(buffer[i]) && j < destlen - 1) {
-        dest[j++] = buffer[i++];
-    }
-
-    return &buffer[i];
 }
 
 /*

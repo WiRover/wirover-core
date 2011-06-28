@@ -312,7 +312,8 @@ static int handle_incoming(int sockfd, int timeout)
 
             downgrade_write_lock(&interface_list_lock);
 
-            DEBUG_MSG("Ping on %s rtt %d avg_rtt %f", ife->name, diff, ife->avg_rtt);
+            DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f", 
+                    ife->name, ife->network, diff, ife->avg_rtt);
         }
 
         release_read_lock(&interface_list_lock);
