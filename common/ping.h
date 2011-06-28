@@ -37,12 +37,15 @@ struct ping_packet {
 
 #define MIN_PING_PACKET_SIZE (sizeof(struct tunhdr) + \
         offsetof(struct ping_packet, gps))
+#define PING_WITH_GPS_SIZE (sizeof(struct tunhdr) + \
+        sizeof(struct ping_packet))
 #define MAX_PING_PACKET_SIZE (sizeof(struct tunhdr) + \
         sizeof(struct ping_packet))
 
 int start_ping_thread();
 
 #ifdef GATEWAY
+struct interface;
 int ping_all_interfaces();
 int ping_interface(struct interface *ife);
 #endif

@@ -335,6 +335,11 @@ static void process_ping_request(char *buffer, int len,
     }
 
     ife->last_ping_time = time(0);
+
+    if(ping->type == PING_REQUEST_WITH_GPS && len >= PING_WITH_GPS_SIZE) {
+        DEBUG_MSG("Node %hu gps %f, %f", node_id,
+                ping->gps.latitude, ping->gps.longitude);
+    }
 }
 
 /*

@@ -3,6 +3,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DGATEWAY")
 add_executable(wigateway
     wigateway.c
     contchan.c
+    gps_handler.c
     ping.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
@@ -15,7 +16,7 @@ add_executable(wigateway
     ${COMMON}/kernel.c
 )
 
-target_link_libraries(wigateway pthread config)
+target_link_libraries(wigateway pthread config gps)
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wigateway DESTINATION /usr/bin)
 install(FILES wigateway.conf DESTINATION /etc)

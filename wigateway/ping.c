@@ -12,6 +12,7 @@
 #include "configuration.h"
 #include "contchan.h"
 #include "debug.h"
+#include "gps_handler.h"
 #include "interface.h"
 #include "netlink.h"
 #include "ping.h"
@@ -151,6 +152,7 @@ static int send_ping(struct interface* ife,
     }
 
     memset(buffer, 0, MAX_PING_PACKET_SIZE);
+    unsigned send_size = MIN_PING_PACKET_SIZE;
 
     struct tunhdr *tunhdr = (struct tunhdr *)buffer;
     tunhdr->flags = TUNFLAG_DONT_DECAP;
@@ -158,17 +160,25 @@ static int send_ping(struct interface* ife,
     struct ping_packet *pkt = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
     pkt->seq_no = htonl(ife->next_ping_seq_no++);
-    pkt->type   = PING_REQUEST;
     pkt->link_state = ife->state;
     pkt->src_id = htons(get_unique_id());
     pkt->link_id = htonl(ife->index);
     pkt->secret_word = get_secret_word();
+
+    // Attempt to stuff GPS data into the packet
+    if(fill_gps_payload(&pkt->gps) < 0) {
+        pkt->type = PING_REQUEST;
+        send_size = MIN_PING_PACKET_SIZE;
+    } else {
+        pkt->type = PING_REQUEST_WITH_GPS;
+        send_size = PING_WITH_GPS_SIZE;
+    }
    
-    //Store a timestamp in the packet for calculating RTT.
+    // Store a timestamp in the packet for calculating RTT.
     pkt->sender_ts = htonl(timeval_to_usec(0));
     pkt->receiver_ts = 0;
 
-    bytes = sendto(sockfd, buffer, MAX_PING_PACKET_SIZE, 0, dest_addr, dest_len);
+    bytes = sendto(sockfd, buffer, send_size, 0, dest_addr, dest_len);
     if(bytes < 0) {
         ERROR_MSG("sending ping packet on %s failed", ife->name);
         free(buffer);
@@ -202,7 +212,7 @@ void* ping_thread_func(void* arg)
     // We never want reads to hold up the thread.
     set_nonblock(sockfd, NONBLOCKING);
 
-    ping_all_interfaces(local_port);
+    ping_all_interfaces();
     time_t last_ping_time = time(0);
 
     unsigned int next_timeout = ping_interval;
