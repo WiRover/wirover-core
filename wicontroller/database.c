@@ -123,10 +123,6 @@ int db_update_pings(struct gateway *gw, struct interface *ife, int rtt)
         return -1;
 
     const time_t now = time(0);
-    if(now == gw->last_gps_time) {
-        // Avoid adding a duplicate.
-        return -1;
-    }
 
     if(pthread_mutex_lock(&database_lock) != 0) {
         DEBUG_MSG("pthread_mutex_lock failed");
@@ -150,10 +146,8 @@ int db_update_pings(struct gateway *gw, struct interface *ife, int rtt)
     int res = mysql_real_query(database, query_buffer, len);
     if(res != 0) {
         DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        goto unlock_and_return;
     }
 
-unlock_and_return:
     pthread_mutex_unlock(&database_lock);
     return res;
 }

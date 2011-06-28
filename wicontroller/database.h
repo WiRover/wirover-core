@@ -3,10 +3,10 @@
 
 #include <mysql/mysql.h>
 
-#define DB_HOST "127.0.0.1"
-#define DB_NAME "gateways"
+#define DB_HOST "localhost"
 #define DB_USER "root"
 #define DB_PASS "password"
+#define DB_NAME "gateways"
 
 int init_database();
 void close_database();
