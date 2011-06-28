@@ -43,8 +43,8 @@ struct ping_packet {
 int start_ping_thread();
 
 #ifdef GATEWAY
-int ping_all_interfaces(unsigned short src_port);
-int ping_interface(struct interface* ife);
+int ping_all_interfaces();
+int ping_interface(struct interface *ife);
 #endif
 
 /*

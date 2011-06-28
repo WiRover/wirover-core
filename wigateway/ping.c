@@ -20,7 +20,7 @@
 #include "sockets.h"
 #include "tunnel.h"
 
-static int send_ping(struct interface* ife, unsigned short src_port, unsigned int dest_port,
+static int send_ping(struct interface* ife,
               const struct sockaddr* dest_addr, socklen_t dest_len);
 static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd, int timeout);
@@ -62,7 +62,7 @@ int start_ping_thread()
  *
  * Locking: Assumes the calling thread does not have a lock on the interface list.
  */
-int ping_all_interfaces(unsigned short src_port)
+int ping_all_interfaces()
 {
     int pings_sent = 0;
 
@@ -86,7 +86,7 @@ int ping_all_interfaces(unsigned short src_port)
 
     struct interface* curr_ife = interface_list;
     while(curr_ife) {
-        send_ping(curr_ife, src_port, controller_port, (struct sockaddr*)&dest_addr, dest_len);
+        send_ping(curr_ife, (struct sockaddr*)&dest_addr, dest_len);
 
         assert(curr_ife != curr_ife->next);
         curr_ife = curr_ife->next;
@@ -107,8 +107,6 @@ int ping_all_interfaces(unsigned short src_port)
  */
 int ping_interface(struct interface* ife)
 {
-    const unsigned short local_port = get_base_port() + DATA_CHANNEL_OFFSET;
-
     char controller_ip[INET6_ADDRSTRLEN];
     get_controller_ip(controller_ip, sizeof(controller_ip));
 
@@ -122,8 +120,7 @@ int ping_interface(struct interface* ife)
         return FAILURE;
     }
 
-    if(send_ping(ife, local_port, controller_port, (struct sockaddr*)&dest_addr,
-         dest_len) == FAILURE) {
+    if(send_ping(ife, (struct sockaddr*)&dest_addr, dest_len) == FAILURE) {
         return FAILURE;
     }
 
@@ -135,14 +132,13 @@ int ping_interface(struct interface* ife)
  *
  * Locking: Assumes the calling thread has a read lock on the interface list.
  */
-static int send_ping(struct interface* ife, unsigned short src_port, unsigned int dest_port,
+static int send_ping(struct interface* ife, 
         const struct sockaddr* dest_addr, socklen_t dest_len)
 {
     int sockfd;
     struct timeval now;
     int bytes;
 
-    //sockfd = udp_raw_open(ife->name);
     sockfd = udp_bind_open(ntohs(ife->data_port), ife->name);
     if(sockfd == FAILURE) {
         return FAILURE;
@@ -194,8 +190,8 @@ static int send_ping(struct interface* ife, unsigned short src_port, unsigned in
 
 void* ping_thread_func(void* arg)
 {
-    const unsigned short    local_port = get_base_port() + DATA_CHANNEL_OFFSET;
-    const unsigned int      ping_interval = get_ping_interval();
+    const unsigned short local_port = get_base_port();
+    const unsigned int   ping_interval = get_ping_interval();
     int sockfd;
 
     sockfd = udp_bind_open(local_port, 0);
@@ -233,7 +229,7 @@ void* ping_thread_func(void* arg)
             mark_inactive_interfaces();
 
             // It is time to send out another round of pings.
-            ping_all_interfaces(local_port);
+            ping_all_interfaces();
             last_ping_time = time(0);
         } else {
             next_timeout = time_remaining;
