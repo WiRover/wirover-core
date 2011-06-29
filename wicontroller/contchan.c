@@ -185,7 +185,7 @@ static int send_response(int sockfd, const struct gateway *gw)
     response.type = CCHAN_NOTIFICATION;
     get_private_ip(&response.priv_ip);
     response.unique_id = htons(get_unique_id());
-    response.secret_word = htonl(gw->my_secret_word);
+    response.secret_word = gw->my_secret_word;
     response.interfaces = 0;
 
     int result = send(sockfd, &response, MIN_NOTIFICATION_LEN, 0);
