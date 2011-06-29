@@ -27,8 +27,9 @@
 static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd);
 static unsigned char ping_request_type(const char *buffer, int len);
-static int send_response(int sockfd, unsigned char type, const char *buffer, int len,
-        const struct sockaddr *to, socklen_t to_len);
+static int send_response(int sockfd, const struct gateway *gw,
+        unsigned char type, const char *buffer, 
+        int len, const struct sockaddr *to, socklen_t to_len);
 static void process_ping_request(char *buffer, int len, 
         const struct sockaddr *from, socklen_t from_len);
 static void process_ping_response(char *buffer, int len, 
@@ -140,11 +141,18 @@ static int handle_incoming(int sockfd)
     }
 
     unsigned char type = ping_request_type(buffer, bytes_recvd);
+    
+    const struct ping_packet *ping = (struct ping_packet *)
+        (buffer + sizeof(struct tunhdr));
+    unsigned short node_id = ntohs(ping->src_id);
+    struct gateway *gw = 0;
+    if(node_id != 0)
+        gw = lookup_gateway_by_id(node_id);
 
     switch(type) {
         case PING_REQUEST:
         case PING_REQUEST_WITH_GPS:
-            if(send_response(sockfd, PING_RESPONSE, buffer, bytes_recvd, 
+            if(send_response(sockfd, gw, PING_RESPONSE, buffer, bytes_recvd, 
                         (struct sockaddr *)&from, from_len) < 0) {
                 ERROR_MSG("Failed to send ping response");
                 return 0;
@@ -154,7 +162,7 @@ static int handle_incoming(int sockfd)
                     (struct sockaddr *)&from, from_len);
             break;
         case PING_REQUEST_WITH_ERROR:
-            if(send_response(sockfd, PING_RESPONSE_WITH_ERROR, buffer, 
+            if(send_response(sockfd, 0, PING_RESPONSE_WITH_ERROR, buffer, 
                         bytes_recvd, (struct sockaddr *)&from, from_len) < 0) {
                 ERROR_MSG("Failed to send ping response");
                 return 0;
@@ -232,7 +240,8 @@ static unsigned char ping_request_type(const char *buffer, int len)
  *
  * Assumes the buffer is at least MIN_PING_PACKET_SIZE in length.
  */
-static int send_response(int sockfd, unsigned char type, const char *buffer, 
+static int send_response(int sockfd, const struct gateway *gw,
+        unsigned char type, const char *buffer, 
         int len, const struct sockaddr *to, socklen_t to_len)
 {
     assert(len >= MIN_PING_PACKET_SIZE);
@@ -245,6 +254,7 @@ static int send_response(int sockfd, unsigned char type, const char *buffer,
 
     ping->type = type;
     ping->src_id = htons(get_unique_id());
+    ping->secret_word = (gw ? gw->my_secret_word : 0);
     ping->receiver_ts = htonl(timeval_to_usec(0));
 
     return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
