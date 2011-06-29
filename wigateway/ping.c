@@ -303,14 +303,14 @@ static int handle_incoming(int sockfd, int timeout)
         notif_needed = 1;
     }
 
-    if(pkt->secret_word != 0 && pkt->secret_word != remote_secret_word) {
-        DEBUG_MSG("secrect word mismatch, identity of sender cannot be assured");
-        return -1;
-    } else if(pkt->secret_word == 0 || remote_secret_word == 0) {
+    if(pkt->secret_word == 0 || remote_secret_word == 0) {
         // This occurs before the control channel has been established.  We
         // cannot verify the sender's identity, so we will not send a response
         // packet which would reveal our own secret word.
         send_response = 0;
+    } else if(pkt->secret_word != remote_secret_word) {
+        DEBUG_MSG("secret word mismatch, identity of sender cannot be assured");
+        return -1;
     }
 
     unsigned link_id = ntohl(pkt->link_id);
