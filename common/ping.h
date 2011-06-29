@@ -3,10 +3,13 @@
 
 #include <sys/time.h>
 
-#define PING_REQUEST          0x10
-#define PING_REQUEST_WITH_GPS 0x11
-#define PING_RESPONSE         0x20
-#define PING_SECOND_RESPONSE  0x30
+#define PING_INVALID             0x00
+#define PING_REQUEST             0x10
+#define PING_REQUEST_WITH_GPS    0x11
+#define PING_REQUEST_WITH_ERROR  0x18
+#define PING_RESPONSE            0x20
+#define PING_RESPONSE_WITH_ERROR 0x28
+#define PING_SECOND_RESPONSE     0x30
 
 #define USEC_PER_SEC        1000000
 #define PING_LOSS_THRESHOLD 4

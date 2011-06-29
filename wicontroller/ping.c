@@ -26,8 +26,8 @@
 
 static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd);
-static int ping_request_type(const char *buffer, int len);
-static int send_response(int sockfd, const char *buffer, int len,
+static unsigned char ping_request_type(const char *buffer, int len);
+static int send_response(int sockfd, unsigned char type, const char *buffer, int len,
         const struct sockaddr *to, socklen_t to_len);
 static void process_ping_request(char *buffer, int len, 
         const struct sockaddr *from, socklen_t from_len);
@@ -139,12 +139,12 @@ static int handle_incoming(int sockfd)
         return -1;
     }
 
-    int type = ping_request_type(buffer, bytes_recvd);
+    unsigned char type = ping_request_type(buffer, bytes_recvd);
 
     switch(type) {
         case PING_REQUEST:
         case PING_REQUEST_WITH_GPS:
-            if(send_response(sockfd, buffer, bytes_recvd, 
+            if(send_response(sockfd, PING_RESPONSE, buffer, bytes_recvd, 
                         (struct sockaddr *)&from, from_len) < 0) {
                 ERROR_MSG("Failed to send ping response");
                 return 0;
@@ -152,6 +152,14 @@ static int handle_incoming(int sockfd)
 
             process_ping_request(buffer, bytes_recvd, 
                     (struct sockaddr *)&from, from_len);
+            break;
+        case PING_REQUEST_WITH_ERROR:
+            if(send_response(sockfd, PING_RESPONSE_WITH_ERROR, buffer, 
+                        bytes_recvd, (struct sockaddr *)&from, from_len) < 0) {
+                ERROR_MSG("Failed to send ping response");
+                return 0;
+            }
+
             break;
         case PING_SECOND_RESPONSE:
             // The receive timestamp recorded by the kernel will be more accurate
@@ -175,18 +183,19 @@ static int handle_incoming(int sockfd)
  * Do minimal preprocessing to determing the type of ping packet
  * and whether it is valid or not.
  *
- * Returns -1 if the ping packet is invalid, otherwise returns
+ * Returns PING_INVALID if the ping packet is invalid, otherwise returns
  * one of the following:
  *
  * PING_REQUEST
  * PING_REQUEST_WITH_GPS
+ * PING_REQUEST_WITH_ERROR
  * PING_RESPONSE
  * PING_SECOND_RESPONSE
  */
-static int ping_request_type(const char *buffer, int len)
+static unsigned char ping_request_type(const char *buffer, int len)
 {
     if(len < MIN_PING_PACKET_SIZE)
-        return -1;
+        return PING_INVALID;
     
     const struct ping_packet *ping = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
@@ -195,7 +204,7 @@ static int ping_request_type(const char *buffer, int len)
      * the root server. */
     unsigned short node_id = ntohs(ping->src_id);
     if(node_id == 0)
-        return -1;
+        return PING_INVALID;
 
     struct gateway *gw = lookup_gateway_by_id(node_id);
 
@@ -206,14 +215,16 @@ static int ping_request_type(const char *buffer, int len)
      * dropped. */
     if(ping->secret_word && gw && ping->secret_word != gw->secret_word) {
         DEBUG_MSG("Secret word mismatch for node %hu", node_id);
-        return -1;
+        return PING_INVALID;
     } else if(ping->secret_word && !gw) {
-        // This can happen if the controller was restarted.
-        // TODO: Inform the gateway that it must send a new notification.
+        // This can happen if the controller was restarted.  We will send a
+        // response with the error bit set so that the gateway will know to
+        // send a new notification.
         DEBUG_MSG("Unrecognized gateway (%hu)", node_id);
+        return PING_REQUEST_WITH_ERROR;
     }
 
-    return (int)ping->type;
+    return ping->type;
 }
 
 /*
@@ -221,8 +232,8 @@ static int ping_request_type(const char *buffer, int len)
  *
  * Assumes the buffer is at least MIN_PING_PACKET_SIZE in length.
  */
-static int send_response(int sockfd, const char *buffer, int len,
-        const struct sockaddr *to, socklen_t to_len)
+static int send_response(int sockfd, unsigned char type, const char *buffer, 
+        int len, const struct sockaddr *to, socklen_t to_len)
 {
     assert(len >= MIN_PING_PACKET_SIZE);
 
@@ -232,7 +243,7 @@ static int send_response(int sockfd, const char *buffer, int len,
     struct ping_packet *ping = (struct ping_packet *)
         (response_buffer + sizeof(struct tunhdr));
 
-    ping->type = PING_RESPONSE;
+    ping->type = type;
     ping->src_id = htons(get_unique_id());
     ping->receiver_ts = htonl(timeval_to_usec(0));
 

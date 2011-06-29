@@ -282,20 +282,31 @@ static int handle_incoming(int sockfd, int timeout)
     struct ping_packet *pkt = (struct ping_packet *)
             (buffer + sizeof(struct tunhdr));
 
-    unsigned link_id = ntohl(pkt->link_id);
-
     // TODO: interface_list is supposed to be locked, but I do not want to wait
     // for a lock before sending the response packet
+
+    // TODO: Verify identity of sender before sending the response.  This is
+    // really important because a malicious host could trick us into sending
+    // him our secret_word.
+
+    /*
+     * If the controller does not recognize our id (this can happen if the
+     * controller is restarted), then it responds with the error bit set.  We
+     * can re-establish state with the controller by sending a notification.
+     */
+    if(pkt->type == PING_RESPONSE_WITH_ERROR) {
+        DEBUG_MSG("Controller responded with an error, sending a notification...");
+        send_notification(1);
+        return 0;
+    }
+
+    unsigned link_id = ntohl(pkt->link_id);
 
     struct interface* ife = find_interface_by_index(interface_list, link_id);
     if(!ife) {
         DEBUG_MSG("Ping response for unknown interface %u", link_id);
         return 0;
     }
-
-    // TODO: Verify identity of sender before sending the response.  This is
-    // really important because a malicious host could trick us into sending
-    // him our secret_word.
     
     if(send_second_response(ife, buffer, bytes, 
                 (struct sockaddr *)&addr, addr_len) < 0) {
