@@ -5,16 +5,22 @@
 #include "contchan.h"
 #include "debug.h"
 #include "gateway.h"
+#include "rootchan.h"
 #include "utlist.h"
 #include "kernel.h"
 
 static struct gateway* make_gateway(const struct cchan_notification* notif);
 static void update_gateway(struct gateway* gw, const struct cchan_notification* notif);
+static int send_response(int sockfd, const struct gateway *gw);
+
+/*
+ * TODO: Use OpenSSL for control channel.
+ */
 
 /*
  * Parse a notification packet and update the list of gateways accordingly.
  */
-int process_notification(const char *packet, unsigned int pkt_len)
+int process_notification(int sockfd, const char *packet, unsigned int pkt_len)
 {
     assert(packet);
 
@@ -40,14 +46,14 @@ int process_notification(const char *packet, unsigned int pkt_len)
     struct gateway* gw = lookup_gateway_by_id(ntohs(notif->unique_id));
     if(gw) {
         update_gateway(gw, notif);
-
     } else {
         gw = make_gateway(notif);
-        
-        if(gw) {
+        if(gw)
             add_gateway(gw);
-        }
     }
+
+    if(gw)
+        send_response(sockfd, gw);
 
     return 0;
 }
@@ -63,6 +69,10 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
     copy_ipaddr(&notif->priv_ip, &gw->private_ip);
     gw->unique_id = ntohs(notif->unique_id);
     gw->secret_word = notif->secret_word;
+
+    do {
+        gw->my_secret_word = rand();
+    } while(!gw->my_secret_word);
 
     struct in_addr priv_ip;
     ipaddr_to_ipv4(&notif->priv_ip, (uint32_t *)&priv_ip.s_addr);
@@ -106,6 +116,10 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
     assert(gw && notif);
 
     gw->secret_word = notif->secret_word;
+
+    do {
+        gw->my_secret_word = rand();
+    } while(!gw->my_secret_word);
 
     struct interface* ife;
     DL_FOREACH(gw->head_interface, ife) {
@@ -161,6 +175,26 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
 
     DEBUG_MSG("Updated gateway %s (uid %d) with %d active interfaces",
               p_ip, gw->unique_id, gw->active_interfaces);
+}
+
+static int send_response(int sockfd, const struct gateway *gw)
+{
+    struct cchan_notification response;
+    memset(&response, 0, sizeof(response));
+
+    response.type = CCHAN_NOTIFICATION;
+    get_private_ip(&response.priv_ip);
+    response.unique_id = htons(get_unique_id());
+    response.secret_word = htonl(gw->my_secret_word);
+    response.interfaces = 0;
+
+    int result = send(sockfd, &response, MIN_NOTIFICATION_LEN, 0);
+    if(result < 0) {
+        ERROR_MSG("Sending notification response failed");
+        return -1;
+    }
+
+    return 0;
 }
 
 

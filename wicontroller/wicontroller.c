@@ -134,7 +134,7 @@ static void server_loop(int cchan_sock)
                     } else if(bytes == 0) {
                         handle_disconnection(&cchan_clients, client);
                     } else {
-                        process_notification(buffer, bytes);
+                        process_notification(client->fd, buffer, bytes);
                     }
                 }
             }

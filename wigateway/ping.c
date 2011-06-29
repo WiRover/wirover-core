@@ -282,12 +282,15 @@ static int handle_incoming(int sockfd, int timeout)
     struct ping_packet *pkt = (struct ping_packet *)
             (buffer + sizeof(struct tunhdr));
 
+    int notif_needed = 0;
+
     // TODO: interface_list is supposed to be locked, but I do not want to wait
     // for a lock before sending the response packet
 
-    // TODO: Verify identity of sender before sending the response.  This is
-    // really important because a malicious host could trick us into sending
-    // him our secret_word.
+    /* Under normal circumstances, we will send a ping response back to the
+     * controller so that it can measure RTT.  The response will be suppressed
+     * if there is an error condition or a secret_word mismatch. */
+    int send_response = 1;
 
     /*
      * If the controller does not recognize our id (this can happen if the
@@ -295,9 +298,19 @@ static int handle_incoming(int sockfd, int timeout)
      * can re-establish state with the controller by sending a notification.
      */
     if(pkt->type == PING_RESPONSE_WITH_ERROR) {
-        DEBUG_MSG("Controller responded with an error, sending a notification...");
-        send_notification(1);
-        return 0;
+        DEBUG_MSG("Controller responded with an error, will send a notification");
+        send_response = 0;
+        notif_needed = 1;
+    }
+
+    if(pkt->secret_word != 0 && pkt->secret_word != remote_secret_word) {
+        DEBUG_MSG("secrect word mismatch, identity of sender cannot be assured");
+        return -1;
+    } else if(pkt->secret_word == 0 || remote_secret_word == 0) {
+        // This occurs before the control channel has been established.  We
+        // cannot verify the sender's identity, so we will not send a response
+        // packet which would reveal our own secret word.
+        send_response = 0;
     }
 
     unsigned link_id = ntohl(pkt->link_id);
@@ -308,12 +321,12 @@ static int handle_incoming(int sockfd, int timeout)
         return 0;
     }
     
-    if(send_second_response(ife, buffer, bytes, 
-                (struct sockaddr *)&addr, addr_len) < 0) {
-        ERROR_MSG("send_second_response failed");
+    if(send_response) {
+        if(send_second_response(ife, buffer, bytes, 
+                    (struct sockaddr *)&addr, addr_len) < 0) {
+            ERROR_MSG("send_second_response failed");
+        }
     }
-
-    int notif_needed = 0;
 
     uint32_t send_ts = ntohl(pkt->sender_ts);
     uint32_t recv_ts = timeval_to_usec(&recv_time);

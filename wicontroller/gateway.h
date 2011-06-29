@@ -15,6 +15,7 @@ struct gateway {
 
     time_t   creation_time;
     uint32_t secret_word; // in network byte order
+    uint32_t my_secret_word;
     time_t   last_ping_time;
 
     unsigned int        active_interfaces;

@@ -24,6 +24,7 @@
 #define CCHAN_NOTIFICATION         0x10
 
 #define CCHAN_CONNECT_TIMEOUT_SEC  5
+#define CCHAN_RESPONSE_TIMEOUT_SEC 5
 
 struct interface_info {
     uint32_t    link_id;
@@ -44,14 +45,18 @@ struct cchan_notification {
     struct interface_info if_info[MAX_INTERFACES];
 } __attribute__((__packed__));
 #define MIN_NOTIFICATION_LEN (offsetof(struct cchan_notification, if_info))
+#define MAX_NOTIFICATION_LEN (sizeof(struct cchan_notification))
 
 #ifdef CONTROLLER
-int process_notification(const char* packet, unsigned int pkt_len);
+int process_notification(int sockfd, const char* packet, unsigned int pkt_len);
 #endif
 
 #ifdef GATEWAY
 int send_notification(int max_tries);
 uint32_t get_secret_word();
+
+extern uint32_t remote_unique_id;
+extern uint32_t remote_secret_word;
 #endif
 
 #endif //_CONTCHAN_H_

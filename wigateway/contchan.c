@@ -19,6 +19,9 @@
  * TODO: May want separate secret words for each controller. */
 static uint32_t secret_word = 0;
 
+uint32_t remote_secret_word = 0;
+uint32_t remote_unique_id = 0;
+
 static int _send_notification(const char *ifname);
 
 int send_notification(int max_tries)
@@ -135,6 +138,21 @@ static int _send_notification(const char *ifname)
         close(sockfd);
         return -1;
     }
+
+    set_nonblock(sockfd, NONBLOCKING);
+    timeout.tv_sec = CCHAN_RESPONSE_TIMEOUT_SEC;
+    timeout.tv_usec = 0;
+
+    bytes = recv_timeout(sockfd, &notification, 
+            sizeof(notification), 0, &timeout);
+    if(bytes < 0) {
+        ERROR_MSG("Receiving notification response failed");
+        close(sockfd);
+        return -1;
+    }
+
+    remote_unique_id = ntohs(notification.unique_id);
+    remote_secret_word = notification.secret_word;
 
     close(sockfd);
     return 0;
