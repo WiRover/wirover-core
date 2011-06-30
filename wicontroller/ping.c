@@ -324,6 +324,8 @@ static void process_ping_request(char *buffer, int len,
                 virt_add_remote_link(&private_ip, &from_in.sin_addr,
                     from_in.sin_port);
             }
+
+            db_update_link(gw, ife);
         }
     } else {
         /* The main reason for adding missing links on ping packets is if
@@ -354,6 +356,8 @@ static void process_ping_request(char *buffer, int len,
             virt_add_remote_link(&private_ip, &from_in.sin_addr, 
                     from_in.sin_port);
         }
+
+        db_update_link(gw, ife);
     }
 
     ife->last_ping_time = time(0);
@@ -421,8 +425,11 @@ static void remove_stale_links(int link_timeout, int node_timeout)
 
         DL_FOREACH_SAFE(gw->head_interface, ife, tmp_ife) {
             if((now - ife->last_ping_time) >= link_timeout) {
-                if(ife->state == ACTIVE)
+                if(ife->state == ACTIVE) {
                     gw->active_interfaces--;
+
+                    db_update_link(gw, ife);
+                }
 
                 virt_remove_remote_link(&private_ip, &ife->public_ip);
                 
@@ -437,6 +444,9 @@ static void remove_stale_links(int link_timeout, int node_timeout)
         }
 
         if(num_ifaces == 0 && (now - gw->last_ping_time) >= node_timeout) {
+            gw->state = INACTIVE;
+            db_update_gateway(gw);
+
             virt_remove_remote_node(&private_ip);
 
             DEBUG_MSG("Removed node %hu due to timeout", gw->unique_id);

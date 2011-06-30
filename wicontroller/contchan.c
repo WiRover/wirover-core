@@ -3,6 +3,7 @@
 #include <arpa/inet.h>
 
 #include "contchan.h"
+#include "database.h"
 #include "debug.h"
 #include "gateway.h"
 #include "rootchan.h"
@@ -52,8 +53,11 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len)
             add_gateway(gw);
     }
 
-    if(gw)
+    if(gw) {
         send_response(sockfd, gw);
+
+        db_update_gateway(gw);
+    }
 
     return 0;
 }
@@ -66,6 +70,8 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
     assert(notif);
 
     struct gateway* gw = alloc_gateway();
+
+    gw->state = ACTIVE;
     copy_ipaddr(&notif->priv_ip, &gw->private_ip);
     gw->unique_id = ntohs(notif->unique_id);
     gw->secret_word = notif->secret_word;
@@ -115,6 +121,7 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
 {
     assert(gw && notif);
 
+    gw->state = ACTIVE;
     gw->secret_word = notif->secret_word;
 
     do {

@@ -10,6 +10,8 @@
 struct interface;
 
 struct gateway {
+    int state;
+
     ipaddr_t       private_ip;
     unsigned short unique_id;
 

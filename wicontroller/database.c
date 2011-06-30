@@ -80,7 +80,82 @@ void close_database()
     database = 0;
 }
 
-int db_update_gps(struct gateway *gw, struct gps_payload *gps)
+int db_update_gateway(const struct gateway *gw)
+{
+    if(!database)
+        return -1;
+
+    if(pthread_mutex_lock(&database_lock) != 0) {
+        DEBUG_MSG("pthread_mutex_lock failed");
+        return -1;
+    }
+
+    int len;
+    if(gw->state == ACTIVE) {
+        char priv_ip[INET6_ADDRSTRLEN];
+        ipaddr_to_string(&gw->private_ip, priv_ip, sizeof(priv_ip));
+
+        len = snprintf(query_buffer, sizeof(query_buffer),
+                "insert into gateways (id, state, private_ip)"
+                "values (%hu, %d, '%s')"
+                "on duplicate key update state=%d, private_ip='%s'",
+                gw->unique_id, gw->state, priv_ip,
+                gw->state, priv_ip);
+    } else {
+        len = snprintf(query_buffer, sizeof(query_buffer),
+                "insert into gateways (id, state, private_ip)"
+                "values (%hu, %d, NULL)"
+                "on duplicate key update state=%d, private_ip=NULL",
+                gw->unique_id, gw->state, gw->state);
+    }
+
+    int res = mysql_real_query(database, query_buffer, len);
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto unlock_and_return;
+    }
+
+unlock_and_return:
+    pthread_mutex_unlock(&database_lock);
+    return res;
+}
+
+int db_update_link(const struct gateway *gw, const struct interface *ife)
+{
+    if(!database)
+        return -1;
+
+    // Do not update database if link's network name is unknown
+    if(!ife->network[0])
+        return 0;
+
+    if(pthread_mutex_lock(&database_lock) != 0) {
+        DEBUG_MSG("pthread_mutex_lock failed");
+        return -1;
+    }
+
+    char pub_ip[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET, &ife->public_ip, pub_ip, sizeof(pub_ip));
+
+    int len = snprintf(query_buffer, sizeof(query_buffer),
+            "insert into links (node_id, network, ip, state)"
+            "values (%hu, '%s', '%s', %d)"
+            "on duplicate key update ip='%s', state=%d",
+            gw->unique_id, ife->network, pub_ip, ife->state,
+            pub_ip, ife->state);
+    
+    int res = mysql_real_query(database, query_buffer, len);
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto unlock_and_return;
+    }
+
+unlock_and_return:
+    pthread_mutex_unlock(&database_lock);
+    return res;
+}
+
+int db_update_gps(struct gateway *gw, const struct gps_payload *gps)
 {
     if(!database)
         return -1;
@@ -117,7 +192,7 @@ unlock_and_return:
     return res;
 }
 
-int db_update_pings(struct gateway *gw, struct interface *ife, int rtt)
+int db_update_pings(const struct gateway *gw, const struct interface *ife, int rtt)
 {
     if(!database)
         return -1;
