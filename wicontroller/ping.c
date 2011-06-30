@@ -426,6 +426,7 @@ static void remove_stale_links(int link_timeout, int node_timeout)
         DL_FOREACH_SAFE(gw->head_interface, ife, tmp_ife) {
             if((now - ife->last_ping_time) >= link_timeout) {
                 if(ife->state == ACTIVE) {
+                    ife->state = INACTIVE;
                     gw->active_interfaces--;
 
                     db_update_link(gw, ife);
