@@ -57,6 +57,12 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len)
         send_response(sockfd, gw);
 
         db_update_gateway(gw);
+
+        // TODO: We really only need to update links that have changed
+        const struct interface *ife;
+        DL_FOREACH(gw->head_interface, ife) {
+            db_update_link(gw, ife);
+        }
     }
 
     return 0;
