@@ -80,7 +80,7 @@ void close_database()
     database = 0;
 }
 
-int db_update_gateway(const struct gateway *gw)
+int db_update_gateway(const struct gateway *gw, int state_change)
 {
     if(!database)
         return -1;
@@ -95,18 +95,35 @@ int db_update_gateway(const struct gateway *gw)
         char priv_ip[INET6_ADDRSTRLEN];
         ipaddr_to_string(&gw->private_ip, priv_ip, sizeof(priv_ip));
 
-        len = snprintf(query_buffer, sizeof(query_buffer),
-                "insert into gateways (id, state, private_ip)"
-                "values (%hu, %d, '%s')"
-                "on duplicate key update state=%d, private_ip='%s'",
-                gw->unique_id, gw->state, priv_ip,
-                gw->state, priv_ip);
+        if(state_change) {
+            len = snprintf(query_buffer, sizeof(query_buffer),
+                    "insert into gateways (id, state, event_time, private_ip)"
+                    "values (%hu, %d, NOW(), '%s')"
+                    "on duplicate key update state=%d, event_time=NOW(), private_ip='%s'",
+                    gw->unique_id, gw->state, priv_ip,
+                    gw->state, priv_ip);
+        } else {
+            len = snprintf(query_buffer, sizeof(query_buffer),
+                    "insert into gateways (id, state, private_ip)"
+                    "values (%hu, %d, '%s')"
+                    "on duplicate key update state=%d, private_ip='%s'",
+                    gw->unique_id, gw->state, priv_ip,
+                    gw->state, priv_ip);
+        }
     } else {
-        len = snprintf(query_buffer, sizeof(query_buffer),
-                "insert into gateways (id, state, private_ip)"
-                "values (%hu, %d, NULL)"
-                "on duplicate key update state=%d, private_ip=NULL",
-                gw->unique_id, gw->state, gw->state);
+        if(state_change) {
+            len = snprintf(query_buffer, sizeof(query_buffer),
+                    "insert into gateways (id, state, event_time, private_ip)"
+                    "values (%hu, %d, NOW(), NULL)"
+                    "on duplicate key update state=%d, event_time=NOW(), private_ip=NULL",
+                    gw->unique_id, gw->state, gw->state);
+        } else {
+            len = snprintf(query_buffer, sizeof(query_buffer),
+                    "insert into gateways (id, state, private_ip)"
+                    "values (%hu, %d, NULL)"
+                    "on duplicate key update state=%d, private_ip=NULL",
+                    gw->unique_id, gw->state, gw->state);
+        }
     }
 
     int res = mysql_real_query(database, query_buffer, len);
@@ -138,9 +155,9 @@ int db_update_link(const struct gateway *gw, const struct interface *ife)
     inet_ntop(AF_INET, &ife->public_ip, pub_ip, sizeof(pub_ip));
 
     int len = snprintf(query_buffer, sizeof(query_buffer),
-            "insert into links (node_id, network, ip, state)"
-            "values (%hu, '%s', '%s', %d)"
-            "on duplicate key update ip='%s', state=%d",
+            "insert into links (node_id, network, ip, state, updated)"
+            "values (%hu, '%s', '%s', %d, NOW())"
+            "on duplicate key update ip='%s', state=%d, updated=NOW()",
             gw->unique_id, ife->network, pub_ip, ife->state,
             pub_ip, ife->state);
     

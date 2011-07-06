@@ -15,7 +15,7 @@ struct gateway;
 struct gps_payload;
 struct interface;
 
-int db_update_gateway(const struct gateway *gw);
+int db_update_gateway(const struct gateway *gw, int state_change);
 int db_update_link(const struct gateway *gw, const struct interface *ife);
 int db_update_gps(struct gateway *gw, const struct gps_payload *gps);
 int db_update_pings(const struct gateway *gw, const struct interface *ife, int rtt);

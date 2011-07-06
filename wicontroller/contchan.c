@@ -44,6 +44,8 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len)
         return -1;
     }
     
+    int state_change = 0;
+
     struct gateway* gw = lookup_gateway_by_id(ntohs(notif->unique_id));
     if(gw) {
         update_gateway(gw, notif);
@@ -51,12 +53,14 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len)
         gw = make_gateway(notif);
         if(gw)
             add_gateway(gw);
+
+        state_change = 1;
     }
 
     if(gw) {
         send_response(sockfd, gw);
 
-        db_update_gateway(gw);
+        db_update_gateway(gw, state_change);
 
         // TODO: We really only need to update links that have changed
         const struct interface *ife;

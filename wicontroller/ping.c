@@ -446,7 +446,7 @@ static void remove_stale_links(int link_timeout, int node_timeout)
 
         if(num_ifaces == 0 && (now - gw->last_ping_time) >= node_timeout) {
             gw->state = INACTIVE;
-            db_update_gateway(gw);
+            db_update_gateway(gw, 1);
 
             virt_remove_remote_node(&private_ip);
 
