@@ -13,6 +13,7 @@
 
 #define USEC_PER_SEC        1000000
 #define PING_LOSS_THRESHOLD 4
+#define RTT_EWMA_WEIGHT     0.2
 
 struct gps_payload {
     uint8_t status;

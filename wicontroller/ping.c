@@ -402,9 +402,13 @@ static void process_ping_response(char *buffer, int len,
     uint32_t recv_ts = timeval_to_usec(recv_time);
     long rtt = (long)recv_ts - (long)send_ts;
 
-    DEBUG_MSG("Ping from node %hu link %d (%s) rtt %lu", node_id, link_id, 
-            ife->network, rtt);
+    ife->avg_rtt = ewma_update(ife->avg_rtt, (double)rtt, RTT_EWMA_WEIGHT);
+
+    DEBUG_MSG("Ping from node %hu link %d (%s) rtt %lu avg_rtt %.0f",
+            node_id, link_id, ife->network, rtt, ife->avg_rtt);
+
     db_update_pings(gw, ife, rtt);
+    db_update_link(gw, ife);
 }
 
 static void remove_stale_links(int link_timeout, int node_timeout)

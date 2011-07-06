@@ -207,12 +207,10 @@ int copy_active_interfaces(const struct interface *head, struct interface_copy *
 }
 
 /*
- * EMA UPDATE
- *
- * Performs an exponential moving average.  If the old value is NaN, then it is
- * assumed that new_val is the first value in the sequence.
+ * Performs an exponential weighted moving average.  If the old value is NaN, 
+ * then it is assumed that new_val is the first value in the sequence.
  */
-double ema_update(double old_val, double new_val, double new_weight)
+double ewma_update(double old_val, double new_val, double new_weight)
 {
     if(isnan(old_val)) {
         return new_val;

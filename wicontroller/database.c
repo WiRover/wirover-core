@@ -155,11 +155,11 @@ int db_update_link(const struct gateway *gw, const struct interface *ife)
     inet_ntop(AF_INET, &ife->public_ip, pub_ip, sizeof(pub_ip));
 
     int len = snprintf(query_buffer, sizeof(query_buffer),
-            "insert into links (node_id, network, ip, state, updated)"
-            "values (%hu, '%s', '%s', %d, NOW())"
-            "on duplicate key update ip='%s', state=%d, updated=NOW()",
-            gw->unique_id, ife->network, pub_ip, ife->state,
-            pub_ip, ife->state);
+            "insert into links (node_id, network, ip, avg_rtt, state, updated)"
+            "values (%hu, '%s', '%s', %f, %d, NOW())"
+            "on duplicate key update ip='%s', avg_rtt=%f, state=%d, updated=NOW()",
+            gw->unique_id, ife->network, pub_ip, ife->avg_rtt, ife->state,
+            pub_ip, ife->avg_rtt, ife->state);
     
     int res = mysql_real_query(database, query_buffer, len);
     if(res != 0) {
