@@ -285,7 +285,7 @@ int db_update_passive(const struct gateway *gw, struct interface *ife,
 
     int len = snprintf(query_buffer, sizeof(query_buffer),
             "insert into passive (node_id, network, time, interval_len, "
-            "bytes_tx, bytes_rx, rate_down, rate_up, packets_tx, packets_rx values "
+            "bytes_tx, bytes_rx, rate_down, rate_up, packets_tx, packets_rx) values "
             "(%hu, '%s', NOW(), %u, %llu, %llu, %f, %f, %u, %u)",
             gw->unique_id, ife->network, time_diff,
             bytes_tx_diff, bytes_rx_diff,
