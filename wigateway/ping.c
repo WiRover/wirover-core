@@ -165,13 +165,17 @@ static int send_ping(struct interface* ife,
     pkt->link_id = htonl(ife->index);
     pkt->secret_word = get_secret_word();
 
+    struct gps_payload *gps = (struct gps_payload *)
+        ((char *)pkt + sizeof(struct ping_packet));
+    gps->next = PING_NO_PAYLOAD;
+
     // Attempt to stuff GPS data into the packet
-    if(fill_gps_payload(&pkt->gps) < 0) {
+    if(fill_gps_payload(gps) < 0) {
         pkt->type = PING_REQUEST;
         send_size = MIN_PING_PACKET_SIZE;
     } else {
-        pkt->type = PING_REQUEST_WITH_GPS;
-        send_size = PING_WITH_GPS_SIZE;
+        pkt->type = PING_REQUEST | PING_GPS_PAYLOAD;
+        send_size = MIN_PING_PACKET_SIZE + sizeof(struct gps_payload);
     }
    
     // Store a timestamp in the packet for calculating RTT.
@@ -297,7 +301,7 @@ static int handle_incoming(int sockfd, int timeout)
      * controller is restarted), then it responds with the error bit set.  We
      * can re-establish state with the controller by sending a notification.
      */
-    if(pkt->type == PING_RESPONSE_WITH_ERROR) {
+    if(pkt->type == PING_RESPONSE_ERROR) {
         DEBUG_MSG("Controller responded with an error, will send a notification");
         send_response = 0;
         notif_needed = 1;
@@ -369,19 +373,34 @@ static int send_second_response(const struct interface *ife,
         return -1;
     }
 
-    char response_buffer[MIN_PING_PACKET_SIZE];
-    memcpy(response_buffer, buffer, MIN_PING_PACKET_SIZE);
+    int send_size = MIN_PING_PACKET_SIZE + sizeof(struct passive_payload);
+    char *response = malloc(send_size);
+    if(!response) {
+        DEBUG_MSG("out of memory");
+        return -1;
+    }
+
+    memcpy(response, buffer, MIN_PING_PACKET_SIZE);
 
     struct ping_packet *ping = (struct ping_packet *)
-            (response_buffer + sizeof(struct tunhdr));
+            (response + sizeof(struct tunhdr));
 
-    ping->type = PING_SECOND_RESPONSE;
+    ping->type = PING_SECOND_RESPONSE | PING_PASSIVE_PAYLOAD;
     ping->src_id = htons(get_unique_id());
     ping->secret_word = get_secret_word();
     ping->sender_ts = 0;
 
-    int result = sendto(sockfd, response_buffer, 
-            MIN_PING_PACKET_SIZE, 0, to, to_len);
+    struct passive_payload *passive = (struct passive_payload *)
+        ((char *)ping + sizeof(struct ping_packet));
+
+    if(fill_passive_payload(ife->name, passive) < 0) {
+        send_size = MIN_PING_PACKET_SIZE;
+    }
+
+    int result = sendto(sockfd, response, send_size, 0, to, to_len);
+
+    free(response);
+
     if(result < 0) {
         ERROR_MSG("sendto failed");
         close(sockfd);
@@ -426,4 +445,5 @@ static void mark_inactive_interfaces()
         send_notification(1);
     }
 }
+
 

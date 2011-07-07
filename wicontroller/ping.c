@@ -1,3 +1,5 @@
+#define _BSD_SOURCE /* required for be64toh */
+
 #include <libconfig.h>
 #include <stropts.h>
 #include <unistd.h>
@@ -7,6 +9,7 @@
 #include <netinet/in.h>
 #include <sys/time.h>
 #include <netdb.h>
+#include <endian.h>
 
 #include "config.h"
 #include "configuration.h"
@@ -26,7 +29,7 @@
 
 static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd);
-static unsigned char ping_request_type(const char *buffer, int len);
+static int ping_request_valid(const char *buffer, int len);
 static int send_response(int sockfd, const struct gateway *gw,
         unsigned char type, const char *buffer, 
         int len, const struct sockaddr *to, socklen_t to_len);
@@ -35,6 +38,8 @@ static void process_ping_request(char *buffer, int len,
 static void process_ping_response(char *buffer, int len, 
         const struct sockaddr *from, socklen_t from_len,
         const struct timeval *recv_time);
+static void process_ping_payload(char *buffer, int len,
+        struct gateway *gw, struct interface *ife);
 static void remove_stale_links(int link_timeout, int node_timeout);
 
 static int          running;
@@ -139,9 +144,11 @@ static int handle_incoming(int sockfd)
         ERROR_MSG("recvfrom failed (socket %d)", sockfd);
         return -1;
     }
-
-    unsigned char type = ping_request_type(buffer, bytes_recvd);
     
+    int valid = ping_request_valid(buffer, bytes_recvd);
+    if(!valid)
+        return 0;
+
     const struct ping_packet *ping = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
     unsigned short node_id = ntohs(ping->src_id);
@@ -149,23 +156,23 @@ static int handle_incoming(int sockfd)
     if(node_id != 0)
         gw = lookup_gateway_by_id(node_id);
 
-    switch(type) {
+    switch(PING_TYPE(ping->type)) {
         case PING_REQUEST:
-        case PING_REQUEST_WITH_GPS:
-            if(send_response(sockfd, gw, PING_RESPONSE, buffer, bytes_recvd, 
-                        (struct sockaddr *)&from, from_len) < 0) {
-                ERROR_MSG("Failed to send ping response");
-                return 0;
-            }
+            if(valid > 0) {
+                if(send_response(sockfd, gw, PING_RESPONSE, buffer, bytes_recvd, 
+                            (struct sockaddr *)&from, from_len) < 0) {
+                    ERROR_MSG("Failed to send ping response");
+                    return 0;
+                }
 
-            process_ping_request(buffer, bytes_recvd, 
-                    (struct sockaddr *)&from, from_len);
-            break;
-        case PING_REQUEST_WITH_ERROR:
-            if(send_response(sockfd, 0, PING_RESPONSE_WITH_ERROR, buffer, 
-                        bytes_recvd, (struct sockaddr *)&from, from_len) < 0) {
-                ERROR_MSG("Failed to send ping response");
-                return 0;
+                process_ping_request(buffer, bytes_recvd, 
+                        (struct sockaddr *)&from, from_len);
+            } else {
+                if(send_response(sockfd, 0, PING_RESPONSE_ERROR, buffer, 
+                            bytes_recvd, (struct sockaddr *)&from, from_len) < 0) {
+                    ERROR_MSG("Failed to send ping response");
+                    return 0;
+                }
             }
 
             break;
@@ -191,19 +198,15 @@ static int handle_incoming(int sockfd)
  * Do minimal preprocessing to determing the type of ping packet
  * and whether it is valid or not.
  *
- * Returns PING_INVALID if the ping packet is invalid, otherwise returns
- * one of the following:
- *
- * PING_REQUEST
- * PING_REQUEST_WITH_GPS
- * PING_REQUEST_WITH_ERROR
- * PING_RESPONSE
- * PING_SECOND_RESPONSE
+ * Returns:
+ *   0 for an invalid ping (drop, no response)
+ *   1 for a valid ping request
+ *   -1 for a ping request that should receive an error response
  */
-static unsigned char ping_request_type(const char *buffer, int len)
+static int ping_request_valid(const char *buffer, int len)
 {
     if(len < MIN_PING_PACKET_SIZE)
-        return PING_INVALID;
+        return 0;
     
     const struct ping_packet *ping = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
@@ -212,7 +215,7 @@ static unsigned char ping_request_type(const char *buffer, int len)
      * the root server. */
     unsigned short node_id = ntohs(ping->src_id);
     if(node_id == 0)
-        return PING_INVALID;
+        return 0;
 
     struct gateway *gw = lookup_gateway_by_id(node_id);
 
@@ -223,16 +226,16 @@ static unsigned char ping_request_type(const char *buffer, int len)
      * dropped. */
     if(ping->secret_word && gw && ping->secret_word != gw->secret_word) {
         DEBUG_MSG("Secret word mismatch for node %hu", node_id);
-        return PING_INVALID;
+        return 0;
     } else if(ping->secret_word && !gw) {
         // This can happen if the controller was restarted.  We will send a
         // response with the error bit set so that the gateway will know to
         // send a new notification.
         DEBUG_MSG("Unrecognized gateway (%hu)", node_id);
-        return PING_REQUEST_WITH_ERROR;
+        return -1;
     }
 
-    return ping->type;
+    return 1;
 }
 
 /*
@@ -362,11 +365,8 @@ static void process_ping_request(char *buffer, int len,
 
     ife->last_ping_time = time(0);
 
-    if(ping->type == PING_REQUEST_WITH_GPS && len >= PING_WITH_GPS_SIZE) {
-        DEBUG_MSG("Node %hu gps %f, %f", node_id,
-                ping->gps.latitude, ping->gps.longitude);
-        db_update_gps(gw, &ping->gps);
-    }
+    process_ping_payload(buffer + sizeof(struct tunhdr), 
+            len - sizeof(struct tunhdr), gw, ife);
 }
 
 /*
@@ -409,6 +409,51 @@ static void process_ping_response(char *buffer, int len,
 
     db_update_pings(gw, ife, rtt);
     db_update_link(gw, ife);
+
+    process_ping_payload(buffer + sizeof(struct tunhdr), 
+            len - sizeof(struct tunhdr), gw, ife);
+}
+
+static void process_ping_payload(char *buffer, int len, 
+        struct gateway *gw, struct interface *ife)
+{
+    int curr_payload_size = sizeof(struct ping_packet);
+    int next_type = PING_NEXT(buffer[0]);
+
+    while(next_type != PING_NO_PAYLOAD && len > curr_payload_size) {
+        buffer += curr_payload_size;
+        len    -= curr_payload_size;
+
+        switch(next_type) {
+            case PING_GPS_PAYLOAD:
+                if(len >= sizeof(struct gps_payload)) {
+                    struct gps_payload *gps = (struct gps_payload *)buffer;
+
+                    DEBUG_MSG("Node %hu gps %f, %f", gw->unique_id,
+                            gps->latitude, gps->longitude);
+
+                    db_update_gps(gw, gps);
+                }
+
+                curr_payload_size = sizeof(struct gps_payload);
+                break;
+
+            case PING_PASSIVE_PAYLOAD:
+                if(len >= sizeof(struct passive_payload)) {
+                    struct passive_payload *passive = (struct passive_payload *)buffer;
+
+                    DEBUG_MSG("Node %hu network %s tx %llu rx %llu",
+                            gw->unique_id, ife->network,
+                            be64toh(passive->bytes_tx),
+                            be64toh(passive->bytes_rx));
+                }
+
+                curr_payload_size = sizeof(struct passive_payload);
+                break;
+        }
+
+        next_type = PING_TYPE(buffer[0]);
+    }
 }
 
 static void remove_stale_links(int link_timeout, int node_timeout)
