@@ -446,6 +446,8 @@ static void process_ping_payload(char *buffer, int len,
                             gw->unique_id, ife->network,
                             be64toh(passive->bytes_tx),
                             be64toh(passive->bytes_rx));
+
+                    db_update_passive(gw, ife, passive);
                 }
 
                 curr_payload_size = sizeof(struct passive_payload);

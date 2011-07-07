@@ -1,3 +1,5 @@
+#define _BSD_SOURCE /* Required for be64toh */
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <gps.h>
@@ -18,6 +20,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
+#include <endian.h>
 
 #include "config.h"
 #include "database.h"
@@ -234,6 +237,61 @@ int db_update_pings(const struct gateway *gw, const struct interface *ife, int r
                 "(%hu, '%s', %d)",
                 gw->unique_id, ife->network, rtt);
     }
+
+    int res = mysql_real_query(database, query_buffer, len);
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+    }
+
+    pthread_mutex_unlock(&database_lock);
+    return res;
+}
+
+int db_update_passive(const struct gateway *gw, struct interface *ife, 
+                const struct passive_payload *passive)
+{
+    time_t now = time(0);
+    uint64_t bytes_tx = be64toh(passive->bytes_tx);
+    uint64_t bytes_rx = be64toh(passive->bytes_rx);
+    uint32_t packets_tx = ntohl(passive->packets_tx);
+    uint32_t packets_rx = ntohl(passive->packets_rx);
+
+    if(ife->last_passive == 0 ||
+            bytes_tx < ife->prev_bytes_tx ||
+            bytes_rx < ife->prev_bytes_rx ||
+            packets_tx < ife->prev_packets_tx ||
+            packets_rx < ife->prev_packets_rx) {
+        ife->last_passive = now;
+        ife->prev_bytes_tx = bytes_tx;
+        ife->prev_bytes_rx = bytes_rx;
+        ife->prev_packets_tx = packets_tx;
+        ife->prev_packets_rx = packets_rx;
+        return 0;
+    }
+
+    unsigned time_diff = now - ife->last_passive;
+    unsigned long long bytes_tx_diff = bytes_tx - ife->prev_bytes_tx;
+    unsigned long long bytes_rx_diff = bytes_rx - ife->prev_bytes_rx;
+    unsigned packets_tx_diff = packets_tx - ife->prev_packets_tx;
+    unsigned packets_rx_diff = packets_rx - ife->prev_packets_rx;
+
+    if(!database)
+        return -1;
+
+    if(pthread_mutex_lock(&database_lock) != 0) {
+        DEBUG_MSG("pthread_mutex_lock failed");
+        return -1;
+    }
+
+    int len = snprintf(query_buffer, sizeof(query_buffer),
+            "insert into passive (node_id, network, time, interval_len, "
+            "bytes_tx, bytes_rx, rate_down, rate_up, packets_tx, packets_rx values "
+            "(%hu, '%s', NOW(), %u, %llu, %llu, %f, %f, %u, %u)",
+            gw->unique_id, ife->network, time_diff,
+            bytes_tx_diff, bytes_rx_diff,
+            (double)bytes_rx_diff / (double)time_diff,
+            (double)bytes_tx_diff / (double)time_diff,
+            packets_tx_diff, packets_rx_diff);
 
     int res = mysql_real_query(database, query_buffer, len);
     if(res != 0) {

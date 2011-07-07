@@ -36,6 +36,14 @@ struct interface {
     // default gateway for routing if needed
     struct in_addr    gateway_ip;
 
+#ifdef CONTROLLER
+    time_t      last_passive;
+    uint64_t    prev_bytes_tx;
+    uint64_t    prev_bytes_rx;
+    uint32_t    prev_packets_tx;
+    uint32_t    prev_packets_rx;
+#endif /* CONTROLLER */
+
     struct interface* next;
     struct interface* prev;
 };
