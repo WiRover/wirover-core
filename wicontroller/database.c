@@ -268,12 +268,20 @@ int db_update_passive(const struct gateway *gw, struct interface *ife,
         ife->prev_packets_rx = packets_rx;
         return 0;
     }
-
+    
     unsigned time_diff = now - ife->last_passive;
     unsigned long long bytes_tx_diff = bytes_tx - ife->prev_bytes_tx;
     unsigned long long bytes_rx_diff = bytes_rx - ife->prev_bytes_rx;
     unsigned packets_tx_diff = packets_tx - ife->prev_packets_tx;
     unsigned packets_rx_diff = packets_rx - ife->prev_packets_rx;
+    double rate_up = (double)(8 * bytes_tx_diff) / (double)(1000000 * time_diff);
+    double rate_down = (double)(8 * bytes_rx_diff) / (double)(1000000 * time_diff);
+        
+    ife->last_passive = now;
+    ife->prev_bytes_tx = bytes_tx;
+    ife->prev_bytes_rx = bytes_rx;
+    ife->prev_packets_tx = packets_tx;
+    ife->prev_packets_rx = packets_rx;
 
     if(!database)
         return -1;
@@ -289,8 +297,7 @@ int db_update_passive(const struct gateway *gw, struct interface *ife,
             "(%hu, '%s', NOW(), %u, %llu, %llu, %f, %f, %u, %u)",
             gw->unique_id, ife->network, time_diff,
             bytes_tx_diff, bytes_rx_diff,
-            (double)bytes_rx_diff / (double)time_diff,
-            (double)bytes_tx_diff / (double)time_diff,
+            rate_up, rate_down,
             packets_tx_diff, packets_rx_diff);
 
     int res = mysql_real_query(database, query_buffer, len);
