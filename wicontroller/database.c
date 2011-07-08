@@ -159,8 +159,8 @@ int db_update_link(const struct gateway *gw, const struct interface *ife)
 
     int len = snprintf(query_buffer, sizeof(query_buffer),
             "insert into links (node_id, network, ip, avg_rtt, state, updated)"
-            "values (%hu, '%s', '%s', %f, %d, NOW())"
-            "on duplicate key update ip='%s', avg_rtt=%f, state=%d, updated=NOW()",
+            "values (%hu, '%s', '%s', '%f', %d, NOW())"
+            "on duplicate key update ip='%s', avg_rtt='%f', state=%d, updated=NOW()",
             gw->unique_id, ife->network, pub_ip, ife->avg_rtt, ife->state,
             pub_ip, ife->avg_rtt, ife->state);
     
@@ -294,7 +294,7 @@ int db_update_passive(const struct gateway *gw, struct interface *ife,
     int len = snprintf(query_buffer, sizeof(query_buffer),
             "insert into passive (node_id, network, time, interval_len, "
             "bytes_tx, bytes_rx, rate_down, rate_up, packets_tx, packets_rx) values "
-            "(%hu, '%s', NOW(), %u, %llu, %llu, %f, %f, %u, %u)",
+            "(%hu, '%s', NOW(), %u, %llu, %llu, '%f', '%f', %u, %u)",
             gw->unique_id, ife->network, time_diff,
             bytes_tx_diff, bytes_rx_diff,
             rate_up, rate_down,
