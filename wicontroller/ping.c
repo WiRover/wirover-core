@@ -408,6 +408,7 @@ static void process_ping_response(char *buffer, int len,
             node_id, link_id, ife->network, rtt, ife->avg_rtt);
 
     db_update_pings(gw, ife, rtt);
+    db_update_link(gw, ife);
 
     process_ping_payload(buffer + sizeof(struct tunhdr), 
             len - sizeof(struct tunhdr), gw, ife);
