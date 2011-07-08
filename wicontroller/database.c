@@ -303,8 +303,22 @@ int db_update_passive(const struct gateway *gw, struct interface *ife,
     int res = mysql_real_query(database, query_buffer, len);
     if(res != 0) {
         DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto unlock_and_return;
+    }
+    
+    len = snprintf(query_buffer, sizeof(query_buffer),
+            "update links set bytes_tx=bytes_tx+%llu, bytes_rx=bytes_rx+%llu, "
+            "month_tx=month_tx+%llu, month_rx=month_rx+%llu, updated=NOW() "
+            "where node_id=%hu and network='%s'",
+            bytes_tx_diff, bytes_rx_diff, bytes_tx_diff, bytes_rx_diff,
+            gw->unique_id, ife->network);
+    
+    res = mysql_real_query(database, query_buffer, len);
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
     }
 
+unlock_and_return:
     pthread_mutex_unlock(&database_lock);
     return res;
 }
