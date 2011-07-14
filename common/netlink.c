@@ -8,6 +8,7 @@
 #include <linux/rtnetlink.h>
 #include <net/if.h>
 #include <ifaddrs.h>
+#include <arpa/inet.h>
 
 #include "config.h"
 #include "contchan.h"
@@ -270,7 +271,62 @@ int handle_netlink_message(const char* msg, int msg_len)
             
             should_notify = 1;
         } else if(nh->nlmsg_type == RTM_NEWROUTE) {
-            DEBUG_MSG("Received RTM_NEWROUTE");
+            struct rtmsg *rtm = (struct rtmsg *)NLMSG_DATA(nh);
+            struct rtattr *rta = RTM_RTA(rtm);
+
+            if(rtm->rtm_family == AF_INET && rtm->rtm_table == RT_TABLE_MAIN &&
+                    rtm->rtm_protocol == RTPROT_BOOT) {
+                struct in_addr dst;
+                struct in_addr gwaddr;
+                int ifindex = 0;
+
+                int dst_set = 0;
+                int gwaddr_set = 0;
+                int ifindex_set = 0;
+
+                int rta_len;
+                for(rta_len = RTM_PAYLOAD(nh); rta_len > 0 && RTA_OK(rta, rta_len);
+                        rta = RTA_NEXT(rta, rta_len)) {
+                    switch(rta->rta_type) {
+                        case RTA_DST:
+                            memcpy(&dst, RTA_DATA(rta), sizeof(dst));
+                            dst_set = 1;
+                            break;
+                        case RTA_GATEWAY:
+                            memcpy(&gwaddr, RTA_DATA(rta), sizeof(gwaddr));
+                            gwaddr_set = 1;
+                            break;
+                        case RTA_OIF:
+                            ifindex = *((int *)RTA_DATA(rta));
+                            ifindex_set = 1;
+                            break;
+                        default:
+                            break;
+                    }
+                }
+
+                if(dst_set && gwaddr_set && ifindex_set) {
+                    char dst_p[INET_ADDRSTRLEN];
+                    char gwaddr_p[INET_ADDRSTRLEN];
+
+                    inet_ntop(AF_INET, &dst, dst_p, sizeof(dst_p));
+                    inet_ntop(AF_INET, &gwaddr, gwaddr_p, sizeof(gwaddr_p));
+
+                    struct interface *ife = find_interface_by_index(
+                            interface_list, ifindex);
+                    if(ife && ife->priority >= 0) {
+                        DEBUG_MSG("RTM_NEWROUTE dst %s gw %s dev %s",
+                                dst_p, gwaddr_p, ife->name);
+
+                        if(dst.s_addr == 0) {
+                            memcpy(&ife->gateway_ip, &gwaddr, 
+                                    sizeof(ife->gateway_ip));
+                            virt_set_gateway_ip(ife->name, &gwaddr);
+                            ping_interface(ife);
+                        }
+                    }
+                }
+            }
         }
     }
 
