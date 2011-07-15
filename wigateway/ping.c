@@ -19,6 +19,7 @@
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
+#include "timing.h"
 #include "tunnel.h"
 
 static int send_ping(struct interface* ife,
@@ -217,36 +218,61 @@ void* ping_thread_func(void* arg)
     // We never want reads to hold up the thread.
     set_nonblock(sockfd, NONBLOCKING);
 
-    ping_all_interfaces();
-    time_t last_ping_time = time(0);
+    // Initialize this so that the first ping will be sent immediately.
+    struct timeval last_ping_time = {
+        .tv_sec = time(0) - ping_interval, .tv_usec = 0};
 
-    unsigned int next_timeout = ping_interval;
+    int num_ifaces = 0;
+    int curr_iface_pos = 0;
+
+    unsigned ping_spacing = ping_interval * USEC_PER_SEC;
+    unsigned next_timeout;
+
     while(1) {
-        struct timeval timeout;
-        timeout.tv_sec = next_timeout;
-        timeout.tv_usec = 0;
+        if(curr_iface_pos >= num_ifaces) {
+            obtain_read_lock(&interface_list_lock);
+            num_ifaces = count_all_interfaces(interface_list);
+            release_read_lock(&interface_list_lock);
+            
+            curr_iface_pos = 0;
+            ping_spacing = ping_interval * USEC_PER_SEC / num_ifaces;
+        }
+
+        struct timeval now;
+        gettimeofday(&now, 0);
+
+        long time_diff = timeval_diff(&now, &last_ping_time);
+        if(time_diff >= ping_spacing) {
+            mark_inactive_interfaces();
+
+            obtain_read_lock(&interface_list_lock);
+            struct interface *ife = find_interface_at_pos(
+                    interface_list, curr_iface_pos);
+            if(ife) {
+                ping_interface(ife);
+            }
+            release_read_lock(&interface_list_lock);
+
+            memcpy(&last_ping_time, &now, sizeof(last_ping_time));
+            next_timeout = ping_spacing;
+        } else {
+            // Set the timeout on select such that it will return in time for
+            // the next ping.
+            next_timeout = ping_spacing - time_diff;
+        }
 
         fd_set read_set;
         FD_ZERO(&read_set);
         FD_SET(sockfd, &read_set);
 
+        struct timeval timeout;
+        set_timeval_usec(next_timeout, &timeout);
+
         int result = select(sockfd+1, &read_set, 0, 0, &timeout);
         if(result > 0 && FD_ISSET(sockfd, &read_set)) {
-            // Most likely we have an incoming ping response.
             handle_incoming(sockfd, ping_interval);
         } else if(result < 0) {
             ERROR_MSG("select failed for ping socket (%d)", sockfd);
-        }
-
-        int time_remaining = ping_interval - (time(0) - last_ping_time);
-        if(time_remaining <= 0) {
-            mark_inactive_interfaces();
-
-            // It is time to send out another round of pings.
-            ping_all_interfaces();
-            last_ping_time = time(0);
-        } else {
-            next_timeout = time_remaining;
         }
     }
 
@@ -421,19 +447,6 @@ static void mark_inactive_interfaces()
     struct interface* curr_ife = interface_list;
     while(curr_ife) {
         if(curr_ife->state == ACTIVE) {
-            int32_t losses = (int32_t)curr_ife->next_ping_seq_no -
-                (int32_t)curr_ife->last_ping_seq_no - 1;
-
-            if(losses >= PING_LOSS_THRESHOLD) {
-                DEBUG_MSG("Marking %s INACTIVE after %d ping losses",
-                        curr_ife->name, losses);
-                
-                upgrade_read_lock(&interface_list_lock);
-                change_interface_state(curr_ife, INACTIVE);
-                downgrade_write_lock(&interface_list_lock);
-
-                notif_needed = 1;
-            }
         }
 
         assert(curr_ife != curr_ife->next);

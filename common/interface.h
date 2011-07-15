@@ -58,9 +58,10 @@ void free_interface(struct interface* ife);
 //These are currently implemented by searching the linked list, since the list
 //will typically contain around 1-3 elements.  One can very easily change
 //these functions to use uthash if it helps.
-struct interface* find_interface_by_index(struct interface* head, unsigned int index);
-struct interface* find_interface_by_name(struct interface* head, const char* name);
-struct interface* find_interface_by_network(struct interface* head, const char* network);
+struct interface *find_interface_by_index(struct interface *head, unsigned int index);
+struct interface *find_interface_by_name(struct interface *head, const char *name);
+struct interface *find_interface_by_network(struct interface *head, const char *network);
+struct interface *find_interface_at_pos(struct interface *head, unsigned pos);
 
 int count_all_interfaces(const struct interface *head);
 int count_active_interfaces(const struct interface *head);

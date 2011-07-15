@@ -42,7 +42,7 @@ void free_interface(struct interface* ife)
     }
 }
 
-struct interface* find_interface_by_index(struct interface* head, unsigned int index)
+struct interface *find_interface_by_index(struct interface *head, unsigned int index)
 {
     while(head) {
         if(head->index == index) {
@@ -56,7 +56,7 @@ struct interface* find_interface_by_index(struct interface* head, unsigned int i
     return 0;
 }
 
-struct interface* find_interface_by_name(struct interface* head, const char* name)
+struct interface *find_interface_by_name(struct interface *head, const char *name)
 {
     assert(name);
 
@@ -72,7 +72,7 @@ struct interface* find_interface_by_name(struct interface* head, const char* nam
     return 0;
 }
 
-struct interface* find_interface_by_network(struct interface* head, const char* network)
+struct interface *find_interface_by_network(struct interface *head, const char *network)
 {
     assert(network);
 
@@ -81,6 +81,23 @@ struct interface* find_interface_by_network(struct interface* head, const char* 
             return head;
         }
 
+        assert(head != head->next);
+        head = head->next;
+    }
+
+    return 0;
+}
+
+struct interface *find_interface_at_pos(struct interface *head, unsigned pos)
+{
+    unsigned i = 0;
+
+    while(head) {
+        if(i == pos)
+            return head;
+
+        i++;
+        
         assert(head != head->next);
         head = head->next;
     }

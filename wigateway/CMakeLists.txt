@@ -14,6 +14,7 @@ add_executable(wigateway
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
+    ${COMMON}/timing.c
     ${COMMON}/kernel.c
 )
 
