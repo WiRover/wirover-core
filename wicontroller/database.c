@@ -28,6 +28,7 @@
 #include "gateway.h"
 #include "interface.h"
 #include "ping.h"
+#include "timing.h"
 
 static MYSQL* database = 0;
 static char query_buffer[1024];
@@ -250,18 +251,20 @@ int db_update_pings(const struct gateway *gw, const struct interface *ife, int r
 int db_update_passive(const struct gateway *gw, struct interface *ife, 
                 const struct passive_payload *passive)
 {
-    time_t now = time(0);
+    struct timeval now;
+    gettimeofday(&now, 0);
+
     uint64_t bytes_tx = be64toh(passive->bytes_tx);
     uint64_t bytes_rx = be64toh(passive->bytes_rx);
     uint32_t packets_tx = ntohl(passive->packets_tx);
     uint32_t packets_rx = ntohl(passive->packets_rx);
 
-    if(ife->last_passive == 0 ||
+    if(ife->last_passive.tv_sec == 0 ||
             bytes_tx < ife->prev_bytes_tx ||
             bytes_rx < ife->prev_bytes_rx ||
             packets_tx < ife->prev_packets_tx ||
             packets_rx < ife->prev_packets_rx) {
-        ife->last_passive = now;
+        memcpy(&ife->last_passive, &now, sizeof(ife->last_passive));
         ife->prev_bytes_tx = bytes_tx;
         ife->prev_bytes_rx = bytes_rx;
         ife->prev_packets_tx = packets_tx;
@@ -269,15 +272,15 @@ int db_update_passive(const struct gateway *gw, struct interface *ife,
         return 0;
     }
     
-    unsigned time_diff = now - ife->last_passive;
+    long time_diff = timeval_diff(&now, &ife->last_passive);
     unsigned long long bytes_tx_diff = bytes_tx - ife->prev_bytes_tx;
     unsigned long long bytes_rx_diff = bytes_rx - ife->prev_bytes_rx;
     unsigned packets_tx_diff = packets_tx - ife->prev_packets_tx;
     unsigned packets_rx_diff = packets_rx - ife->prev_packets_rx;
-    double rate_up = (double)(8 * bytes_tx_diff) / (double)(1000000 * time_diff);
-    double rate_down = (double)(8 * bytes_rx_diff) / (double)(1000000 * time_diff);
+    double rate_up = (double)(8 * bytes_tx_diff) / (double)time_diff;
+    double rate_down = (double)(8 * bytes_rx_diff) / (double)time_diff;
         
-    ife->last_passive = now;
+    memcpy(&ife->last_passive, &now, sizeof(ife->last_passive));
     ife->prev_bytes_tx = bytes_tx;
     ife->prev_bytes_rx = bytes_rx;
     ife->prev_packets_tx = packets_tx;
@@ -294,10 +297,10 @@ int db_update_passive(const struct gateway *gw, struct interface *ife,
     int len = snprintf(query_buffer, sizeof(query_buffer),
             "insert into passive (node_id, network, time, interval_len, "
             "bytes_tx, bytes_rx, rate_down, rate_up, packets_tx, packets_rx) values "
-            "(%hu, '%s', NOW(), %u, %llu, %llu, '%f', '%f', %u, %u)",
+            "(%hu, '%s', NOW(), %ld, %llu, %llu, '%f', '%f', %u, %u)",
             gw->unique_id, ife->network, time_diff,
             bytes_tx_diff, bytes_rx_diff,
-            rate_up, rate_down,
+            rate_down, rate_up,
             packets_tx_diff, packets_rx_diff);
 
     int res = mysql_real_query(database, query_buffer, len);

@@ -3,6 +3,7 @@
 
 #include <time.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <linux/if.h>
 #include <netinet/in.h>
 #include "uthash.h"
@@ -37,11 +38,11 @@ struct interface {
     struct in_addr    gateway_ip;
 
 #ifdef CONTROLLER
-    time_t      last_passive;
-    uint64_t    prev_bytes_tx;
-    uint64_t    prev_bytes_rx;
-    uint32_t    prev_packets_tx;
-    uint32_t    prev_packets_rx;
+    struct timeval last_passive;
+    uint64_t prev_bytes_tx;
+    uint64_t prev_bytes_rx;
+    uint32_t prev_packets_tx;
+    uint32_t prev_packets_rx;
 #endif /* CONTROLLER */
 
     struct interface* next;
