@@ -233,6 +233,17 @@ static int ping_request_valid(const char *buffer, int len)
         // send a new notification.
         DEBUG_MSG("Unrecognized gateway (%hu)", node_id);
         return -1;
+    } else if(ping->secret_word && gw && ping->secret_word == gw->secret_word) {
+        unsigned link_id = ntohl(ping->link_id);
+
+        struct interface *ife = 
+                find_interface_by_index(gw->head_interface, link_id);
+
+        if(!ife) {
+            DEBUG_MSG("Unrecognized interface (%u) for node (%hu)", 
+                    link_id, node_id);
+            return -1;
+        }
     }
 
     return 1;
@@ -290,6 +301,11 @@ static void process_ping_request(char *buffer, int len,
     struct interface *ife = 
         find_interface_by_index(gw->head_interface, link_id);
 
+    if(!ife) {
+        DEBUG_MSG("Error: interface not recognized");
+        return;
+    }
+
     // TODO: Add IPv6 support
     struct sockaddr_in from_in;
     if(sockaddr_to_sockaddr_in(from, from_len, &from_in) < 0) {
@@ -300,63 +316,30 @@ static void process_ping_request(char *buffer, int len,
         return;
     }
         
-    if(ife) {
-        /* The main reason for this check is if the gateway is behind a NAT,
-         * then the IP address and port that it sends in its notification are
-         * not the same as its public IP address and port. */
-        if(memcmp(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr)) ||
-                ife->data_port != from_in.sin_port) {
-            struct in_addr private_ip;
-            ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
-            
-            DEBUG_MSG("Changing node %hu link %hu from %x:%hu to %x:%hu",
-                    gw->unique_id, ife->index,
-                    ntohl(ife->public_ip.s_addr), ntohs(ife->data_port),
-                    ntohl(from_in.sin_addr.s_addr), ntohs(from_in.sin_port));
+    /* The main reason for this check is if the gateway is behind a NAT,
+     * then the IP address and port that it sends in its notification are
+     * not the same as its public IP address and port. */
+    if(memcmp(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr)) ||
+            ife->data_port != from_in.sin_port) {
+        struct in_addr private_ip;
+        ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
 
-            if(ife->state == ACTIVE)
-                gw->active_interfaces--;
-            virt_remove_remote_link(&private_ip, &ife->public_ip);
+        DEBUG_MSG("Changing node %hu link %hu from %x:%hu to %x:%hu",
+                gw->unique_id, ife->index,
+                ntohl(ife->public_ip.s_addr), ntohs(ife->data_port),
+                ntohl(from_in.sin_addr.s_addr), ntohs(from_in.sin_port));
 
-            memcpy(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr));
-            ife->data_port  = from_in.sin_port;
-            ife->state      = ping->link_state;
+        if(ife->state == ACTIVE)
+            gw->active_interfaces--;
+        virt_remove_remote_link(&private_ip, &ife->public_ip);
 
-            if(ife->state == ACTIVE) {
-                gw->active_interfaces++;
-                virt_add_remote_link(&private_ip, &from_in.sin_addr,
-                    from_in.sin_port);
-            }
-
-            db_update_link(gw, ife);
-        }
-    } else {
-        /* The main reason for adding missing links on ping packets is if
-         * the controller is restarted (the list of links is cleared).
-         * 
-         * TODO: Instead, write state to a file on exit and read the file
-         * on start up. */
-        ife = alloc_interface();
-        if(!ife) {
-            DEBUG_MSG("out of memory");
-            return;
-        }
-
-        ife->index = ntohl(ping->link_id);
-        strncpy(ife->name, "unknown", sizeof(ife->name));
-        strncpy(ife->network, "unknown", sizeof(ife->network));
         memcpy(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr));
-        ife->data_port = from_in.sin_port;
-        ife->state = ping->link_state;
-
-        DL_APPEND(gw->head_interface, ife);
+        ife->data_port  = from_in.sin_port;
+        ife->state      = ping->link_state;
 
         if(ife->state == ACTIVE) {
-            struct in_addr private_ip;
-            ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
-
             gw->active_interfaces++;
-            virt_add_remote_link(&private_ip, &from_in.sin_addr, 
+            virt_add_remote_link(&private_ip, &from_in.sin_addr,
                     from_in.sin_port);
         }
 
@@ -474,7 +457,7 @@ static void remove_stale_links(int link_timeout, int node_timeout)
         struct in_addr private_ip;
         ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
 
-        DL_FOREACH_SAFE(gw->head_interface, ife, tmp_ife) {
+        DL_FOREACH(gw->head_interface, ife) {
             if((now - ife->last_ping_time) >= link_timeout) {
                 if(ife->state == ACTIVE) {
                     ife->state = INACTIVE;
@@ -487,21 +470,23 @@ static void remove_stale_links(int link_timeout, int node_timeout)
                 
                 DEBUG_MSG("Removed node %hu link %hu due to timeout",
                         gw->unique_id, ife->index);
-
-                DL_DELETE(gw->head_interface, ife);
-                free(ife);
             } else {
                 num_ifaces++;
             }
         }
 
         if(num_ifaces == 0 && (now - gw->last_ping_time) >= node_timeout) {
-            gw->state = INACTIVE;
-            db_update_gateway(gw, 1);
-
             virt_remove_remote_node(&private_ip);
 
             DEBUG_MSG("Removed node %hu due to timeout", gw->unique_id);
+
+            gw->state = INACTIVE;
+            db_update_gateway(gw, 1);
+
+            DL_FOREACH_SAFE(gw->head_interface, ife, tmp_ife) {
+                DL_DELETE(gw->head_interface, ife);
+                free(ife);
+            }
 
             HASH_DELETE(hh_id, gateway_id_hash, gw);
             free(gw);
