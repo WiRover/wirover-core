@@ -391,18 +391,27 @@ static void process_ping_response(char *buffer, int len,
             node_id, link_id, ife->network, rtt, ife->avg_rtt);
 
     if(ife->state == INACTIVE) {
-        struct in_addr private_ip;
-        const struct sockaddr_in *from_in = (const struct sockaddr_in *)from;
-
         DEBUG_MSG("Marking node %hu link %d (%s) ACTIVE",
                 node_id, link_id, ife->network);
 
         ife->state = ACTIVE;
         gw->active_interfaces++;
+    
+        // TODO: Add IPv6 support
+        struct sockaddr_in from_in;
+        if(sockaddr_to_sockaddr_in(from, from_len, &from_in) < 0) {
+            char p_ip[INET6_ADDRSTRLEN];
+            getnameinfo(from, from_len, p_ip, sizeof(p_ip), 0, 0, NI_NUMERICHOST);
 
+            DEBUG_MSG("Unable to add interface with address %s (IPv6?)", p_ip);
+            return;
+        }
+
+        struct in_addr private_ip;
         ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
-        virt_add_remote_link(&private_ip, &from_in->sin_addr,
-                from_in->sin_port);
+
+        virt_add_remote_link(&private_ip, &from_in.sin_addr,
+                from_in.sin_port);
     }
 
     db_update_pings(gw, ife, rtt);
