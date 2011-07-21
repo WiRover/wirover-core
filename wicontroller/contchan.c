@@ -149,39 +149,41 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
 
     int i;
     for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
-        int is_new = 0;
-
         ife = find_interface_by_name(gw->head_interface, notif->if_info[i].ifname);
         if(!ife) {
-            is_new = 1;
             ife = alloc_interface();
             
             strncpy(ife->name, notif->if_info[i].ifname, sizeof(ife->name));
             ife->public_ip.s_addr = notif->if_info[i].local_ip;
             ife->data_port = notif->if_info[i].data_port;
+            ife->state = DEAD; // will be changed by the following code
+
+            DL_APPEND(gw->head_interface, ife);
         }
         
         strncpy(ife->network, notif->if_info[i].network, sizeof(ife->network));
-        ife->state = notif->if_info[i].state;
         ife->index = ntohl(notif->if_info[i].link_id);
+        int new_state = notif->if_info[i].state;
 
-        if(is_new) {
-            DL_APPEND(gw->head_interface, ife);
-        }
-
-        if(ife->state == ACTIVE) {
+        if(ife->state == ACTIVE && new_state != ACTIVE) {
+            virt_remove_remote_link(&priv_ip, &ife->public_ip);
+        } else if(ife->state != ACTIVE && new_state == ACTIVE) {
             gw->active_interfaces++;
 
-            if(is_new)
-                virt_add_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
-        } else if(!is_new) {
-            virt_remove_remote_link(&priv_ip, &ife->public_ip);
+            virt_add_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
         }
+
+        ife->state = new_state;
+        db_update_link(gw, ife);
     }
 
     struct interface* tmp;
     DL_FOREACH_SAFE(gw->head_interface, ife, tmp) {
         if(ife->state == DEAD) {
+            virt_remove_remote_link(&priv_ip, &ife->public_ip);
+
+            db_update_link(gw, ife);
+
             DL_DELETE(gw->head_interface, ife);
             free(ife);
         }
