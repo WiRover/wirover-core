@@ -464,12 +464,12 @@ static void remove_stale_links(int link_timeout, int node_timeout)
                     gw->active_interfaces--;
 
                     db_update_link(gw, ife);
-                }
 
-                virt_remove_remote_link(&private_ip, &ife->public_ip);
-                
-                DEBUG_MSG("Removed node %hu link %hu due to timeout",
-                        gw->unique_id, ife->index);
+                    virt_remove_remote_link(&private_ip, &ife->public_ip);
+
+                    DEBUG_MSG("Removed node %hu link %hu due to timeout",
+                            gw->unique_id, ife->index);
+                }
             } else {
                 num_ifaces++;
             }

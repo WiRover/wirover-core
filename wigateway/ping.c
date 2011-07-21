@@ -255,6 +255,8 @@ void* ping_thread_func(void* arg)
 
             memcpy(&last_ping_time, &now, sizeof(last_ping_time));
             next_timeout = ping_spacing;
+
+            curr_iface_pos++;
         } else {
             // Set the timeout on select such that it will return in time for
             // the next ping.
