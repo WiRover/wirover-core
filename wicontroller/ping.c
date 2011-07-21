@@ -390,6 +390,21 @@ static void process_ping_response(char *buffer, int len,
     DEBUG_MSG("Ping from node %hu link %d (%s) rtt %lu avg_rtt %.0f",
             node_id, link_id, ife->network, rtt, ife->avg_rtt);
 
+    if(ife->state == INACTIVE) {
+        struct in_addr private_ip;
+        const struct sockaddr_in *from_in = (const struct sockaddr_in *)from;
+
+        DEBUG_MSG("Marking node %hu link %d (%s) ACTIVE",
+                node_id, link_id, ife->network);
+
+        ife->state = ACTIVE;
+        gw->active_interfaces++;
+
+        ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
+        virt_add_remote_link(&private_ip, &from_in->sin_addr,
+                from_in->sin_port);
+    }
+
     db_update_pings(gw, ife, rtt);
     db_update_link(gw, ife);
 
