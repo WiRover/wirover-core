@@ -195,7 +195,7 @@ static int handle_incoming(int sockfd)
 }
 
 /*
- * Do minimal preprocessing to determing the type of ping packet
+ * Do minimal preprocessing to determine the type of ping packet
  * and whether it is valid or not.
  *
  * Returns:
