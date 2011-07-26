@@ -84,11 +84,8 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
     gw->state = ACTIVE;
     copy_ipaddr(&notif->priv_ip, &gw->private_ip);
     gw->unique_id = ntohs(notif->unique_id);
-    gw->secret_word = notif->secret_word;
 
-    do {
-        gw->my_secret_word = rand();
-    } while(!gw->my_secret_word);
+    memcpy(gw->private_key, notif->key, sizeof(gw->private_key));
 
     struct in_addr priv_ip;
     ipaddr_to_ipv4(&notif->priv_ip, (uint32_t *)&priv_ip.s_addr);
@@ -132,11 +129,8 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
     assert(gw && notif);
 
     gw->state = ACTIVE;
-    gw->secret_word = notif->secret_word;
 
-    do {
-        gw->my_secret_word = rand();
-    } while(!gw->my_secret_word);
+    memcpy(gw->private_key, notif->key, sizeof(gw->private_key));
 
     struct interface* ife;
     DL_FOREACH(gw->head_interface, ife) {
@@ -204,8 +198,9 @@ static int send_response(int sockfd, const struct gateway *gw)
     response.type = CCHAN_NOTIFICATION;
     get_private_ip(&response.priv_ip);
     response.unique_id = htons(get_unique_id());
-    response.secret_word = gw->my_secret_word;
     response.interfaces = 0;
+
+    memset(response.key, 0, sizeof(response.key));
 
     int result = send(sockfd, &response, MIN_NOTIFICATION_LEN, 0);
     if(result < 0) {

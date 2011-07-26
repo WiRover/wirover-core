@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <time.h>
+#include <openssl/sha.h>
 
 #include "ipaddr.h"
 #include "uthash.h"
@@ -16,9 +17,9 @@ struct gateway {
     unsigned short unique_id;
 
     time_t   creation_time;
-    uint32_t secret_word; // in network byte order
-    uint32_t my_secret_word;
     time_t   last_ping_time;
+
+    uint8_t  private_key[SHA256_DIGEST_LENGTH];
 
     unsigned int        active_interfaces;
     struct interface*   head_interface;

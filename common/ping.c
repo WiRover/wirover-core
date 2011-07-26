@@ -81,3 +81,43 @@ int fill_passive_payload(const char *ifname, struct passive_payload *dest)
     return retval;
 }
 
+/*
+ * Verifies sender of ping packet by computing keyed SHA hash.
+ *
+ * Returns 0 on match.
+ */
+int verify_ping_sender(char *buffer, int len, const unsigned char *key)
+{
+    struct ping_packet *ping = (struct ping_packet *)buffer;
+
+    unsigned char rcv_digest[SHA256_DIGEST_LENGTH];
+    memcpy(rcv_digest, ping->digest, sizeof(ping->digest));
+
+    memcpy(ping->digest, key, SHA256_DIGEST_LENGTH);
+
+    SHA256_CTX sha;
+    SHA256_Init(&sha);
+    SHA256_Update(&sha, buffer, len);
+
+    unsigned char cmp_digest[SHA256_DIGEST_LENGTH];
+    SHA256_Final(cmp_digest, &sha);
+
+    int result = memcmp(rcv_digest, cmp_digest, SHA256_DIGEST_LENGTH);
+
+    memcpy(ping->digest, rcv_digest, SHA256_DIGEST_LENGTH);
+
+    return result;
+}
+
+int iszero(const unsigned char *buffer, int len)
+{
+    int i;
+    for(i = 0; i < len; i++) {
+        if(buffer[i])
+            return 0;
+    }
+
+    return 1;
+}
+
+

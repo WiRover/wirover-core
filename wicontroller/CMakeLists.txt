@@ -10,6 +10,7 @@ add_executable(wicontroller
     ${COMMON}/debug.c
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
+    ${COMMON}/ping.c
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
@@ -17,7 +18,7 @@ add_executable(wicontroller
     ${COMMON}/kernel.c
 )
 
-target_link_libraries(wicontroller pthread config mysqlclient)
+target_link_libraries(wicontroller pthread config mysqlclient ssl)
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wicontroller DESTINATION /usr/bin)
 install(FILES wicontroller.conf DESTINATION /etc)

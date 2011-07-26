@@ -4,6 +4,9 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
+#include <openssl/rand.h>
+#include <openssl/sha.h>
+
 #include "config.h"
 #include "configuration.h"
 #include "contchan.h"
@@ -66,6 +69,16 @@ int main(int argc, char* argv[])
 
     int state = GATEWAY_START;
     const struct lease_info *lease = 0;
+
+    // Generate our private key
+    if(RAND_bytes(private_key, sizeof(private_key)) != 1) {
+        DEBUG_MSG("RAND_bytes failed, falling back to RAND_pseudo_bytes");
+
+        if(RAND_pseudo_bytes(private_key, sizeof(private_key)) != 1) {
+            DEBUG_MSG("RAND_pseudo_bytes failed");
+            exit(1);
+        }
+    }
 
     while(1) {
         if(state == GATEWAY_START) {

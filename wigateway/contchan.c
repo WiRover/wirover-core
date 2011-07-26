@@ -16,10 +16,8 @@
  * and ping packet.  The controller uses it to verify the origin of ping
  * packets so that the public IP address can be trusted.
  *
- * TODO: May want separate secret words for each controller. */
-static uint32_t secret_word = 0;
-
-uint32_t remote_secret_word = 0;
+ * TODO: Separate keys for each controller */
+uint8_t private_key[SHA256_DIGEST_LENGTH] = { 0 };
 uint32_t remote_unique_id = 0;
 
 static int _send_notification(const char *ifname);
@@ -93,9 +91,7 @@ static int _send_notification(const char *ifname)
     get_private_ip(&notification.priv_ip);
     notification.unique_id = htons(get_unique_id());
 
-    if(secret_word == 0)
-        secret_word = rand();
-    notification.secret_word = secret_word;
+    memcpy(notification.key, private_key, sizeof(notification.key));
 
     obtain_read_lock(&interface_list_lock);
 
@@ -152,17 +148,8 @@ static int _send_notification(const char *ifname)
     }
 
     remote_unique_id = ntohs(notification.unique_id);
-    remote_secret_word = notification.secret_word;
 
     close(sockfd);
     return 0;
-}
-
-/*
- * Return secret_word in network byte order.
- */
-uint32_t get_secret_word()
-{
-    return secret_word;
 }
 

@@ -29,7 +29,7 @@
 
 static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd);
-static int ping_request_valid(const char *buffer, int len);
+static int ping_request_valid(char *buffer, int len);
 static int send_response(int sockfd, const struct gateway *gw,
         unsigned char type, const char *buffer, 
         int len, const struct sockaddr *to, socklen_t to_len);
@@ -146,7 +146,7 @@ static int handle_incoming(int sockfd)
     }
     
     int valid = ping_request_valid(buffer, bytes_recvd);
-    if(!valid)
+    if(valid == 0)
         return 0;
 
     const struct ping_packet *ping = (struct ping_packet *)
@@ -203,7 +203,7 @@ static int handle_incoming(int sockfd)
  *   1 for a valid ping request
  *   -1 for a ping request that should receive an error response
  */
-static int ping_request_valid(const char *buffer, int len)
+static int ping_request_valid(char *buffer, int len)
 {
     if(len < MIN_PING_PACKET_SIZE)
         return 0;
@@ -219,31 +219,26 @@ static int ping_request_valid(const char *buffer, int len)
 
     struct gateway *gw = lookup_gateway_by_id(node_id);
 
-    /* This verifies the identity of the ping sender.  A secret_word of zero is
-     * acceptable, but the sender will not be trusted in that case.  Zero is
-     * used during the startup procedure before the control channel has been
-     * established.  A non-zero secret word must match or the ping packet is
-     * dropped. */
-    if(ping->secret_word && gw && ping->secret_word != gw->secret_word) {
-        DEBUG_MSG("Secret word mismatch for node %hu", node_id);
-        return 0;
-    } else if(ping->secret_word && !gw) {
-        // This can happen if the controller was restarted.  We will send a
-        // response with the error bit set so that the gateway will know to
-        // send a new notification.
+    if(gw) {
+        if(verify_ping_sender(buffer + sizeof(struct tunhdr), 
+                    len - sizeof(struct tunhdr), gw->private_key) == 0) {
+            unsigned link_id = ntohl(ping->link_id);
+
+            struct interface *ife = 
+                    find_interface_by_index(gw->head_interface, link_id);
+
+            if(!ife) {
+                DEBUG_MSG("Unrecognized interface (%u) for node (%hu)", 
+                        link_id, node_id);
+                return -1;
+            }
+        } else {
+            DEBUG_MSG("SHA hash mismatch");
+            return 0;
+        }
+    } else {
         DEBUG_MSG("Unrecognized gateway (%hu)", node_id);
         return -1;
-    } else if(ping->secret_word && gw && ping->secret_word == gw->secret_word) {
-        unsigned link_id = ntohl(ping->link_id);
-
-        struct interface *ife = 
-                find_interface_by_index(gw->head_interface, link_id);
-
-        if(!ife) {
-            DEBUG_MSG("Unrecognized interface (%u) for node (%hu)", 
-                    link_id, node_id);
-            return -1;
-        }
     }
 
     return 1;
@@ -268,8 +263,14 @@ static int send_response(int sockfd, const struct gateway *gw,
 
     ping->type = type;
     ping->src_id = htons(get_unique_id());
-    ping->secret_word = (gw ? gw->my_secret_word : 0);
     ping->receiver_ts = htonl(timeval_to_usec(0));
+    
+    memcpy(ping->digest, gw->private_key, sizeof(ping->digest));
+
+    SHA256_CTX sha;
+    SHA256_Init(&sha);
+    SHA256_Update(&sha, buffer, MIN_PING_PACKET_SIZE);
+    SHA256_Final(ping->digest, &sha);
 
     return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
 }
@@ -290,9 +291,6 @@ static void process_ping_request(char *buffer, int len,
 
     struct gateway *gw = lookup_gateway_by_id(node_id);
     if(!gw)
-        return;
-
-    if(ping->secret_word == 0 || ping->secret_word != gw->secret_word)
         return;
 
     gw->last_ping_time = time(0);
@@ -366,9 +364,6 @@ static void process_ping_response(char *buffer, int len,
 
     struct gateway *gw = lookup_gateway_by_id(node_id);
     if(!gw)
-        return;
-
-    if(ping->secret_word == 0 || ping->secret_word != gw->secret_word)
         return;
 
     gw->last_ping_time = time(0);

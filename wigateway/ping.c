@@ -165,7 +165,6 @@ static int send_ping(struct interface* ife,
     pkt->link_state = ife->state;
     pkt->src_id = htons(get_unique_id());
     pkt->link_id = htonl(ife->index);
-    pkt->secret_word = get_secret_word();
 
     struct gps_payload *gps = (struct gps_payload *)
         ((char *)pkt + sizeof(struct ping_packet));
@@ -183,6 +182,14 @@ static int send_ping(struct interface* ife,
     // Store a timestamp in the packet for calculating RTT.
     pkt->sender_ts = htonl(timeval_to_usec(0));
     pkt->receiver_ts = 0;
+
+    // Fill in the PSK before computing hash
+    memcpy(pkt->digest, private_key, sizeof(pkt->digest));
+
+    SHA256_CTX sha;
+    SHA256_Init(&sha);
+    SHA256_Update(&sha, buffer, send_size);
+    SHA256_Final(pkt->digest, &sha);
 
     bytes = sendto(sockfd, buffer, send_size, 0, dest_addr, dest_len);
     if(bytes < 0) {
@@ -336,13 +343,11 @@ static int handle_incoming(int sockfd, int timeout)
         notif_needed = 1;
     }
 
-    if(pkt->secret_word == 0 || remote_secret_word == 0) {
-        // This occurs before the control channel has been established.  We
-        // cannot verify the sender's identity, so we will not send a response
-        // packet which would reveal our own secret word.
+    if(iszero(pkt->digest, sizeof(pkt->digest))) {
         send_response = 0;
-    } else if(pkt->secret_word != remote_secret_word) {
-        DEBUG_MSG("secret word mismatch, identity of sender cannot be assured");
+    } else if(verify_ping_sender(buffer + sizeof(struct tunhdr), 
+                bytes - sizeof(struct tunhdr), private_key) != 0) {
+        DEBUG_MSG("SHA hash mismatch, ping packet discarded");
         return -1;
     }
 
@@ -416,7 +421,6 @@ static int send_second_response(const struct interface *ife,
 
     ping->type = PING_SECOND_RESPONSE | PING_PASSIVE_PAYLOAD;
     ping->src_id = htons(get_unique_id());
-    ping->secret_word = get_secret_word();
     ping->sender_ts = 0;
 
     struct passive_payload *passive = (struct passive_payload *)
@@ -425,6 +429,14 @@ static int send_second_response(const struct interface *ife,
     if(fill_passive_payload(ife->name, passive) < 0) {
         send_size = MIN_PING_PACKET_SIZE;
     }
+    
+    // Fill in the PSK before computing hash
+    memcpy(ping->digest, private_key, sizeof(ping->digest));
+
+    SHA256_CTX sha;
+    SHA256_Init(&sha);
+    SHA256_Update(&sha, response, send_size);
+    SHA256_Final(ping->digest, &sha);
 
     int result = sendto(sockfd, response, send_size, 0, to, to_len);
 

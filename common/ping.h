@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <sys/time.h>
+#include <openssl/sha.h>
 
 #define PING_INVALID            0x00
 #define PING_REQUEST            0x10
@@ -28,9 +29,9 @@ struct ping_packet {
     int8_t   link_state;
     uint16_t src_id;
     uint32_t link_id;
-    uint32_t secret_word;
     uint32_t sender_ts;
     uint32_t receiver_ts;
+    uint8_t  digest[SHA256_DIGEST_LENGTH];
 } __attribute__((__packed__));
 
 struct gps_payload {
@@ -86,6 +87,9 @@ static inline uint32_t timeval_to_usec(const struct timeval *tv)
         return (uint32_t)(now.tv_sec * USEC_PER_SEC + now.tv_usec);
     }
 }
+
+int verify_ping_sender(char *buffer, int len, const unsigned char *key);
+int iszero(const unsigned char *buffer, int len);
 
 #endif //_PING_H_
 

@@ -18,7 +18,7 @@ add_executable(wigateway
     ${COMMON}/kernel.c
 )
 
-target_link_libraries(wigateway pthread config gps)
+target_link_libraries(wigateway pthread config gps ssl)
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wigateway DESTINATION /usr/bin)
 install(FILES wigateway.conf DESTINATION /etc)

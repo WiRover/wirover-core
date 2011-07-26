@@ -15,6 +15,7 @@
 #include <sys/socket.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>
+#include <openssl/sha.h>
 
 #include "interface.h"
 #include "ipaddr.h"
@@ -40,7 +41,7 @@ struct cchan_notification {
     uint8_t     type;
     ipaddr_t    priv_ip;
     uint16_t    unique_id;
-    uint32_t    secret_word;
+    uint8_t     key[SHA256_DIGEST_LENGTH];
     uint8_t     interfaces;
     struct interface_info if_info[MAX_INTERFACES];
 } __attribute__((__packed__));
@@ -53,10 +54,9 @@ int process_notification(int sockfd, const char* packet, unsigned int pkt_len);
 
 #ifdef GATEWAY
 int send_notification(int max_tries);
-uint32_t get_secret_word();
 
+extern uint8_t private_key[SHA256_DIGEST_LENGTH];
 extern uint32_t remote_unique_id;
-extern uint32_t remote_secret_word;
 #endif
 
 #endif //_CONTCHAN_H_
