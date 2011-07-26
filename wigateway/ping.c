@@ -188,7 +188,8 @@ static int send_ping(struct interface* ife,
 
     SHA256_CTX sha;
     SHA256_Init(&sha);
-    SHA256_Update(&sha, buffer, send_size);
+    SHA256_Update(&sha, buffer + sizeof(struct tunhdr), 
+            send_size - sizeof(struct tunhdr));
     SHA256_Final(pkt->digest, &sha);
 
     bytes = sendto(sockfd, buffer, send_size, 0, dest_addr, dest_len);
@@ -435,7 +436,8 @@ static int send_second_response(const struct interface *ife,
 
     SHA256_CTX sha;
     SHA256_Init(&sha);
-    SHA256_Update(&sha, response, send_size);
+    SHA256_Update(&sha, response + sizeof(struct tunhdr), 
+            send_size - sizeof(struct tunhdr));
     SHA256_Final(ping->digest, &sha);
 
     int result = sendto(sockfd, response, send_size, 0, to, to_len);
