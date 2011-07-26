@@ -265,7 +265,10 @@ static int send_response(int sockfd, const struct gateway *gw,
     ping->src_id = htons(get_unique_id());
     ping->receiver_ts = htonl(timeval_to_usec(0));
     
-    memcpy(ping->digest, gw->private_key, sizeof(ping->digest));
+    if(gw)
+        memcpy(ping->digest, gw->private_key, sizeof(ping->digest));
+    else
+        memset(ping->digest, 0, sizeof(ping->digest));
 
     SHA256_CTX sha;
     SHA256_Init(&sha);
