@@ -265,15 +265,16 @@ static int send_response(int sockfd, const struct gateway *gw,
     ping->src_id = htons(get_unique_id());
     ping->receiver_ts = htonl(timeval_to_usec(0));
     
-    if(gw)
+    if(gw) {
         memcpy(ping->digest, gw->private_key, sizeof(ping->digest));
-    else
-        memset(ping->digest, 0, sizeof(ping->digest));
 
-    SHA256_CTX sha;
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, buffer, MIN_PING_PACKET_SIZE);
-    SHA256_Final(ping->digest, &sha);
+        SHA256_CTX sha;
+        SHA256_Init(&sha);
+        SHA256_Update(&sha, buffer, MIN_PING_PACKET_SIZE);
+        SHA256_Final(ping->digest, &sha);
+    } else {
+        memset(ping->digest, 0, sizeof(ping->digest));
+    }
 
     return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
 }
