@@ -270,7 +270,8 @@ static int send_response(int sockfd, const struct gateway *gw,
 
         SHA256_CTX sha;
         SHA256_Init(&sha);
-        SHA256_Update(&sha, buffer, MIN_PING_PACKET_SIZE);
+        SHA256_Update(&sha, buffer + sizeof(struct tunhdr), 
+                MIN_PING_PACKET_SIZE - sizeof(struct tunhdr));
         SHA256_Final(ping->digest, &sha);
     } else {
         memset(ping->digest, 0, sizeof(ping->digest));
