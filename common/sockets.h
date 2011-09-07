@@ -28,6 +28,8 @@ int udp_bind_open(unsigned short local_port, const char* device);
 
 int recv_timeout(int sockfd, void *buffer, size_t len, int flags, 
         struct timeval *timeout);
+int recvfrom_timeout(int sockfd, void *buffer, size_t len, int flags,
+        struct sockaddr *address, socklen_t *address_len, struct timeval *timeout);
 
 int set_nonblock(int sockfd, int enable);
 int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage* dest);

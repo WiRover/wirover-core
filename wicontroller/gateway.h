@@ -18,6 +18,7 @@ struct gateway {
 
     time_t   creation_time;
     time_t   last_ping_time;
+    time_t   last_bw_time;
 
     uint8_t  private_key[SHA256_DIGEST_LENGTH];
 

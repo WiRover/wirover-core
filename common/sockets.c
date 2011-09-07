@@ -270,6 +270,55 @@ int recv_timeout(int sockfd, void *buffer, size_t len, int flags,
 }
 
 /*
+ * This is a wrapper function around recvfrom that blocks for the specified maximum
+ * amount of time.  Error reporting matches that of the recv function.  On
+ * timeout, -1 is returned with errno set to EWOULDBLOCK.
+ */
+int recvfrom_timeout(int sockfd, void *buffer, size_t len, int flags, 
+        struct sockaddr *address, socklen_t *address_len, struct timeval *timeout)
+{
+    int res;
+    fd_set read_set;
+    int sock_flags;
+
+    sock_flags = fcntl(sockfd, F_GETFL, 0);
+    if(flags == -1) {
+        ERROR_MSG("fcntl F_GETFL failed");
+    }
+
+    // Set socket to nonblocking for safety
+    if(!(sock_flags & O_NONBLOCK)) {
+        if(fcntl(sockfd, F_SETFL, (sock_flags | O_NONBLOCK) == -1)) {
+            ERROR_MSG("fcntl F_SETFL failed");
+        }
+    }
+
+    FD_ZERO(&read_set);
+    FD_SET(sockfd, &read_set);
+
+    res = select(sockfd + 1, &read_set, 0, 0, timeout);
+    if(res < 0) {
+        ERROR_MSG("select failed");
+        return -1;
+    } else if(!FD_ISSET(sockfd, &read_set)) {
+        // timed out
+        errno = EWOULDBLOCK;
+        return -1;
+    }
+
+    res = recvfrom(sockfd, buffer, len, flags, address, address_len);
+
+    // Restore socket flags
+    if(!(sock_flags & O_NONBLOCK)) {
+        if(fcntl(sockfd, F_SETFL, sock_flags) == -1) {
+            ERROR_MSG("fcntl F_SETFL failed");
+        }
+    }
+
+    return res;
+}
+
+/*
  * SET NONBLOCK
  *
  * enable should be non-zero to set or 0 to clear.

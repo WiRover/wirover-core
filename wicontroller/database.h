@@ -22,6 +22,8 @@ int db_update_gps(struct gateway *gw, const struct gps_payload *gps);
 int db_update_pings(const struct gateway *gw, const struct interface *ife, int rtt);
 int db_update_passive(const struct gateway *gw, struct interface *ife, 
         const struct passive_payload *passive);
+int db_update_bandwidth(const struct gateway *gw, const struct interface *ife,
+        int type, double bw_down, double bw_up);
 
 #endif /* DATABASE_H */
 

@@ -22,6 +22,7 @@
 #include <unistd.h>
 #include <endian.h>
 
+#include "bandwidth.h"
 #include "config.h"
 #include "database.h"
 #include "debug.h"
@@ -324,5 +325,56 @@ int db_update_passive(const struct gateway *gw, struct interface *ife,
 unlock_and_return:
     pthread_mutex_unlock(&database_lock);
     return res;
+}
+
+int db_update_bandwidth(const struct gateway *gw, const struct interface *ife, 
+                int type, double bw_down, double bw_up)
+{
+    if(!database)
+        return -1;
+
+    const time_t now = time(0);
+
+    if(pthread_mutex_lock(&database_lock) != 0) {
+        DEBUG_MSG("pthread_mutex_lock failed");
+        return -1;
+    }
+
+    const char *type_str;
+    switch(type) {
+        case BW_UDP:
+            type_str = "'UDP'";
+            break;
+        case BW_TCP:
+            type_str = "'TCP'";
+            break;
+        default:
+            type_str = "NULL";
+            break;
+    }
+
+    int len;
+
+    if((now - gw->last_gps_time) < GPS_DATA_TIMEOUT) {
+        len = snprintf(query_buffer, sizeof(query_buffer),
+                "insert into bandwidth (node_id, network, gps_id, bw_down, bw_up, type) values"
+                "(%hu, '%s', %u, '%f', '%f', '%s')",
+                gw->unique_id, ife->network, gw->last_gps_row_id,
+                bw_down, bw_up, type_str);
+    } else {
+        len = snprintf(query_buffer, sizeof(query_buffer),
+                "insert into bandwidth (node_id, network, bw_down, bw_up, type) values"
+                "(%hu, '%s', '%f', '%f', '%s')",
+                gw->unique_id, ife->network, bw_down, bw_up, type_str);
+    }
+
+    int res = mysql_real_query(database, query_buffer, len);
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+    }
+
+    pthread_mutex_unlock(&database_lock);
+    return res;
+
 }
 

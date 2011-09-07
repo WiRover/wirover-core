@@ -2,6 +2,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCONTROLLER")
 
 add_executable(wicontroller
     wicontroller.c
+    bandwidth.c
     contchan.c
     database.c
     gateway.c

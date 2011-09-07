@@ -21,6 +21,9 @@
 // user-level code is used.
 #define WITH_KERNEL 1
 
+// Enables use of MySQL for data logging.
+#define WITH_MYSQL 1
+
 /* Default timeouts for removing a remote link or node. */
 #define DEFAULT_LINK_TIMEOUT 30
 #define DEFAULT_NODE_TIMEOUT 300
@@ -34,6 +37,22 @@
 
 /* Invalidate GPS data after 5 seconds */
 #define GPS_DATA_TIMEOUT 5
+
+#define MTU             1600
+#define DEFAULT_MTU     1400
+
+#define ACTIVE_BW_BYTES     14480
+#define ACTIVE_BW_INTERVAL  30000000 //in microseconds
+#define ACTIVE_BW_TIMEOUT   5000000 //in microseconds
+#define ACTIVE_BW_DELAY     100000 //extra 100ms delay between testing interfaces
+
+// Bandwidth server will simply ignore any requests to send a stream larger
+// than this.
+#define MAX_BW_BYTES 1000000
+
+// Used for bandwidth calculations
+#define DEFAULT_IP_H_SIZE 20
+#define DEFAULT_TCP_H_SIZE 32
 
 #endif //_CONFIG_H_
 
