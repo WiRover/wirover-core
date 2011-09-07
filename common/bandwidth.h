@@ -82,7 +82,6 @@ struct bw_client_info {
     // Settings for the bandwidth thread
     // Set these values before calling startBandwidthClientThread()
     unsigned int       timeout; //in microseconds
-    unsigned int       numBytes;
     unsigned int       remote_addr;
     unsigned short     remote_port;
     unsigned int       interval; //in microseconds
@@ -114,11 +113,11 @@ struct bw_hdr {
 } __attribute__((__packed__));
 
 #ifdef CONTROLLER
-int     start_bandwidth_server_thread(struct bw_server_info* serverInfo);
+int     start_bandwidth_server_thread(struct bw_server_info *serverInfo);
 #endif
 
 #ifdef GATEWAY
-int     startBandwidthClientThread(struct bw_client_info* clientInfo);
+int     start_bandwidth_client_thread(struct bw_client_info *clientInfo);
 void    registerBandwidthCallback(struct bw_client_info* clientInfo, bw_callback_t callback);
 void    setBandwidthInterval(struct bw_client_info* clientInfo, unsigned int interval);
 

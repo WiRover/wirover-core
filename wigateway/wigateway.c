@@ -7,6 +7,7 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 
+#include "bandwidth.h"
 #include "config.h"
 #include "configuration.h"
 #include "contchan.h"
@@ -148,6 +149,21 @@ int main(int argc, char* argv[])
                 // TODO: Set default policy to encap
 
                 state = GATEWAY_NOTIFICATION_SUCCEEDED;
+                
+                uint32_t pub_ip;
+                ipaddr_to_ipv4(&lease->cinfo[0].pub_ip, &pub_ip);
+
+                struct bw_client_info bw_client;
+                memset(&bw_client, 0, sizeof(bw_client));
+                bw_client.timeout = DEFAULT_BANDWIDTH_TIMEOUT;
+                bw_client.remote_addr = pub_ip;
+                bw_client.remote_port = DEFAULT_BANDWIDTH_PORT; // TODO: set this dynamically
+                bw_client.interval = DEFAULT_BANDWIDTH_INTERVAL;
+
+                if(start_bandwidth_client_thread(&bw_client) < 0) {
+                    DEBUG_MSG("Failed to start bandwidth client thread");
+                    exit(1);
+                }
             }
         }
 

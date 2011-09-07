@@ -10,6 +10,7 @@
 #define DEFAULT_PING_INTERVAL       10
 #define DEFAULT_BANDWIDTH_TIMEOUT   5000000
 #define DEFAULT_BANDWIDTH_PORT      8002
+#define DEFAULT_BANDWIDTH_INTERVAL  60000000
 
 // Controllers pick a base port, then use subsequent port numbers for other
 // services.  Data, pings, and nat punches will go over the "data channel"

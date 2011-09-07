@@ -38,22 +38,15 @@ void*   bandwidthThreadFunc(void* clientInfo);
 int     runActiveBandwidthTest(struct bw_client_info* clientInfo, struct bw_stats* stats);
 int     runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stats* stats);
 
-//static int  openBandwidthSocket(struct bw_client_info* clientInfo, const char* bindDevice);
-static int  openBandwidthSocket_udp(struct bw_client_info* clientInfo, const char* bindDevice);
-//static int  receiveCts(int sockfd, int timeout, unsigned int* max_burst);
-static int  receiveCts_udp(int sockfd, int timeout, unsigned int* max_burst);
-//static int  sendBurst(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats);
-static int  sendBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats);
-//static int  receiveBurst(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats);
-static int  receiveBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats);
-//static int  sendMeasurement(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats);
-static int  sendMeasurement_udp(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats);
-//static unsigned int    getTransferSizeBits(unsigned int payloadBytes);
+static int openBandwidthSocket_udp(struct bw_client_info* clientInfo, const char* bindDevice);
+static int receiveCts_udp(int sockfd, int timeout, unsigned int* max_burst);
+static int sendBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats);
+static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
+        int sockfd, char *buffer, int buffer_len);
+static int sendMeasurement_udp(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats);
 
 
 /*
- * S T A R T   B A N D W I D T H   T H R E A D
- *
  * Starts a thread that will continually run bandwidth tests.  
  *
  * The caller must pass a pointer to a bw_client_info structure that has the
@@ -61,7 +54,7 @@ static int  sendMeasurement_udp(int sockfd, char* buffer, unsigned len, struct b
  *
  * Returns SUCCESS or FAILURE.
  */
-int startBandwidthClientThread(struct bw_client_info* clientInfo)
+int start_bandwidth_client_thread(struct bw_client_info* clientInfo)
 {
     assert(clientInfo != 0);
     
@@ -88,8 +81,6 @@ int startBandwidthClientThread(struct bw_client_info* clientInfo)
 } // end function startBandwidthThread()
 
 /*
- * R E G I S T E R   B A N D W I D T H   C A L L B A C K
- *
  * Sets the function to be called whenever a bandwidth test is completed.
  *
  * Note: The current implementation only supports one callback.
@@ -101,11 +92,8 @@ void registerBandwidthCallback(struct bw_client_info* clientInfo, bw_callback_t 
 }
 
 /*
- * S E T   B A N D W I D T H   I N T E R V A L
- *
  * Sets the interval for bandwidth tests.  The interval should be in
  * microseconds.
- *
  */
 void setBandwidthInterval(struct bw_client_info* clientInfo, unsigned int interval)
 {
@@ -114,8 +102,6 @@ void setBandwidthInterval(struct bw_client_info* clientInfo, unsigned int interv
 }
 
 /*
- * P A U S E   B A N D W I D T H   T H R E A D
- *
  * Pauses execution of the active bandwidth tests until resumeBandwidthThread()
  * is called.
  */
@@ -125,8 +111,6 @@ void pauseBandwidthThread(struct bw_client_info* clientInfo)
 }
 
 /*
- * R E S U M E   B A N D W I D T H   T H R E A D
- *
  * Resumes execution of the active bandwidth tests.
  */
 void resumeBandwidthThread(struct bw_client_info* clientInfo)
@@ -139,10 +123,6 @@ void resumeBandwidthThread(struct bw_client_info* clientInfo)
     }
 }
 
-/*
- * B A N D W I D T H   T H R E A D   F U N C
- *
- */
 void* bandwidthThreadFunc(void* clientInfo)
 {
     struct bw_client_info* info = (struct bw_client_info*)clientInfo;
@@ -163,6 +143,8 @@ void* bandwidthThreadFunc(void* clientInfo)
                 struct bw_stats stats;
                 memcpy(stats.device, ife->name, IFNAMSIZ);
                 stats.link_id = ife->index;
+                stats.downlink_bw = NAN;
+                stats.uplink_bw = NAN;
                 
                 int rtn;
  
@@ -194,8 +176,6 @@ void* bandwidthThreadFunc(void* clientInfo)
 }
 
 /*
- * R U N   A C T I V E   B A N D W I D T H   T E S T
- *
  * Runs a bandwidth test by transferring a random file (a large, contiguous
  * block of data).  This consists of opening a TCP connection, sending the
  * data, then receiving the same data again.
@@ -205,49 +185,43 @@ void* bandwidthThreadFunc(void* clientInfo)
  */
 int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stats* stats)
 {
-    int  sockfd_data = -1;
+    int sockfd_data = -1;
     int rtn;
-    const int header_size = sizeof(struct tunhdr) + sizeof(struct bw_hdr);
+    char buffer[MTU];
 
     sockfd_data = openBandwidthSocket_udp(clientInfo, stats->device);
-   
-    DEBUG_MSG("sockfd_data:%d",sockfd_data); 
     if(sockfd_data == -1){
+        DEBUG_MSG("sockfd_data: %d", sockfd_data); 
         return FAILURE;
     }
    
-
     // Send RTS
-           
     struct sockaddr_in remoteAddr;
     memset(&remoteAddr, 0, sizeof(remoteAddr));
     remoteAddr.sin_family       = AF_INET;
     remoteAddr.sin_port         = htons(clientInfo->remote_port);
     remoteAddr.sin_addr.s_addr  = clientInfo->remote_addr;
 
-    const unsigned int packet_size = sizeof(struct bw_hdr);
-    char buffer[packet_size];
-    memset(buffer, 0, sizeof(buffer));
-
-    struct bw_hdr* __restrict__ bw_hdr = (struct bw_hdr*)buffer;
+    struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
     bw_hdr->type = htons(SPKT_ACTBW_CTS);
-    bw_hdr->size = htonl(MAX_BW_BYTES);
+    bw_hdr->size = htonl(DEFAULT_MTU);
     bw_hdr->bandwidth = 0.0;
     bw_hdr->node_id = htons(get_unique_id());
-    bw_hdr->link_id = htons(0);
-    socklen_t addrLen = sizeof(struct sockaddr);
+    bw_hdr->link_id = htons(stats->link_id);
 
-    rtn = sendto(sockfd_data, buffer, packet_size, 0, (struct sockaddr*)&remoteAddr, addrLen);
+    const int header_size = sizeof(struct bw_hdr);
+
+    rtn = sendto(sockfd_data, buffer, header_size, 0, 
+            (struct sockaddr *)&remoteAddr, sizeof(remoteAddr));
     if(rtn < 0) {
         ERROR_MSG("Sending RTS failed");
         return FAILURE;
-    } else if(rtn < packet_size) {
+    } else if(rtn < header_size) {
         DEBUG_MSG("Sending RTS stopped early");
         return FAILURE;
     }
 
     // Wait for CTS
- 
     unsigned int max_burst;
     rtn = receiveCts_udp(sockfd_data, clientInfo->timeout, &max_burst);
     if(rtn == FAILURE) {
@@ -265,26 +239,18 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
     // someone made a silly mistake somewhere.
     assert(burst_size >= header_size);
 
-    char buffer_burst[burst_size];
-    /*if(!buffer_burst) {
-        DEBUG_MSG("malloc failed");
-        //close(sockfd_ctrl);
-        close(sockfd_data);
-        return FAILURE;
-    }*/
+    fill_buffer_random(buffer, burst_size);
 
-    fill_buffer_random(buffer_burst, burst_size);
-
-    rtn = sendBurst_udp(sockfd_data, buffer_burst, burst_size, clientInfo, stats); 
+    rtn = sendBurst_udp(sockfd_data, buffer, burst_size, clientInfo, stats); 
         DEBUG_MSG("sendBurst_udp:%d",rtn);
     if (rtn <=0){
         goto failure;
      }
 
     sleep (ACTIVE_BW_TIMEOUT/1000000);
-    rtn = receiveBurst_udp(sockfd_data, buffer_burst, burst_size, clientInfo, stats);
-        DEBUG_MSG("receiveBurst_udp:%d",rtn);
-    if (rtn <=0){
+    rtn = recv_burst_udp(clientInfo, stats, sockfd_data, buffer, sizeof(buffer));
+    if (rtn <= 0) {
+        DEBUG_MSG("recv_burst_udp: %d", rtn);
         goto failure;
     }
 
@@ -305,133 +271,6 @@ failure:
     return FAILURE;
 } // end function runActiveBandwidthTest()
 
-/*
-int runActiveBandwidthTest(struct bw_client_info* clientInfo, struct bw_stats* stats)
-{
-    int sockfd = -1;
-    int rtn;
-    const int header_size = sizeof(struct tunhdr) + sizeof(struct bw_hdr);
-
-    sockfd = openBandwidthSocket(clientInfo, stats->device);
-    if(sockfd == -1) {
-        return FAILURE;
-    }
-    
-    unsigned int max_burst;
-    rtn = receiveCts(sockfd, clientInfo->timeout, &max_burst);
-        DEBUG_MSG("receiveCts:%d",receiveCts);
-    if(rtn == FAILURE) {
-        close(sockfd);
-        return FAILURE;
-    }
-
-    // Never exceed the maximum size the server gave us.
-    unsigned int burst_size = MIN(clientInfo->numBytes, max_burst);
-
-    // The burst needs to fit the header at least.  If this check fails,
-    // someone made a silly mistake somewhere.
-    assert(burst_size >= header_size);
-
-    char* buffer = (char*)malloc(burst_size);
-    if(!buffer) {
-        DEBUG_MSG("malloc failed");
-        close(sockfd);
-        return FAILURE;
-    }
-    fill_buffer_random(buffer, burst_size);
-
-    if(sendBurst(sockfd, buffer, burst_size, clientInfo, stats) <= 0) {
-        goto failure;
-    }
-
-    if(receiveBurst(sockfd, buffer, burst_size, clientInfo, stats) <= 0) {
-        goto failure;
-    }
-
-    if(sendMeasurement(sockfd, buffer, burst_size, clientInfo, stats) <= 0) {
-        goto failure;
-    }
-   
-    free(buffer);
-    close(sockfd);
-
-    return SUCCESS;   
-
-failure:
-    free(buffer);
-    close(sockfd);
-
-    return FAILURE;
-} // end function runActiveBandwidthTest()
-*/
-
-/*
- * O P E N   B A N D W I D T H   S O C K E T
- *
- * Opens a TCP socket and connects to the bandwidth test server
- * that runs on the controller.
- *
- * Returns a connected socket or -1 on failure.
- */
-/*
-static int openBandwidthSocket(struct bw_client_info* clientInfo, const char* bindDevice)
-{
-    int sockfd = -1;
-    int rtn;
-
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(sockfd < 0) {
-        ERROR_MSG("failed to open bandwidth socket");
-        return -1;
-    }
-
-    rtn = setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, bindDevice, IFNAMSIZ);
-    if(rtn < 0) {
-        ERROR_MSG("failed to bind socket to device");
-        goto failure;
-    }
-    
-    const int yes = 1;
-    rtn = setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
-    if(rtn < 0) {
-        ERROR_MSG("setsockopt SO_REUSEADDR failed");
-        goto failure;
-    }
-
-    struct timeval timeout;
-    set_timeval_us(&timeout, clientInfo->timeout);
-
-    // Set socket timeout so that recv() cannot block indefinitely.
-    rtn = setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-    if(rtn < 0) {
-        ERROR_MSG("setsockopt SO_RCVTIMEO failed (bad, but not critical)");
-    }
-
-    struct sockaddr_in remoteAddr;
-    memset(&remoteAddr, 0, sizeof(remoteAddr));
-    remoteAddr.sin_family       = AF_INET;
-    remoteAddr.sin_port         = htons(clientInfo->remote_port);
-    remoteAddr.sin_addr.s_addr  = clientInfo->remote_addr;
-
-    set_timeval_us(&timeout, clientInfo->timeout);
-
-    rtn = connect_timeout(sockfd, (struct sockaddr*)&remoteAddr, sizeof(remoteAddr), &timeout);
-    if(rtn < 0) {
-        if(errno == EWOULDBLOCK) {
-            DEBUG_MSG("Bandwidth connection timed out.");
-        } else {
-            ERROR_MSG("Bandwidth connection failed");
-        }
-        goto failure;
-    }
-    
-    return sockfd;
-
-failure:
-    close(sockfd);
-    return -1;
-}
-*/
 
 static int openBandwidthSocket_udp(struct bw_client_info* clientInfo, const char* bindDevice)
 {
@@ -465,28 +304,6 @@ static int openBandwidthSocket_udp(struct bw_client_info* clientInfo, const char
     if(rtn < 0) {
         ERROR_MSG("setsockopt SO_RCVTIMEO failed (bad, but not critical)");
     }
-/*
-    struct sockaddr_in remoteAddr;
-    memset(&remoteAddr, 0, sizeof(remoteAddr));
-    remoteAddr.sin_family       = AF_INET;
-    remoteAddr.sin_port         = htons(clientInfo->remote_port);
-    remoteAddr.sin_addr.s_addr  = clientInfo->remote_addr;
-
-    struct timespec connTimeout;
-    connTimeout.tv_sec  = timeout.tv_sec;
-    connTimeout.tv_nsec = timeout.tv_usec * 1000;
-
-    
-rtn = connect_timeout(sockfd, (struct sockaddr*)&remoteAddr, sizeof(remoteAddr), &connTimeout);
-    if(rtn < 0) {
-        if(errno == EWOULDBLOCK) {
-            DEBUG_MSG("Bandwidth connection timed out.");
-        } else {
-            ERROR_MSG("Bandwidth connection failed");
-        }
-        goto failure;
-    }
-*/
     
     return sockfd;
 
@@ -496,49 +313,6 @@ failure:
 }
 
 
-
-/*
- * RECEIVE CTS
- *
- * Waits up to timeout microseconds for a CTS packet.  If this returns SUCCESS,
- * then you are clear to flood the server with useless data.  If max_burst is
- * not null, this will write the server's max burst size into it.  If you try
- * to send more than that the server will ignore you.
- */
-/*
-static int receiveCts(int sockfd, int timeout, unsigned int* max_burst)
-{
-    const int packet_size = sizeof(struct bw_hdr);
-    char buffer[packet_size];
-    int result;
-
-    struct timeval timeout_tv;
-    set_timeval_us(&timeout_tv, timeout);
-
-    result = recv_timeout(sockfd, buffer, packet_size, MSG_WAITALL, &timeout_tv);
-    if(result < packet_size) {
-        if(result == -1 && errno == EWOULDBLOCK) {
-            DEBUG_MSG("Timed out receiving CTS");
-        }
-        return FAILURE;
-    }
-    
-    struct bw_hdr* __restrict__ bw_hdr = (struct bw_hdr*)buffer;
-    uint16_t h_type = ntohs(bw_hdr->type);
-    uint32_t h_size = ntohl(bw_hdr->size);
-    
-    if(h_type != SPKT_ACTBW_CTS) {
-        DEBUG_MSG("Received something other than CTS... look into this");
-        return FAILURE;
-    }
-
-    if(max_burst) {
-        *max_burst = h_size;
-    }
-
-    return SUCCESS;
-}
-*/
 
 /*
  * RECEIVE CTS
@@ -566,7 +340,7 @@ static int receiveCts_udp(int sockfd, int timeout, unsigned int* max_burst)
         return FAILURE;
     }
     
-    struct bw_hdr* __restrict__ bw_hdr = (struct bw_hdr*)buffer;
+    struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
     uint16_t h_type = ntohs(bw_hdr->type);
     uint32_t h_size = ntohl(bw_hdr->size);
     
@@ -582,21 +356,6 @@ static int receiveCts_udp(int sockfd, int timeout, unsigned int* max_burst)
     return SUCCESS;
 }
 
-/*
-static int sendBurst(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats)
-{
-    struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-
-    bw_hdr->type = htons(SPKT_ACTBW_BURST);
-    bw_hdr->size = htonl(len);
-    bw_hdr->bandwidth = 0.0; //bandwidth not known yet
-    bw_hdr->node_id = htons(get_unique_id());
-    bw_hdr->link_id = htons(stats->link_id);
-
-    return send(sockfd, buffer, len, 0);
-}
-*/
-
 static int sendBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats)
 {
     int i;
@@ -611,143 +370,63 @@ static int sendBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_clien
         struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
 
         bw_hdr->type = htons(SPKT_ACTBW_BURST);
-        bw_hdr->size = htonl(len);
+        bw_hdr->size = htonl(DEFAULT_MTU);
         bw_hdr->bandwidth = i; //bandwidth not known yet
         bw_hdr->node_id = htons(get_unique_id());
         bw_hdr->link_id = htons(stats->link_id);
 
-        rtn = sendto(sockfd, buffer, DEFAULT_MTU, 0, (struct sockaddr*)&remoteAddr, sizeof(struct sockaddr));
+        rtn = sendto(sockfd, buffer, DEFAULT_MTU, 0, 
+                (struct sockaddr*)&remoteAddr, sizeof(struct sockaddr));
     }
 
     return rtn;
 }
 
-/*    
-static int receiveBurst(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats)
+static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
+        int sockfd, char *buffer, int buffer_len)
 {
-    struct bw_hdr* __restrict__ bw_hdr  = (struct bw_hdr*)buffer;
-
     int result;
-    struct timeval recvTime;
+    int bytes_recvd = 0;
+    struct timeval start_time;
+    struct timeval last_pkt_time;
 
-    struct timeval timeout;
-    set_timeval_us(&timeout, clientInfo->timeout);
+    gettimeofday(&start_time, 0);
 
-    result = recv_timeout(sockfd, buffer, len, MSG_WAITALL, &timeout, &recvTime);
-    if(result < len) {
-        if(result == -1 && errno == EWOULDBLOCK) {
-            DEBUG_MSG("Timed out receiving burst");
+    long remaining_us = client->timeout;
+    while(remaining_us > 0) {
+        struct timeval timeout;
+        set_timeval_us(&timeout, remaining_us);
+
+        struct timeval recvfrom_start;
+        gettimeofday(&recvfrom_start, 0);
+
+        struct sockaddr_storage sender_addr;
+        socklen_t sender_addr_len = sizeof(sender_addr);
+
+        result = recvfrom_timeout(sockfd, buffer, buffer_len, 0,
+                (struct sockaddr *)&sender_addr, &sender_addr_len, &timeout);
+        if(result >= sizeof(struct bw_hdr)) {
+            // TODO: Verify sender address matches server
+
+            get_recv_timestamp(sockfd, &last_pkt_time);
+            bytes_recvd += result;
+            remaining_us = client->timeout;
+
+            struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
+            stats->uplink_bw = bw_hdr->bandwidth;
         }
-        return FAILURE;
+
+        remaining_us -= get_elapsed_us(&recvfrom_start);
     }
 
-    int elapsed_us = (recvTime.tv_sec * 1000000) + recvTime.tv_usec;
-    unsigned numBits = getTransferSizeBits(len);
-    stats->downlink_bw = (double)numBits / elapsed_us; //in mbps
+    long elapsed_us = timeval_diff(&last_pkt_time, &start_time);
+    stats->downlink_bw = (double)(bytes_recvd * 8) / (double)elapsed_us; //in Mbps
 
-    // The server measured its own downlink bandwidth and sent it to us
-    stats->uplink_bw = 2*bw_hdr->bandwidth;
+    DEBUG_MSG("bytes: %d, time: %ld, downlink_bw: %f Mbps, uplink_bw: %f Mbps",
+            bytes_recvd, elapsed_us, stats->downlink_bw, stats->uplink_bw);
 
-    return result;
+    return bytes_recvd;
 }
-*/
-
-static int receiveBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats)
-{
-    struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-
-    int flag = 0;
-    int result = 0;
-    int bytesRcvd = 0;
-    struct timeval recvTime;
-
-    fd_set readSet;
-    sigset_t sigset;
-
-    FD_ZERO(&readSet);
-    FD_SET(sockfd, &readSet);
-
-    sigemptyset(&sigset);
-    sigaddset(&sigset, SIGALRM);
-
-    struct timeval  startTime, endTime;
-    gettimeofday(&startTime, 0);
-    gettimeofday(&endTime, 0);
-    timersub(&endTime, &startTime, &recvTime);
-
-    struct timeval timeout;
-    set_timeval_us(&timeout, clientInfo->timeout);
-
-    while(1){
-        result = select(sockfd + 1, &readSet, 0, 0, &timeout);
-        //DEBUG_MSG("pselect:%d",result);
-        if(result < 0) {
-            break;
-        } else if(!FD_ISSET(sockfd, &readSet)) {
-            // Receive timed out
-            errno = EWOULDBLOCK;
-            break;
-        }
-
-        struct timeval  prevRecvTimeout;
-        struct timeval  tempRecvTimeout = {
-            .tv_sec     = timeout.tv_sec,
-            .tv_usec    = timeout.tv_usec,
-        };
-
-        //TODO: Check return values of {get,set}sockopt()
-        socklen_t       timeoutSize = sizeof(prevRecvTimeout);
-        getsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &prevRecvTimeout, &timeoutSize);
-        setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tempRecvTimeout, sizeof(tempRecvTimeout));
-
-
-
-        result= recvfrom(sockfd, buffer, DEFAULT_MTU, MSG_WAITALL, NULL, 0);
-        //DEBUG_MSG("Rcvd %d bytes", result);
-
-        //buffer += result;
-
-        if (!flag){
-            flag=1;
-            gettimeofday(&startTime, 0);
-        }
-        else{
-            bytesRcvd += result;
-        }
-
-        gettimeofday(&endTime, 0);
-        timersub(&endTime, &startTime, &recvTime);
-
-        setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &prevRecvTimeout, sizeof(prevRecvTimeout));
-    }
-
-    int elapsed_us = (recvTime.tv_sec * 1000000) + recvTime.tv_usec;
-
-    if (elapsed_us){
-        unsigned numBits = bytesRcvd*8; //getTransferSizeBits(len);
-        stats->downlink_bw = (double)numBits / elapsed_us; //in mbps
-        DEBUG_MSG("downlink_bw %f, Rcvd bytes:%d, Transfer time:%d",stats->downlink_bw, bytesRcvd, elapsed_us);
-        // The server measured its own downlink bandwidth and sent it to us
-        stats->uplink_bw = 1.5*bw_hdr->bandwidth;
-    }
-    return bytesRcvd;
-}
-
-/*
-static int sendMeasurement(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats)
-{
-    struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-    const unsigned header_len = sizeof(struct bw_hdr);
-
-    bw_hdr->type = htons(SPKT_ACTBW_BURST);
-    bw_hdr->size = htonl(header_len);
-    bw_hdr->bandwidth = stats->downlink_bw;
-    bw_hdr->node_id = htons(get_unique_id());
-    bw_hdr->link_id = htons(stats->link_id);
-    
-    return send(sockfd, buffer, header_len, 0);
-}
-*/
 
 static int sendMeasurement_udp(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats)
 {
@@ -766,25 +445,8 @@ static int sendMeasurement_udp(int sockfd, char* buffer, unsigned len, struct bw
     remoteAddr.sin_port         = htons(clientInfo->remote_port);
     remoteAddr.sin_addr.s_addr  = clientInfo->remote_addr;
 
-    return sendto(sockfd, buffer, header_len, 0,(struct sockaddr*)&remoteAddr, sizeof(struct sockaddr));
+    return sendto(sockfd, buffer, header_len, 0, 
+            (struct sockaddr *)&remoteAddr, sizeof(struct sockaddr));
 }
 
-
-/*
- * GET TRANSFER SIZE BITS
- *
- * Estimates the number of bits in sending the payload over TCP.  Assumes a
- * default MTU to calculate how many bits are transmitted for IP and TCP
- * headers.
- */
-/*
-static unsigned int getTransferSizeBits(unsigned int payloadBytes)
-{
-    const int payloadMtu = DEFAULT_MTU - DEFAULT_IP_H_SIZE - DEFAULT_TCP_H_SIZE;
-    unsigned int numPackets = (unsigned int)ceil((double)payloadBytes / payloadMtu);
-    unsigned int numBytes = payloadBytes + 
-        (DEFAULT_IP_H_SIZE + DEFAULT_TCP_H_SIZE) * numPackets;
-    return numBytes * 8;
-}
-*/
 
