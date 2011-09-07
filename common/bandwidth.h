@@ -27,6 +27,11 @@
 #ifndef _BANDWIDTH_H_
 #define _BANDWIDTH_H_
 
+#include <pthread.h>
+#include <linux/if.h>
+#include <linux/if_ether.h>
+#include <sys/time.h>
+
 enum {
     BW_UDP = 1,
     BW_TCP,
@@ -47,14 +52,30 @@ typedef void (*bw_callback_t)(struct bw_client_info *, struct interface *,
 #define SPKT_ACTBW_BURST    0x11
 #define SPKT_ACTBW_STATS    0x12
 
+/* Storage for a queue of waiting bandwidth clients. */
+struct bw_client {
+    struct sockaddr_storage addr;
+    socklen_t addr_len;
+    int pkt_len;
+
+    double uplink_bw;
+
+    struct timeval rts_time;
+
+    struct bw_client *next;
+};
+
 struct bw_server_info {
     // Settings for the bandwidth thread
     // Set these values before calling startBandwidthServerThread()
     unsigned int       timeout; //in microseconds
-    unsigned short     local_port;
+    unsigned short     port;
 
     pthread_t          tcp_thread;
     pthread_t          udp_thread;
+
+    struct bw_client   *clients_head;
+    struct bw_client   *clients_tail;
 };
 
 struct bw_client_info {
@@ -93,7 +114,7 @@ struct bw_hdr {
 } __attribute__((__packed__));
 
 #ifdef CONTROLLER
-int     startBandwidthServerThread(struct bw_server_info* serverInfo);
+int     start_bandwidth_server_thread(struct bw_server_info* serverInfo);
 #endif
 
 #ifdef GATEWAY

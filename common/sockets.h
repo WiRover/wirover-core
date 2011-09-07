@@ -44,5 +44,7 @@ void remove_idle_clients(struct client** head, unsigned int timeout_sec);
 
 void fill_buffer_random(void *buffer, int size);
 
+int get_recv_timestamp(int sockfd, struct timeval *timestamp);
+
 #endif //_SOCKETS_H_
 

@@ -1,3 +1,5 @@
+#define _BSD_SOURCE
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -669,58 +671,58 @@ static int receiveBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_cl
     sigaddset(&sigset, SIGALRM);
 
     struct timeval  startTime, endTime;
-        gettimeofday(&startTime, 0);
-        gettimeofday(&endTime, 0);
-        timeval_sub(&recvTime, &endTime, &startTime);
+    gettimeofday(&startTime, 0);
+    gettimeofday(&endTime, 0);
+    timersub(&endTime, &startTime, &recvTime);
 
     struct timeval timeout;
     set_timeval_us(&timeout, clientInfo->timeout);
-    
+
     while(1){
-    result = select(sockfd + 1, &readSet, 0, 0, &timeout);
-    //DEBUG_MSG("pselect:%d",result);
-    if(result < 0) {
-        break;
-    } else if(!FD_ISSET(sockfd, &readSet)) {
-        // Receive timed out
-        errno = EWOULDBLOCK;
-        break;
+        result = select(sockfd + 1, &readSet, 0, 0, &timeout);
+        //DEBUG_MSG("pselect:%d",result);
+        if(result < 0) {
+            break;
+        } else if(!FD_ISSET(sockfd, &readSet)) {
+            // Receive timed out
+            errno = EWOULDBLOCK;
+            break;
+        }
+
+        struct timeval  prevRecvTimeout;
+        struct timeval  tempRecvTimeout = {
+            .tv_sec     = timeout.tv_sec,
+            .tv_usec    = timeout.tv_usec,
+        };
+
+        //TODO: Check return values of {get,set}sockopt()
+        socklen_t       timeoutSize = sizeof(prevRecvTimeout);
+        getsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &prevRecvTimeout, &timeoutSize);
+        setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tempRecvTimeout, sizeof(tempRecvTimeout));
+
+
+
+        result= recvfrom(sockfd, buffer, DEFAULT_MTU, MSG_WAITALL, NULL, 0);
+        //DEBUG_MSG("Rcvd %d bytes", result);
+
+        //buffer += result;
+
+        if (!flag){
+            flag=1;
+            gettimeofday(&startTime, 0);
+        }
+        else{
+            bytesRcvd += result;
+        }
+
+        gettimeofday(&endTime, 0);
+        timersub(&endTime, &startTime, &recvTime);
+
+        setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &prevRecvTimeout, sizeof(prevRecvTimeout));
     }
 
-    struct timeval  prevRecvTimeout;
-    struct timeval  tempRecvTimeout = {
-        .tv_sec     = timeout.tv_sec,
-        .tv_usec    = timeout.tv_usec,
-    };
-
-    //TODO: Check return values of {get,set}sockopt()
-    socklen_t       timeoutSize = sizeof(prevRecvTimeout);
-    getsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &prevRecvTimeout, &timeoutSize);
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &tempRecvTimeout, sizeof(tempRecvTimeout));
-
-
-
-    result= recvfrom(sockfd, buffer, DEFAULT_MTU, MSG_WAITALL, NULL, 0);
-    //DEBUG_MSG("Rcvd %d bytes", result);
-
-    //buffer += result;
-       
-     if (!flag){
-       flag=1;
-        gettimeofday(&startTime, 0);
-      }
-      else{
-      bytesRcvd += result;
-      }
- 
-     gettimeofday(&endTime, 0);
-     timeval_sub(&recvTime, &endTime, &startTime);
-
-    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &prevRecvTimeout, sizeof(prevRecvTimeout));
-  }
-
     int elapsed_us = (recvTime.tv_sec * 1000000) + recvTime.tv_usec;
-    
+
     if (elapsed_us){
         unsigned numBits = bytesRcvd*8; //getTransferSizeBits(len);
         stats->downlink_bw = (double)numBits / elapsed_us; //in mbps

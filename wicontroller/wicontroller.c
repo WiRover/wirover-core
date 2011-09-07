@@ -1,8 +1,10 @@
 #include <errno.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 
+#include "bandwidth.h"
 #include "configuration.h"
 #include "contchan.h"
 #include "database.h"
@@ -24,6 +26,8 @@ int main(int argc, char* argv[])
 {
     struct lease_info* lease;
     int result;
+
+    const config_t *config = get_config();
 
     const char* wiroot_ip = get_wiroot_ip();
     const unsigned short wiroot_port = get_wiroot_port();
@@ -66,6 +70,32 @@ int main(int argc, char* argv[])
 
     if(start_ping_thread() == FAILURE) {
         DEBUG_MSG("Failed to start ping thread");
+        exit(1);
+    }
+
+    struct bw_server_info bw_server;
+    memset(&bw_server, 0, sizeof(bw_server));
+    bw_server.timeout = DEFAULT_BANDWIDTH_TIMEOUT;
+    bw_server.port = DEFAULT_BANDWIDTH_PORT;
+
+    if(config) {
+        int tmp;
+        
+        config_lookup_int(config, "bandwidth-server.timeout", &tmp);
+        if(tmp > 0)
+            bw_server.timeout = tmp;
+        else
+            DEBUG_MSG("Invalid: bandwidth-server.timeout = %d", tmp);
+
+        config_lookup_int(config, "bandwidth-server.port", &tmp);
+        if(tmp > 0 && tmp <= USHRT_MAX)
+            bw_server.port = tmp;
+        else
+            DEBUG_MSG("Invalid: bandwidth-server.port = %d", tmp);
+    }
+
+    if(start_bandwidth_server_thread(&bw_server) < 0) {
+        DEBUG_MSG("Failed to start bandwidth server thread");
         exit(1);
     }
 

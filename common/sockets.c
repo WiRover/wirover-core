@@ -1,14 +1,16 @@
 #include <assert.h>
 #include <fcntl.h>
-#include <netdb.h>
+#include <asm-generic/sockios.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <stropts.h>
 #include <time.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/time.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>
 #include <netdb.h>
@@ -555,4 +557,12 @@ void fill_buffer_random(void *buffer, int size)
     for(i = 1; i <= rem_bytes; i++)
         ((char *)buffer)[size - i] = (char)rand();
 }
+
+int get_recv_timestamp(int sockfd, struct timeval *timestamp) {
+    if(ioctl(sockfd, SIOCGSTAMP, timestamp) < 0) {
+        gettimeofday(timestamp, 0);
+    }
+    return 0;
+}
+
 

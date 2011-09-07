@@ -6,8 +6,10 @@
 
 #define SPECIAL_SEQ_NO 0xFFFFFFFF
 
-#define DEFAULT_BASE_PORT       8000
-#define DEFAULT_PING_INTERVAL   10
+#define DEFAULT_BASE_PORT           8000
+#define DEFAULT_PING_INTERVAL       10
+#define DEFAULT_BANDWIDTH_TIMEOUT   5000000
+#define DEFAULT_BANDWIDTH_PORT      8002
 
 // Controllers pick a base port, then use subsequent port numbers for other
 // services.  Data, pings, and nat punches will go over the "data channel"
