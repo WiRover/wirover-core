@@ -23,6 +23,13 @@
 #define PROC_NET_DEV            "/proc/net/dev"
 #define PROC_NET_DEV_STAT_COLS  8
 
+/* Ping error codes */
+#define PING_ERR_OK         0
+#define PING_ERR_TOO_SHORT  1
+#define PING_ERR_BAD_NODE   2
+#define PING_ERR_BAD_LINK   3
+#define PING_ERR_BAD_HASH   4
+
 struct ping_packet {
     uint8_t  type;
     uint32_t seq_no;

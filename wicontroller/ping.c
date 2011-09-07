@@ -146,8 +146,6 @@ static int handle_incoming(int sockfd)
     }
     
     int valid = ping_request_valid(buffer, bytes_recvd);
-    if(valid == 0)
-        return 0;
 
     const struct ping_packet *ping = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
@@ -158,7 +156,7 @@ static int handle_incoming(int sockfd)
 
     switch(PING_TYPE(ping->type)) {
         case PING_REQUEST:
-            if(valid > 0) {
+            if(valid == PING_ERR_OK) {
                 if(send_response(sockfd, gw, PING_RESPONSE, buffer, bytes_recvd, 
                             (struct sockaddr *)&from, from_len) < 0) {
                     ERROR_MSG("Failed to send ping response");
@@ -177,15 +175,18 @@ static int handle_incoming(int sockfd)
 
             break;
         case PING_SECOND_RESPONSE:
-            // The receive timestamp recorded by the kernel will be more accurate
-            // than if we call gettimeofday() at this point.
-            if(ioctl(sockfd, SIOCGSTAMP, &recv_time) == -1) {
-                DEBUG_MSG("ioctl SIOCGSTAMP failed");
-                gettimeofday(&recv_time, 0);
+            if(valid == PING_ERR_OK) {
+                // The receive timestamp recorded by the kernel will be more accurate
+                // than if we call gettimeofday() at this point.
+                if(ioctl(sockfd, SIOCGSTAMP, &recv_time) == -1) {
+                    DEBUG_MSG("ioctl SIOCGSTAMP failed");
+                    gettimeofday(&recv_time, 0);
+                }
+                        
+                process_ping_response(buffer, bytes_recvd,
+                        (struct sockaddr *)&from, from_len, &recv_time);
             }
-                    
-            process_ping_response(buffer, bytes_recvd,
-                    (struct sockaddr *)&from, from_len, &recv_time);
+
             break;
         default:
             break;
@@ -198,15 +199,17 @@ static int handle_incoming(int sockfd)
  * Do minimal preprocessing to determine the type of ping packet
  * and whether it is valid or not.
  *
- * Returns:
- *   0 for an invalid ping (drop, no response)
- *   1 for a valid ping request
- *   -1 for a ping request that should receive an error response
+ * Returns one of the error codes:
+ *  PING_ERR_OK
+ *  PING_ERR_TOO_SHORT
+ *  PING_ERR_BAD_NODE
+ *  PING_ERR_BAD_LINK
+ *  PING_ERR_BAD_HASH
  */
 static int ping_request_valid(char *buffer, int len)
 {
     if(len < MIN_PING_PACKET_SIZE)
-        return 0;
+        return PING_ERR_TOO_SHORT;
     
     const struct ping_packet *ping = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
@@ -215,7 +218,7 @@ static int ping_request_valid(char *buffer, int len)
      * the root server. */
     unsigned short node_id = ntohs(ping->src_id);
     if(node_id == 0)
-        return 0;
+        return PING_ERR_BAD_NODE;
 
     struct gateway *gw = lookup_gateway_by_id(node_id);
 
@@ -230,18 +233,18 @@ static int ping_request_valid(char *buffer, int len)
             if(!ife) {
                 DEBUG_MSG("Unrecognized interface (%u) for node (%hu)", 
                         link_id, node_id);
-                return -1;
+                return PING_ERR_BAD_LINK;
             }
         } else {
             DEBUG_MSG("SHA hash mismatch");
-            return 0;
+            return PING_ERR_BAD_HASH;
         }
     } else {
         DEBUG_MSG("Unrecognized gateway (%hu)", node_id);
-        return -1;
+        return PING_ERR_BAD_NODE;
     }
 
-    return 1;
+    return PING_ERR_OK;
 }
 
 /*
