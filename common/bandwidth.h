@@ -27,20 +27,21 @@
 #ifndef _BANDWIDTH_H_
 #define _BANDWIDTH_H_
 
+enum {
+    BW_UDP = 1,
+    BW_TCP,
+};
+
 // Forward declarations of structures
-struct link;
+struct interface;
 struct bw_server_info;
 struct bw_client_info;
 struct bw_stats;
 struct bw_test_payload;
 
 // typedef for a callback function to get bw statistics
-typedef void (*bw_callback_t)(struct bw_client_info*, struct link*, struct bw_stats*);
-
-enum {
-    BW_UDP = 1,
-    BW_TCP,
-};
+typedef void (*bw_callback_t)(struct bw_client_info *, struct interface *,
+        struct bw_stats *);
 
 #define SPKT_ACTBW_CTS      0x10
 #define SPKT_ACTBW_BURST    0x11

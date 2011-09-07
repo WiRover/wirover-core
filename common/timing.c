@@ -1,6 +1,8 @@
 #include <assert.h>
+#include <errno.h>
 #include <sys/time.h>
 
+#include "debug.h"
 #include "timing.h"
 
 void timeval_sub(struct timeval *result, const struct timeval *lhs, 
@@ -32,5 +34,25 @@ void set_timeval_usec(long usec, struct timeval *dest)
 {
     dest->tv_sec = usec / USEC_PER_SEC;
     dest->tv_usec = usec % USEC_PER_SEC;
+}
+
+void set_timeval_us(struct timeval *dest, long usec)
+{
+    dest->tv_sec = usec / USEC_PER_SEC;
+    dest->tv_usec = usec % USEC_PER_SEC;
+}
+
+int safe_usleep(long usec)
+{
+    struct timeval sleep;
+    sleep.tv_sec = usec / USEC_PER_SEC;
+    sleep.tv_usec = usec % USEC_PER_SEC;
+
+    int rtn = select(0, 0, 0, 0, &sleep);
+    if(rtn < 0 && errno == EINTR) {
+        DEBUG_MSG("Warning: select() was interrupted");
+    }
+
+    return rtn;
 }
 

@@ -220,6 +220,71 @@ free_and_fail:
 
 }
 
+int connect_timeout(int socket, struct sockaddr *addr, socklen_t addrlen, 
+                struct timeval *timeout)
+{
+    int         result;
+    fd_set      writeSet;
+    int         prevFlags;
+    int         retval = 0;
+    
+    if(!timeout) {
+        retval = connect(socket, addr, addrlen);
+        goto done;
+    }
+
+    FD_ZERO(&writeSet);
+    FD_SET(socket, &writeSet);
+
+    prevFlags = fcntl(socket, F_GETFL, 0);
+    if(prevFlags < 0) {
+        ERROR_MSG("Failed to get file flags from socket");
+        retval = -1;
+        goto done;
+    }
+
+    // If the socket was not already set to nonblocking, we need to do so to
+    // prevent connect() from blocking.
+    if(prevFlags & ~O_NONBLOCK) {
+        if(fcntl(socket, F_SETFL, prevFlags | O_NONBLOCK) < 0) {
+            ERROR_MSG("Failed to set file flags on socket");
+            retval = -1;
+            goto done;
+        }
+    }
+
+    // connect() should return -1 with errno set to EINPROGRESS
+    result = connect(socket, addr, addrlen);
+    if(result < 0 && errno != EINPROGRESS) {
+        ERROR_MSG("Socket connect failed");
+        retval = -1;
+        goto reset_socket;
+    }
+
+    // If the socket becomes writable, then the connection attempt succeeded.
+    result = select(socket + 1, 0, &writeSet, 0, timeout);
+    if(result < 0) {
+        retval = -1;
+        goto reset_socket;
+    } else if(!FD_ISSET(socket, &writeSet)) {
+        // Connection timed out
+        errno = EWOULDBLOCK;
+        retval = -1;
+        goto reset_socket;
+    }
+
+reset_socket:    
+    if(prevFlags & ~O_NONBLOCK) {
+        if(fcntl(socket, F_SETFL, prevFlags) < 0) {
+            ERROR_MSG("Failed to set file flags on socket");
+            retval = -1;
+        }
+    }
+
+done:
+    return retval;
+}
+
 /*
  * This is a wrapper function around recv that blocks for the specified maximum
  * amount of time.  Error reporting matches that of the recv function.  On
@@ -478,4 +543,16 @@ void remove_idle_clients(struct client** head, unsigned int timeout_sec)
     }
 }
 
+void fill_buffer_random(void *buffer, int size)
+{
+    int i;
+
+    const int num_words = size / sizeof(int);
+    for(i = 0; i < num_words; i++)
+        ((int *)buffer)[i] = rand();
+
+    const int rem_bytes = size % sizeof(int);
+    for(i = 1; i <= rem_bytes; i++)
+        ((char *)buffer)[size - i] = (char)rand();
+}
 

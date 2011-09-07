@@ -2,6 +2,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DGATEWAY")
 
 add_executable(wigateway
     wigateway.c
+    bandwidth.c
     contchan.c
     gps_handler.c
     ping.c

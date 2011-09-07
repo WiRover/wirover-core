@@ -54,5 +54,9 @@
 #define DEFAULT_IP_H_SIZE 20
 #define DEFAULT_TCP_H_SIZE 32
 
+#define BW_TYPE BW_UDP
+#define BW_UDP_PKTS 20
+#define BW_UDP_SLEEP 1000 //in micro secs
+
 #endif //_CONFIG_H_
 
