@@ -242,10 +242,9 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
     fill_buffer_random(buffer, burst_size);
 
     rtn = sendBurst_udp(sockfd_data, buffer, burst_size, clientInfo, stats); 
-        DEBUG_MSG("sendBurst_udp:%d",rtn);
     if (rtn <=0){
         goto failure;
-     }
+    }
 
     // TODO: We should use whatever timeout the controller is using.
     usleep(clientInfo->timeout);
