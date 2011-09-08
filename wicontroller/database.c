@@ -358,13 +358,13 @@ int db_update_bandwidth(const struct gateway *gw, const struct interface *ife,
     if((now - gw->last_gps_time) < GPS_DATA_TIMEOUT) {
         len = snprintf(query_buffer, sizeof(query_buffer),
                 "insert into bandwidth (node_id, network, gps_id, bw_down, bw_up, type) values"
-                "(%hu, '%s', %u, '%f', '%f', '%s')",
+                "(%hu, '%s', %u, '%f', '%f', %s)",
                 gw->unique_id, ife->network, gw->last_gps_row_id,
                 bw_down, bw_up, type_str);
     } else {
         len = snprintf(query_buffer, sizeof(query_buffer),
                 "insert into bandwidth (node_id, network, bw_down, bw_up, type) values"
-                "(%hu, '%s', '%f', '%f', '%s')",
+                "(%hu, '%s', '%f', '%f', %s)",
                 gw->unique_id, ife->network, bw_down, bw_up, type_str);
     }
 

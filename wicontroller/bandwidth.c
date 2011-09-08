@@ -179,7 +179,7 @@ static int handle_bandwidth_client_udp(struct bw_server_info *serverInfo,
         // This is the bandwidth from the controller to the gateway
         double gw_downlink_bw = bw_hdr->bandwidth;
 
-        DEBUG_MSG("Bandwidth for node %d link %d down% %f Mbps, up: %f Mbps, bytes recvd: %d, sent: %d",
+        DEBUG_MSG("Bandwidth for node %d link %d down %f Mbps, up: %f Mbps, bytes recvd: %d, sent: %d",
                 h_node_id, h_link_id, gw_downlink_bw, client->uplink_bw, 
                 bytes_recvd, bytes_sent);
 
