@@ -266,11 +266,11 @@ static int recv_client_burst_udp(struct bw_server_info *server, struct bw_client
 {
     int result;
     int bytes_recvd = 0;
-    struct timeval start_time;
+
+    int is_first_pkt = 1;
+    struct timeval first_pkt_time;
     struct timeval last_pkt_time;
 
-    gettimeofday(&start_time, 0);
-    
     long remaining_us = server->timeout;
     while(remaining_us > 0) {
         struct timeval timeout;
@@ -289,9 +289,15 @@ static int recv_client_burst_udp(struct bw_server_info *server, struct bw_client
             
             if(bw_hdr->type == BW_TYPE_BURST && his_addr_len == client->addr_len &&
                     memcmp(&his_addr, &client->addr, his_addr_len) == 0) {
-                bytes_recvd += result;
+                if(is_first_pkt) {
+                    get_recv_timestamp(sockfd, &first_pkt_time);
+                    is_first_pkt = 0;
+                } else {
+                    get_recv_timestamp(sockfd, &last_pkt_time);
+                    bytes_recvd += result;
+                }
+
                 remaining_us = server->timeout;
-                get_recv_timestamp(sockfd, &last_pkt_time);
             } else if(bw_hdr->type == BW_TYPE_RTS) {
                 // Received an RTS from a new client.
                 struct bw_client *new_client = malloc(sizeof(struct bw_client));
@@ -317,7 +323,7 @@ static int recv_client_burst_udp(struct bw_server_info *server, struct bw_client
         remaining_us -= get_elapsed_us(&recvfrom_start);
     }
     
-    long elapsed_us = timeval_diff(&last_pkt_time, &start_time);
+    long elapsed_us = timeval_diff(&last_pkt_time, &first_pkt_time);
     double uplink_bw = (double)(bytes_recvd * 8) / (double)elapsed_us; //in Mbps
 
     client->uplink_bw = uplink_bw;

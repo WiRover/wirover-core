@@ -382,10 +382,10 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
 {
     int result;
     int bytes_recvd = 0;
-    struct timeval start_time;
-    struct timeval last_pkt_time;
 
-    gettimeofday(&start_time, 0);
+    int is_first_pkt = 1;
+    struct timeval first_pkt_time;
+    struct timeval last_pkt_time;
 
     long remaining_us = client->timeout;
     while(remaining_us > 0) {
@@ -405,8 +405,14 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
 
             // TODO: Verify sender address matches server
             if(bw_hdr->type == BW_TYPE_BURST) {
-                get_recv_timestamp(sockfd, &last_pkt_time);
-                bytes_recvd += result;
+                if(is_first_pkt) {
+                    get_recv_timestamp(sockfd, &first_pkt_time);
+                    is_first_pkt = 0;
+                } else {
+                    get_recv_timestamp(sockfd, &last_pkt_time);
+                    bytes_recvd += result;
+                }
+
                 remaining_us = client->timeout;
 
                 struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
@@ -417,7 +423,7 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
         remaining_us -= get_elapsed_us(&recvfrom_start);
     }
 
-    long elapsed_us = timeval_diff(&last_pkt_time, &start_time);
+    long elapsed_us = timeval_diff(&last_pkt_time, &first_pkt_time);
     stats->downlink_bw = (double)(bytes_recvd * 8) / (double)elapsed_us; //in Mbps
 
     DEBUG_MSG("bytes: %d, time: %ld, downlink_bw: %f Mbps, uplink_bw: %f Mbps",
