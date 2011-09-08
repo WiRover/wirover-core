@@ -112,10 +112,13 @@ static int handle_bandwidth_client_udp(struct bw_server_info *serverInfo,
         return FAILURE;
 
     bytes_recvd = recv_client_burst_udp(serverInfo, client, sockfd, buffer, buffer_len);
+    if(bytes_recvd <= 0)
+        return FAILURE;
 
     //Send Packets for DL BW estimation by Client
     int bytes_sent = send_burst_udp(client, sockfd, buffer, buffer_len);
-    DEBUG_MSG("bytesSent: %d", bytes_sent);
+    if(bytes_sent <= 0)
+        return FAILURE;
 
     int recvd_last_pkt = 0;
     
@@ -133,16 +136,16 @@ static int handle_bandwidth_client_udp(struct bw_server_info *serverInfo,
         result = recvfrom_timeout(sockfd, buffer, buffer_len, 0, 
                 (struct sockaddr *)&his_addr, &his_addr_len, &timeout);
         if(result > 0) {
-            if(his_addr_len == client->addr_len &&
+            struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
+
+            if(bw_hdr->type == BW_TYPE_STATS && his_addr_len == client->addr_len &&
                     memcmp(&his_addr, &client->addr, his_addr_len) == 0) {
                 recvd_last_pkt = 1;
                 break;
-            } else {
+            } else if(bw_hdr->type == BW_TYPE_RTS) {
                 // Received an RTS from a new client.
                 struct bw_client *new_client = malloc(sizeof(struct bw_client));
                 if(new_client) {
-                    struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-
                     memcpy(&new_client->addr, &his_addr, sizeof(his_addr));
                     new_client->addr_len = his_addr_len;
                     new_client->pkt_len = ntohl(bw_hdr->size);
@@ -181,7 +184,7 @@ static int handle_bandwidth_client_udp(struct bw_server_info *serverInfo,
         if(gw) {
             time(&gw->last_bw_time);
 
-#ifdef WITH_MYSQL
+#ifdef WITH_DATABASE
             struct interface *ife = find_interface_by_index(gw->head_interface, 
                     h_link_id);
             if(ife) {
@@ -204,25 +207,28 @@ static int wait_for_client_udp(struct bw_server_info *server, int sockfd,
 
     result = recvfrom(sockfd, buffer, buffer_len, 0,
             (struct sockaddr *)&his_addr, &his_addr_len);
-    if(result > 0) {
-        // Received an RTS from a new client.
-        struct bw_client *new_client = malloc(sizeof(struct bw_client));
-        if(new_client) {
-            struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
+    if(result >= sizeof(struct bw_hdr)) {
+        struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
 
-            memcpy(&new_client->addr, &his_addr, sizeof(his_addr));
-            new_client->addr_len = his_addr_len;
-            new_client->pkt_len = ntohl(bw_hdr->size);
-            get_recv_timestamp(sockfd, &new_client->rts_time);
-            new_client->uplink_bw = NAN; // not measured yet
-            new_client->next = 0;
+        if(bw_hdr->type == BW_TYPE_RTS) {
+            // Received an RTS from a new client.
+            struct bw_client *new_client = malloc(sizeof(struct bw_client));
+            if(new_client) {
 
-            if(server->clients_tail) {
-                server->clients_tail->next = new_client;
-                server->clients_tail = new_client;
-            } else {
-                server->clients_head = new_client;
-                server->clients_tail = new_client;
+                memcpy(&new_client->addr, &his_addr, sizeof(his_addr));
+                new_client->addr_len = his_addr_len;
+                new_client->pkt_len = ntohl(bw_hdr->size);
+                get_recv_timestamp(sockfd, &new_client->rts_time);
+                new_client->uplink_bw = NAN; // not measured yet
+                new_client->next = 0;
+
+                if(server->clients_tail) {
+                    server->clients_tail->next = new_client;
+                    server->clients_tail = new_client;
+                } else {
+                    server->clients_head = new_client;
+                    server->clients_tail = new_client;
+                }
             }
         }
     }
@@ -237,7 +243,7 @@ static int send_cts_udp(int sockfd, struct sockaddr *dest_addr, socklen_t dest_l
     memset(buffer, 0, sizeof(buffer));
 
     struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-    bw_hdr->type = htons(SPKT_ACTBW_CTS);
+    bw_hdr->type = BW_TYPE_CTS;
     bw_hdr->size = htonl(DEFAULT_MTU);
     bw_hdr->bandwidth = 0.0;
 
@@ -276,18 +282,18 @@ static int recv_client_burst_udp(struct bw_server_info *server, struct bw_client
 
         result = recvfrom_timeout(sockfd, buffer, buffer_len, 0, 
                 (struct sockaddr *)&his_addr, &his_addr_len, &timeout);
-        if(result > 0) {
-            if(his_addr_len == client->addr_len &&
+        if(result >= sizeof(struct bw_hdr)) {
+            struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
+            
+            if(bw_hdr->type == BW_TYPE_BURST && his_addr_len == client->addr_len &&
                     memcmp(&his_addr, &client->addr, his_addr_len) == 0) {
                 bytes_recvd += result;
                 remaining_us = server->timeout;
                 get_recv_timestamp(sockfd, &last_pkt_time);
-            } else {
+            } else if(bw_hdr->type == BW_TYPE_RTS) {
                 // Received an RTS from a new client.
                 struct bw_client *new_client = malloc(sizeof(struct bw_client));
                 if(new_client) {
-                    struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-
                     memcpy(&new_client->addr, &his_addr, sizeof(his_addr));
                     new_client->addr_len = his_addr_len;
                     new_client->pkt_len = ntohl(bw_hdr->size);
@@ -328,6 +334,7 @@ static int send_burst_udp(const struct bw_client *client, int sockfd,
     int result;
         
     struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
+    bw_hdr->type = BW_TYPE_BURST;
     bw_hdr->bandwidth = client->uplink_bw;
 
     for(i = 0; i < BW_UDP_PKTS; i++) {

@@ -42,9 +42,11 @@ int main(int argc, char* argv[])
         DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
     }
 
+#ifdef WITH_DATABASE
     if(init_database() < 0) {
         DEBUG_MSG("Failed to initialize database connection");
     }
+#endif
 
     uint32_t priv_ip = 0;
     uint32_t priv_netmask = 0;

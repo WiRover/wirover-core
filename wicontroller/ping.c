@@ -349,7 +349,9 @@ static void process_ping_request(char *buffer, int len,
                     from_in.sin_port);
         }
 
+#ifdef WITH_DATABASE
         db_update_link(gw, ife);
+#endif
     }
 
     ife->last_ping_time = time(0);

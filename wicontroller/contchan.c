@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 
+#include "config.h"
 #include "contchan.h"
 #include "database.h"
 #include "debug.h"
@@ -59,7 +60,7 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len)
 
     if(gw) {
         send_response(sockfd, gw);
-
+#ifdef WITH_DATABASE
         db_update_gateway(gw, state_change);
 
         // TODO: We really only need to update links that have changed
@@ -67,6 +68,7 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len)
         DL_FOREACH(gw->head_interface, ife) {
             db_update_link(gw, ife);
         }
+#endif
     }
 
     return 0;
@@ -168,7 +170,9 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
         }
 
         ife->state = new_state;
+#ifdef WITH_DATABASE
         db_update_link(gw, ife);
+#endif
     }
 
     struct interface* tmp;
@@ -176,7 +180,9 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
         if(ife->state == DEAD) {
             virt_remove_remote_link(&priv_ip, &ife->public_ip);
 
+#ifdef WITH_DATABASE
             db_update_link(gw, ife);
+#endif
 
             DL_DELETE(gw->head_interface, ife);
             free(ife);

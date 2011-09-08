@@ -153,6 +153,8 @@ void* bandwidthThreadFunc(void* clientInfo)
                     //rtn = runActiveBandwidthTest(info, &stats);
                 } else if(BW_TYPE == BW_UDP) {
                     rtn = runActiveBandwidthTest_udp(info, &stats);
+                    if(rtn == FAILURE)
+                        DEBUG_MSG("Bandwidth test on %s failed", ife->name);
                 } else {
                     DEBUG_MSG("BW_TYPE not defined");
                 }
@@ -203,7 +205,7 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
     remoteAddr.sin_addr.s_addr  = clientInfo->remote_addr;
 
     struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-    bw_hdr->type = htons(SPKT_ACTBW_CTS);
+    bw_hdr->type = BW_TYPE_RTS;
     bw_hdr->size = htonl(DEFAULT_MTU);
     bw_hdr->bandwidth = 0.0;
     bw_hdr->node_id = htons(get_unique_id());
@@ -215,19 +217,17 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
             (struct sockaddr *)&remoteAddr, sizeof(remoteAddr));
     if(rtn < 0) {
         ERROR_MSG("Sending RTS failed");
-        return FAILURE;
+        goto failure;
     } else if(rtn < header_size) {
         DEBUG_MSG("Sending RTS stopped early");
-        return FAILURE;
+        goto failure;
     }
 
     // Wait for CTS
     unsigned int max_burst;
     rtn = receiveCts_udp(sockfd_data, clientInfo->timeout, &max_burst);
     if(rtn == FAILURE) {
-        //close(sockfd_ctrl);
-        close(sockfd_data);
-        return FAILURE;
+        goto failure;
     }
 
      // Send some packets for BW estimation
@@ -261,15 +261,13 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
         goto failure;
     }
    
-
+    close(sockfd_data);
     return SUCCESS;   
 
 failure:
-   // free(buffer_burst);
-    //close(sockfd_data);
-
+    close(sockfd_data);
     return FAILURE;
-} // end function runActiveBandwidthTest()
+}
 
 
 static int openBandwidthSocket_udp(struct bw_client_info* clientInfo, const char* bindDevice)
@@ -315,8 +313,6 @@ failure:
 
 
 /*
- * RECEIVE CTS
- *
  * Waits up to timeout microseconds for a CTS packet.  If this returns SUCCESS,
  * then you are clear to flood the server with useless data.  If max_burst is
  * not null, this will write the server's max burst size into it.  If you try
@@ -331,7 +327,7 @@ static int receiveCts_udp(int sockfd, int timeout, unsigned int* max_burst)
     struct timeval timeout_tv;
     set_timeval_us(&timeout_tv, timeout);
 
-    result = recvfrom_timeout(sockfd, buffer, packet_size, MSG_WAITALL, 
+    result = recvfrom_timeout(sockfd, buffer, packet_size, 0, 
             0, 0, &timeout_tv);
     if(result < packet_size) {
         if(result == -1 && errno == EWOULDBLOCK) {
@@ -341,10 +337,9 @@ static int receiveCts_udp(int sockfd, int timeout, unsigned int* max_burst)
     }
     
     struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-    uint16_t h_type = ntohs(bw_hdr->type);
     uint32_t h_size = ntohl(bw_hdr->size);
-    
-    if(h_type != SPKT_ACTBW_CTS) {
+
+    if(bw_hdr->type != BW_TYPE_CTS) {
         DEBUG_MSG("Received something other than CTS... look into this");
         return FAILURE;
     }
@@ -369,7 +364,7 @@ static int sendBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_clien
     for(i = 0; i <= BW_UDP_PKTS; i++){
         struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
 
-        bw_hdr->type = htons(SPKT_ACTBW_BURST);
+        bw_hdr->type = BW_TYPE_BURST;
         bw_hdr->size = htonl(DEFAULT_MTU);
         bw_hdr->bandwidth = i; //bandwidth not known yet
         bw_hdr->node_id = htons(get_unique_id());
@@ -406,14 +401,17 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
         result = recvfrom_timeout(sockfd, buffer, buffer_len, 0,
                 (struct sockaddr *)&sender_addr, &sender_addr_len, &timeout);
         if(result >= sizeof(struct bw_hdr)) {
-            // TODO: Verify sender address matches server
-
-            get_recv_timestamp(sockfd, &last_pkt_time);
-            bytes_recvd += result;
-            remaining_us = client->timeout;
-
             struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-            stats->uplink_bw = bw_hdr->bandwidth;
+
+            // TODO: Verify sender address matches server
+            if(bw_hdr->type == BW_TYPE_BURST) {
+                get_recv_timestamp(sockfd, &last_pkt_time);
+                bytes_recvd += result;
+                remaining_us = client->timeout;
+
+                struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
+                stats->uplink_bw = bw_hdr->bandwidth;
+            }
         }
 
         remaining_us -= get_elapsed_us(&recvfrom_start);
@@ -433,7 +431,7 @@ static int sendMeasurement_udp(int sockfd, char* buffer, unsigned len, struct bw
     struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
     const unsigned header_len = sizeof(struct bw_hdr);
 
-    bw_hdr->type = htons(SPKT_ACTBW_BURST);
+    bw_hdr->type = BW_TYPE_STATS;
     bw_hdr->size = htonl(header_len);
     bw_hdr->bandwidth = stats->downlink_bw;
     bw_hdr->node_id = htons(get_unique_id());

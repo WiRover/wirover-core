@@ -21,6 +21,7 @@ static int find_config_file(const char* __restrict__ filename, char* __restrict_
  */
 const config_t* get_config()
 {
+#ifdef CONFIG_FILENAME
     if(!is_open) {
         char filename[MAX_CONFIG_PATH_LEN];
         if(find_config_file(CONFIG_FILENAME, filename, sizeof(filename)) == 0) {
@@ -39,6 +40,9 @@ const config_t* get_config()
     }
 
     return &config;
+#else
+    return 0;
+#endif
 }       
 
 /*

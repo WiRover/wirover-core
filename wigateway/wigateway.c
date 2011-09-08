@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <errno.h>
+#include <getopt.h>
 #include <time.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -34,11 +35,40 @@ enum {
     GATEWAY_NOTIFICATION_SUCCEEDED,
 };
 
+static struct option long_options[] = {
+    {"no-kernel", no_argument, 0, 'k'},
+    {0,           0,           0, 0  },
+};
+
+static void print_usage(const char *cmd)
+{
+    printf("Usage: %s [--no-kernel]\n", cmd);
+}
+
 int main(int argc, char* argv[])
 {
     int result;
+    int with_kernel = 1;
 
     srand(time(0));
+
+    int c;
+    while(1) {
+        int option_index = 0;
+
+        c = getopt_long(argc, argv, "", long_options, &option_index);
+        if(c == -1)
+            break;
+
+        switch(c) {
+            case 'k':
+                with_kernel = 0;
+                break;
+            default:
+                print_usage(argv[0]);
+                exit(1);
+        }
+    }
 
     const char* wiroot_ip = get_wiroot_ip();
     const unsigned short wiroot_port = get_wiroot_port();
@@ -93,10 +123,12 @@ int main(int argc, char* argv[])
                 ipaddr_to_ipv4(&lease->priv_ip, &private_ip);
                 private_netmask = htonl(~((1 << lease->priv_subnet_size) - 1));
                 
-                result = setup_virtual_interface(private_ip, private_netmask);
-                if(result == -1) {
-                    DEBUG_MSG("Failed to bring up virtual interface");
-                    exit(1);
+                if(with_kernel) {
+                    result = setup_virtual_interface(private_ip, private_netmask);
+                    if(result == -1) {
+                        DEBUG_MSG("Failed to bring up virtual interface");
+                        exit(1);
+                    }
                 }
 
                 if(lease->controllers > 0) {
@@ -104,18 +136,20 @@ int main(int argc, char* argv[])
                     ipaddr_to_string(&lease->cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
                     DEBUG_MSG("First controller is at: %s", cont_ip);
 
-                    uint32_t priv_ip;
-                    uint32_t pub_ip;
+                    if(with_kernel) {
+                        uint32_t priv_ip;
+                        uint32_t pub_ip;
 
-                    ipaddr_to_ipv4(&lease->cinfo[0].priv_ip, &priv_ip);
-                    ipaddr_to_ipv4(&lease->cinfo[0].pub_ip, &pub_ip);
+                        ipaddr_to_ipv4(&lease->cinfo[0].priv_ip, &priv_ip);
+                        ipaddr_to_ipv4(&lease->cinfo[0].pub_ip, &pub_ip);
 
-                    virt_add_remote_node((struct in_addr *)&priv_ip);
-                    virt_add_remote_link((struct in_addr *)&priv_ip, 
-                        (struct in_addr *)&pub_ip, lease->cinfo[0].base_port);
-                
-                    // Add a default vroute that directs all traffic to the controller
-                    virt_add_vroute(0, 0, priv_ip);
+                        virt_add_remote_node((struct in_addr *)&priv_ip);
+                        virt_add_remote_link((struct in_addr *)&priv_ip, 
+                            (struct in_addr *)&pub_ip, lease->cinfo[0].base_port);
+                    
+                        // Add a default vroute that directs all traffic to the controller
+                        virt_add_vroute(0, 0, priv_ip);
+                    }
 
                     if(start_ping_thread() == FAILURE) {
                         DEBUG_MSG("Failed to start ping thread");
@@ -132,12 +166,14 @@ int main(int argc, char* argv[])
 
         if(state == GATEWAY_LEASE_OBTAINED) {
             if(find_active_interface(interface_list)) {
-                result = add_route(0, 0, 0, VIRT_DEVICE);
+                if(with_kernel) {
+                    result = add_route(0, 0, 0, VIRT_DEVICE);
 
-                // EEXIST means the route was already present -> not a failure
-                if(result < 0 && result != -EEXIST) {
-                    DEBUG_MSG("add_route failed");
-                    exit(1);
+                    // EEXIST means the route was already present -> not a failure
+                    if(result < 0 && result != -EEXIST) {
+                        DEBUG_MSG("add_route failed");
+                        exit(1);
+                    }
                 }
                 
                 state = GATEWAY_PING_SUCCEEDED;

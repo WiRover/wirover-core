@@ -27,9 +27,11 @@
 #ifndef _BANDWIDTH_H_
 #define _BANDWIDTH_H_
 
+#include <stdint.h>
 #include <pthread.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>
+#include <sys/socket.h>
 #include <sys/time.h>
 
 enum {
@@ -48,9 +50,10 @@ struct bw_test_payload;
 typedef void (*bw_callback_t)(struct bw_client_info *, struct interface *,
         struct bw_stats *);
 
-#define SPKT_ACTBW_CTS      0x10
-#define SPKT_ACTBW_BURST    0x11
-#define SPKT_ACTBW_STATS    0x12
+#define BW_TYPE_RTS         0x01
+#define BW_TYPE_CTS         0x02
+#define BW_TYPE_BURST       0x03
+#define BW_TYPE_STATS       0x04
 
 /* Storage for a queue of waiting bandwidth clients. */
 struct bw_client {
@@ -104,26 +107,22 @@ struct bw_stats {
 };
 
 struct bw_hdr {
-    uint16_t        type;
-    uint32_t        size;
-    double          bandwidth;
+    uint8_t  type;
+    uint32_t size;
+    double   bandwidth;
 
-    uint16_t        node_id;
-    uint16_t        link_id;
+    uint16_t node_id;
+    uint16_t link_id;
 } __attribute__((__packed__));
 
-#ifdef CONTROLLER
 int     start_bandwidth_server_thread(struct bw_server_info *serverInfo);
-#endif
 
-#ifdef GATEWAY
 int     start_bandwidth_client_thread(struct bw_client_info *clientInfo);
 void    registerBandwidthCallback(struct bw_client_info* clientInfo, bw_callback_t callback);
 void    setBandwidthInterval(struct bw_client_info* clientInfo, unsigned int interval);
 
 void    pauseBandwidthThread(struct bw_client_info* clientInfo);
 void    resumeBandwidthThread(struct bw_client_info* clientInfo);
-#endif
 
 #endif //_BANDWIDTH_H_
 

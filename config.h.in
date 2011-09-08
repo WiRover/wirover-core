@@ -24,8 +24,8 @@
 // user-level code is used.
 #define WITH_KERNEL 1
 
-// Enables use of MySQL for data logging.
-#define WITH_MYSQL 1
+// Enable logging of data to database.
+#define WITH_DATABASE
 
 /* Default timeouts for removing a remote link or node. */
 #define DEFAULT_LINK_TIMEOUT 30
