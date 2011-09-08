@@ -247,7 +247,9 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
         goto failure;
      }
 
-    sleep (ACTIVE_BW_TIMEOUT/1000000);
+    // TODO: We should use whatever timeout the controller is using.
+    usleep(clientInfo->timeout);
+
     rtn = recv_burst_udp(clientInfo, stats, sockfd_data, buffer, sizeof(buffer));
     if (rtn <= 0) {
         DEBUG_MSG("recv_burst_udp: %d", rtn);
@@ -255,7 +257,6 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
     }
 
     rtn = sendMeasurement_udp(sockfd_data, buffer, header_size, clientInfo, stats);
-    DEBUG_MSG("sendMeasure %d", rtn);
     if(rtn <= 0) {
         DEBUG_MSG("Failed at sendMeasurement");
         goto failure;
@@ -444,7 +445,7 @@ static int sendMeasurement_udp(int sockfd, char* buffer, unsigned len, struct bw
     remoteAddr.sin_addr.s_addr  = clientInfo->remote_addr;
 
     return sendto(sockfd, buffer, header_len, 0, 
-            (struct sockaddr *)&remoteAddr, sizeof(struct sockaddr));
+            (struct sockaddr *)&remoteAddr, sizeof(remoteAddr));
 }
 
 

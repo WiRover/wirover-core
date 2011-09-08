@@ -120,6 +120,9 @@ static int handle_bandwidth_client_udp(struct bw_server_info *serverInfo,
     if(bytes_sent <= 0)
         return FAILURE;
 
+    // TODO: We should use whatever timeout the gateway is using.
+    usleep(serverInfo->timeout);
+
     int recvd_last_pkt = 0;
     
     long remaining_us = serverInfo->timeout;

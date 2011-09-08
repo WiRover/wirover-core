@@ -109,6 +109,7 @@ struct bw_stats {
 struct bw_hdr {
     uint8_t  type;
     uint32_t size;
+    uint32_t timeout;
     double   bandwidth;
 
     uint16_t node_id;
