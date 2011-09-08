@@ -149,7 +149,7 @@ static int handle_bandwidth_client_udp(struct bw_server_info *serverInfo,
                 // Received an RTS from a new client.
                 struct bw_client *new_client = malloc(sizeof(struct bw_client));
                 if(new_client) {
-                    memcpy(&new_client->addr, &his_addr, sizeof(his_addr));
+                    memcpy(&new_client->addr, &his_addr, his_addr_len);
                     new_client->addr_len = his_addr_len;
                     new_client->pkt_len = ntohl(bw_hdr->size);
                     get_recv_timestamp(sockfd, &new_client->rts_time);
@@ -210,15 +210,14 @@ static int wait_for_client_udp(struct bw_server_info *server, int sockfd,
 
     result = recvfrom(sockfd, buffer, buffer_len, 0,
             (struct sockaddr *)&his_addr, &his_addr_len);
-    if(result >= sizeof(struct bw_hdr)) {
+    if(result >= (int)sizeof(struct bw_hdr)) {
         struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
 
         if(bw_hdr->type == BW_TYPE_RTS) {
             // Received an RTS from a new client.
             struct bw_client *new_client = malloc(sizeof(struct bw_client));
             if(new_client) {
-
-                memcpy(&new_client->addr, &his_addr, sizeof(his_addr));
+                memcpy(&new_client->addr, &his_addr, his_addr_len);
                 new_client->addr_len = his_addr_len;
                 new_client->pkt_len = ntohl(bw_hdr->size);
                 get_recv_timestamp(sockfd, &new_client->rts_time);
@@ -285,7 +284,7 @@ static int recv_client_burst_udp(struct bw_server_info *server, struct bw_client
 
         result = recvfrom_timeout(sockfd, buffer, buffer_len, 0, 
                 (struct sockaddr *)&his_addr, &his_addr_len, &timeout);
-        if(result >= sizeof(struct bw_hdr)) {
+        if(result >= (int)sizeof(struct bw_hdr)) {
             struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
             
             if(bw_hdr->type == BW_TYPE_BURST && his_addr_len == client->addr_len &&
