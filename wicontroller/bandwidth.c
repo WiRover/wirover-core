@@ -191,7 +191,11 @@ static int handle_bandwidth_client_udp(struct bw_server_info *serverInfo,
             struct interface *ife = find_interface_by_index(gw->head_interface, 
                     h_link_id);
             if(ife) {
+                ife->avg_downlink_bw = ewma_update(ife->avg_downlink_bw, gw_downlink_bw, BW_EWMA_WEIGHT);
+                ife->avg_uplink_bw = ewma_update(ife->avg_uplink_bw, client->uplink_bw, BW_EWMA_WEIGHT);
+
                 db_update_bandwidth(gw, ife, BW_UDP, gw_downlink_bw, client->uplink_bw);
+                db_update_link(gw, ife);
             }
 #endif
         }

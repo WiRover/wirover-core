@@ -22,6 +22,8 @@ struct interface* alloc_interface()
 
     memset(ife, 0, sizeof(*ife));
     ife->avg_rtt = NAN;
+    ife->avg_downlink_bw = NAN;
+    ife->avg_uplink_bw = NAN;
 
     // Prevent early timeouts
     ife->last_ping_time = time(0);

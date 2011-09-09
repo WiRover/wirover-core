@@ -61,5 +61,8 @@
 #define BW_UDP_PKTS 20
 #define BW_UDP_SLEEP 1000 //in micro secs
 
+#define RTT_EWMA_WEIGHT  0.2
+#define BW_EWMA_WEIGHT   0.2
+
 #endif //_CONFIG_H_
 
