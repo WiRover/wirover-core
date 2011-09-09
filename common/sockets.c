@@ -92,10 +92,31 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
     int sockfd;
     int rtn;
 
-    sockfd = socket(PF_INET6, SOCK_STREAM, IPPROTO_TCP);
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_NUMERICSERV;
+
+    char port_string[16];
+    snprintf(port_string, sizeof(port_string), "%d", remote_port);
+
+    struct addrinfo* results = 0;
+    rtn = getaddrinfo(remote_addr, port_string, &hints, &results);
+    if(rtn != 0) {
+        DEBUG_MSG("getaddrinfo failed - %s", gai_strerror(rtn));
+        return -1;
+    }
+
+    // If getaddrinfo completed successfully, these pointers should not be
+    // null, so this assert should never be triggered
+    assert(results != 0 && results->ai_addr != 0);
+
+    sockfd = socket(results->ai_family, results->ai_socktype, results->ai_protocol);
     if(sockfd < 0) {
         ERROR_MSG("failed creating socket");
-        return -1;
+        goto free_and_return;
     }
     
     if(device) {
@@ -105,25 +126,6 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
             goto close_and_return;
         }
     }
-
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET6;
-    hints.ai_flags = AI_V4MAPPED | NI_NUMERICSERV;
-
-    char port_string[16];
-    snprintf(port_string, sizeof(port_string), "%d", remote_port);
-
-    struct addrinfo* results = 0;
-    rtn = getaddrinfo(remote_addr, port_string, &hints, &results);
-    if(rtn != 0) {
-        DEBUG_MSG("getaddrinfo failed - %s", gai_strerror(rtn));
-        goto close_and_return;
-    }
-
-    // If getaddrinfo completed successfully, these pointers should not be
-    // null, so this assert should never be triggered
-    assert(results != 0 && results->ai_addr != 0);
 
     if(timeout)
         set_nonblock(sockfd, NONBLOCKING);
@@ -153,8 +155,11 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
         set_nonblock(sockfd, BLOCKING);
     }
 
+    freeaddrinfo(results);
     return sockfd;
 
+free_and_return:
+    freeaddrinfo(results);
 close_and_return:
     close(sockfd);
     return -1;
