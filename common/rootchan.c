@@ -58,8 +58,7 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
     }
 
     struct rchan_response response;
-    if(_obtain_lease(wiroot_ip, wiroot_port, &request, 
-                internal_if, &response) < 0) {
+    if(_obtain_lease(wiroot_ip, wiroot_port, &request, 0, &response) < 0) {
         DEBUG_MSG("Failed to obtain lease");
         return 0;
     }
