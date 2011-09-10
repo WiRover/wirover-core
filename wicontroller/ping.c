@@ -507,6 +507,11 @@ static void remove_stale_links(int link_timeout, int node_timeout)
         if(num_ifaces == 0 && (now - gw->last_ping_time) >= node_timeout) {
             virt_remove_remote_node(&private_ip);
 
+            // TODO: This could be made more configurable.
+            uint32_t client_network = htonl(0x0A000000 | ((uint32_t)gw->unique_id << 8));
+            uint32_t client_netmask = htonl(0xFFFFFF00);
+            virt_delete_vroute(client_network, client_netmask, private_ip.s_addr);
+
             DEBUG_MSG("Removed node %hu due to timeout", gw->unique_id);
 
             gw->state = INACTIVE;

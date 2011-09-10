@@ -94,6 +94,12 @@ static struct gateway* make_gateway(const struct cchan_notification* notif)
 
     virt_add_remote_node(&priv_ip);
 
+    // TODO: This gives the gateway 10.xxx.xxx.0/24 based on its unique_id.
+    // This could be made more configurable though.
+    uint32_t client_network = htonl(0x0A000000 | (gw->unique_id << 8));
+    uint32_t client_netmask = htonl(0xFFFFFF00);
+    virt_add_vroute(client_network, client_netmask, priv_ip.s_addr);
+
     int i;
     for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
         struct interface* ife = alloc_interface();
