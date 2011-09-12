@@ -92,6 +92,9 @@ next_ifap:
     release_write_lock(&interface_list_lock);
     freeifaddrs(ifap);
 
+    DEBUG_MSG("Initial interface list:");
+    dump_interfaces(interface_list, "  ");
+
     return 0;
 }
 
@@ -322,6 +325,9 @@ int handle_netlink_message(const char* msg, int msg_len)
     if(should_notify && lease != 0) {
         send_notification(1);
     }
+    
+    DEBUG_MSG("Interface list:");
+    dump_interfaces(interface_list, "  ");
 
     return 0;
 }

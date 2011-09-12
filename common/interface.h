@@ -75,5 +75,7 @@ int copy_active_interfaces(const struct interface *head, struct interface_copy *
 
 double ewma_update(double old_val, double new_val, double new_weight);
 
+void dump_interfaces(const struct interface *head, const char *prepend);
+
 #endif //_INTERFACE_H_
 

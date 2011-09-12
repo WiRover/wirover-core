@@ -60,6 +60,7 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len)
 
     if(gw) {
         send_response(sockfd, gw);
+
 #ifdef WITH_DATABASE
         db_update_gateway(gw, state_change);
 
@@ -69,6 +70,9 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len)
             db_update_link(gw, ife);
         }
 #endif
+
+        DEBUG_MSG("Interface list for node %d:", gw->unique_id);
+        dump_interfaces(gw->head_interface, "  ");
     }
 
     return 0;

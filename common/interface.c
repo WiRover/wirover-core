@@ -238,3 +238,33 @@ double ewma_update(double old_val, double new_val, double new_weight)
     }
 }
 
+void dump_interfaces(const struct interface *head, const char *prepend)
+{
+    if(!prepend)
+        prepend = "";
+
+    while(head) {
+        const char *state;
+        switch(head->state) {
+            case ACTIVE:
+                state = "ACTIVE";
+                break;
+            case INACTIVE:
+                state = "INACTIVE";
+                break;
+            case DEAD:
+                state = "DEAD";
+                break;
+            default:
+                state = "UNKNOWN";
+                break;
+        }
+
+        DEBUG_MSG("%s%d\t%s\t%s\t%s", 
+                prepend, head->index, head->name, head->network, state);
+
+        assert(head != head->next);
+        head = head->next;
+    }
+}
+
