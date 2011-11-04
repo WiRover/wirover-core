@@ -305,6 +305,8 @@ int handle_netlink_message(const char* msg, int msg_len)
                     char gwaddr_p[INET_ADDRSTRLEN];
                     inet_ntop(AF_INET, &gwaddr, gwaddr_p, sizeof(gwaddr_p));
 
+                    obtain_read_lock(&interface_list_lock);
+
                     struct interface *ife = find_interface_by_index(
                             interface_list, ifindex);
                     if(ife && ife->priority >= 0) {
@@ -316,6 +318,8 @@ int handle_netlink_message(const char* msg, int msg_len)
                         virt_set_gateway_ip(ife->name, &gwaddr);
                         ping_interface(ife);
                     }
+
+                    release_read_lock(&interface_list_lock);
                 }
             }
         }
