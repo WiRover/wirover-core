@@ -4,6 +4,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <linux/if.h>
+#include <linux/sockios.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -12,6 +13,7 @@
 #include "debug.h"
 #include "kernel.h"
 #include "tunnel.h"
+#include "config.h"
 
 const char* VIRT_DEVICE = "virt0";
 
@@ -95,11 +97,19 @@ int kernel_enslave_device(const char* device)
     strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
     strncpy(ifr.ifr_slave, device, sizeof(ifr.ifr_slave));
     
+#ifdef USE_BOND_ENSLAVE
+    if(ioctl(sockfd, SIOCBONDENSLAVE, &ifr) < 0) {
+        ERROR_MSG("SIOCBONDENSLAVE ioctl failed");
+        close(sockfd);
+        return FAILURE;
+    }
+#else
     if(ioctl(sockfd, SIOCVIRTENSLAVE, &ifr) < 0) {
         ERROR_MSG("SIOCVIRTENSLAVE ioctl failed");
         close(sockfd);
         return FAILURE;
     }
+#endif
 
     close(sockfd);
     return 0;
@@ -116,12 +126,20 @@ int kernel_release_device(const char* device)
     struct ifreq ifr;
     strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
     strncpy(ifr.ifr_slave, device, sizeof(ifr.ifr_slave));
-    
+
+#ifdef USE_BOND_ENSLAVE
+    if(ioctl(sockfd, SIOCBONDRELEASE, &ifr) < 0) {
+        ERROR_MSG("SIOCBONDRELEASE ioctl failed");
+        close(sockfd);
+        return FAILURE;
+    }
+#else
     if(ioctl(sockfd, SIOCVIRTRELEASE, &ifr) < 0) {
         ERROR_MSG("SIOCVIRTRELEASE ioctl failed");
         close(sockfd);
         return FAILURE;
     }
+#endif
 
     close(sockfd);
     return 0;

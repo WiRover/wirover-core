@@ -64,5 +64,8 @@
 #define RTT_EWMA_WEIGHT  0.2
 #define BW_EWMA_WEIGHT   0.2
 
+// Use the bonding driver enlave and release ioctls instead of custom ones.
+#define USE_BOND_ENSLAVE 1
+
 #endif //_CONFIG_H_
 
