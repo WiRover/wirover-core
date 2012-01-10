@@ -19,7 +19,7 @@ add_executable(wicontroller
     ${COMMON}/kernel.c
 )
 
-target_link_libraries(wicontroller pthread config mysqlclient ssl)
+target_link_libraries(wicontroller pthread config mysqlclient ssl crypto)
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wicontroller DESTINATION /usr/bin)
 install(FILES wicontroller.conf DESTINATION /etc)
