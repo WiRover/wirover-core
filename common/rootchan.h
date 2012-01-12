@@ -13,26 +13,14 @@
 // Root server will inform gateway of at most 3 controllers
 #define MAX_CONTROLLERS     3
 
-#define RCHAN_GATEWAY_CONFIG       0x01
-#define RCHAN_CONTROLLER_CONFIG    0x02
-#define RCHAN_SHUTDOWN             0x03
-
 #define RCHAN_CONNECT_TIMEOUT_SEC  5
 
 struct controller_info {
     ipaddr_t    priv_ip;
     ipaddr_t    pub_ip;
-    uint16_t    base_port;
+    uint16_t    data_port;
+    uint16_t    control_port;
 } __attribute__((__packed__));
-
-struct rchan_request {
-    uint8_t     type;
-    uint8_t     hw_addr[ETH_ALEN];
-    double      latitude;
-    double      longitude;
-    uint16_t    base_port;
-} __attribute__((__packed__));
-#define MIN_REQUEST_LEN (sizeof(struct rchan_request))
 
 struct rchan_response {
     uint8_t     type;
@@ -46,6 +34,45 @@ struct rchan_response {
 } __attribute__((__packed__));
 #define MIN_RESPONSE_LEN (offsetof(struct rchan_response, cinfo))
 
+/* Types for rchanhdr */
+#define RCHAN_REGISTER_CONTROLLER   0x01
+#define RCHAN_REGISTER_GATEWAY      0x02
+
+/* Option types */
+#define RCHAN_OPTION_END            0x00
+#define RCHAN_OPTION_ADDR           0x01
+#define RCHAN_OPTION_GSP            0x02
+    
+struct rchanhdr {
+    uint8_t     type;
+    uint8_t     flags;
+    uint8_t     id[ETH_ALEN];
+} __attribute__((__packed__));
+
+/* If the address family is sent as 0, root server will use the connection
+ * source address. */
+#define RCHAN_USE_SOURCE            0x0000
+
+struct rchan_ctrlreg {
+    uint16_t    family;
+
+    union {
+        uint32_t ip4;
+        uint8_t  ip6[16];
+    } addr;
+
+    uint16_t    data_port;
+    uint16_t    control_port;
+
+    double      latitude;
+    double      longitude;
+} __attribute__((__packed__));
+
+struct rchan_gwreg {
+    double latitude;
+    double longitude;
+} __attribute__((__packed__));
+
 struct lease_info {
     ipaddr_t    priv_ip;
     uint8_t     priv_subnet_size;
@@ -53,10 +80,14 @@ struct lease_info {
     uint16_t    unique_id;
 
     unsigned int    controllers;
-    struct controller_info* cinfo;
+    struct controller_info cinfo[MAX_CONTROLLERS];
 };
 
-struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_port, unsigned short base_port);
+int register_controller(struct lease_info *lease, const char *wiroot_ip,
+        unsigned short wiroot_port, unsigned short data_port, unsigned short control_port);
+int register_gateway(struct lease_info *lease, const char *wiroot_ip,
+        unsigned short wiroot_port);
+
 int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, int destlen);
 
 uint16_t get_unique_id();

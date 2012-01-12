@@ -14,15 +14,20 @@
 #define CONFIG_FILENAME "wiroot.conf"
 #endif
 
+#define DEFAULT_REGISTER_ADDRESS ""
+
 const config_t*     get_config();
 void                close_config();
 
 const char*     get_wiroot_ip();
 unsigned short  get_wiroot_port();
-unsigned short  get_base_port();
+unsigned short  get_data_port();
+unsigned short  get_control_port();
 unsigned int    get_ping_interval();
 const char*     get_internal_interface();
 int             get_interface_priority(const char *ifname);
+
+const char      *get_register_address();
 
 #endif //_CONFIGURATION_H_
 

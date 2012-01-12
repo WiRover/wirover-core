@@ -3,8 +3,12 @@
 #include <netdb.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <ifaddrs.h>
+
+#include <linux/if.h>
 
 #include "ipaddr.h"
+#include "debug.h"
 
 const unsigned char IPV4_ON_IPV6_PREFIX[] = {
     0x00, 0x00, 0x00, 0x00,
@@ -147,6 +151,84 @@ void copy_ipaddr(const ipaddr_t* src, ipaddr_t* dest)
         memcpy(dest, src, sizeof(*dest));
     } else if(dest) {
         memset(dest, 0, sizeof(*dest));
+    }
+}
+
+int get_interface_address(const char *dev, struct sockaddr *dest, int dest_len)
+{
+    struct ifaddrs *ifap_head = NULL;
+    struct ifaddrs *ifap = NULL;
+
+    if(getifaddrs(&ifap_head) < 0) {
+        ERROR_MSG("getifaddrs failed");
+        return -1;
+    }
+
+    ifap = ifap_head;
+    while(ifap) {
+        if(strncmp(dev, ifap->ifa_name, IFNAMSIZ) == 0) {
+            switch(ifap->ifa_addr->sa_family) {
+                case AF_INET:
+                {
+                    if(dest_len >= sizeof(struct sockaddr_in)) {
+                        memcpy(dest, ifap->ifa_addr, sizeof(struct sockaddr_in));
+                        goto success_out;
+                    }
+                    break;
+                }
+                case AF_INET6:
+                {
+                    // TODO: Probably need to handle different address scopes
+                    if(dest_len >= sizeof(struct sockaddr_in6)) {
+                        memcpy(dest, ifap->ifa_addr, sizeof(struct sockaddr_in6));
+                        goto success_out;
+                    }
+                }
+            }
+        }
+
+        ifap = ifap->ifa_next;
+    }
+
+    freeifaddrs(ifap_head);
+    return -1;
+
+success_out:
+    freeifaddrs(ifap_head);
+    return 0;
+}
+
+/*
+ * Resolve address which may be an interface name, an IP string,
+ * or a hostname.
+ */
+int resolve_address(const char *address, struct sockaddr *dest, int dest_len)
+{
+    if(get_interface_address(address, dest, dest_len) == 0)
+        return 0;
+
+    struct addrinfo hints;
+    memset(&hints, 0, sizeof(hints));
+    if(dest_len >= sizeof(struct sockaddr_in6))
+        hints.ai_family = AF_UNSPEC;
+    else
+        hints.ai_family = AF_INET;
+
+    struct addrinfo *addrinfo;
+
+    int result = getaddrinfo(address, 0, &hints, &addrinfo);
+    if(result != 0) {
+        DEBUG_MSG("getaddrinfo failed: %s", gai_strerror(result));
+        return -1;
+    }
+
+    if(addrinfo->ai_addrlen <= dest_len) {
+        memcpy(dest, addrinfo->ai_addr, addrinfo->ai_addrlen);
+        freeaddrinfo(addrinfo);
+        return 0;
+    } else {
+        freeaddrinfo(addrinfo);
+        return -1;
     }
 }
 

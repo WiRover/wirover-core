@@ -72,8 +72,8 @@ int main(int argc, char* argv[])
 
     const char* wiroot_ip = get_wiroot_ip();
     const unsigned short wiroot_port = get_wiroot_port();
-    unsigned short base_port = get_base_port();
-    if(!(wiroot_ip && wiroot_port && base_port)) {
+    unsigned short data_port = get_data_port();
+    if(!(wiroot_ip && wiroot_port && data_port)) {
         DEBUG_MSG("You must fix the config file.");
         exit(1);
     } 
@@ -99,7 +99,7 @@ int main(int argc, char* argv[])
     inet_pton(AF_INET, DEFAULT_NETMASK, &private_netmask);
 
     int state = GATEWAY_START;
-    const struct lease_info *lease = 0;
+    struct lease_info lease;
 
     // Generate our private key
     if(RAND_bytes(private_key, sizeof(private_key)) != 1) {
@@ -113,15 +113,15 @@ int main(int argc, char* argv[])
 
     while(1) {
         if(state == GATEWAY_START) {
-            lease = obtain_lease(wiroot_ip, wiroot_port, base_port);
-            if(lease) {
+            result = register_gateway(&lease, wiroot_ip, wiroot_port);
+            if(result == 0) {
                 char my_ip[INET6_ADDRSTRLEN];
-                ipaddr_to_string(&lease->priv_ip, my_ip, sizeof(my_ip));
-                DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease->unique_id);
-                DEBUG_MSG("There are %d controllers available.", lease->controllers);
+                ipaddr_to_string(&lease.priv_ip, my_ip, sizeof(my_ip));
+                DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease.unique_id);
+                DEBUG_MSG("There are %d controllers available.", lease.controllers);
 
-                ipaddr_to_ipv4(&lease->priv_ip, &private_ip);
-                private_netmask = htonl(~((1 << lease->priv_subnet_size) - 1));
+                ipaddr_to_ipv4(&lease.priv_ip, &private_ip);
+                private_netmask = htonl(~((1 << lease.priv_subnet_size) - 1));
                 
                 if(with_kernel) {
                     result = setup_virtual_interface(private_ip, private_netmask);
@@ -131,21 +131,21 @@ int main(int argc, char* argv[])
                     }
                 }
 
-                if(lease->controllers > 0) {
+                if(lease.controllers > 0) {
                     char cont_ip[INET6_ADDRSTRLEN];
-                    ipaddr_to_string(&lease->cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
+                    ipaddr_to_string(&lease.cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
                     DEBUG_MSG("First controller is at: %s", cont_ip);
 
                     if(with_kernel) {
                         uint32_t priv_ip;
                         uint32_t pub_ip;
 
-                        ipaddr_to_ipv4(&lease->cinfo[0].priv_ip, &priv_ip);
-                        ipaddr_to_ipv4(&lease->cinfo[0].pub_ip, &pub_ip);
+                        ipaddr_to_ipv4(&lease.cinfo[0].priv_ip, &priv_ip);
+                        ipaddr_to_ipv4(&lease.cinfo[0].pub_ip, &pub_ip);
 
                         virt_add_remote_node((struct in_addr *)&priv_ip);
                         virt_add_remote_link((struct in_addr *)&priv_ip, 
-                            (struct in_addr *)&pub_ip, lease->cinfo[0].base_port);
+                            (struct in_addr *)&pub_ip, lease.cinfo[0].data_port);
                     
                         // Add a default vroute that directs all traffic to the controller
                         virt_add_vroute(0, 0, priv_ip);
@@ -187,7 +187,7 @@ int main(int argc, char* argv[])
                 state = GATEWAY_NOTIFICATION_SUCCEEDED;
                 
                 uint32_t pub_ip;
-                ipaddr_to_ipv4(&lease->cinfo[0].pub_ip, &pub_ip);
+                ipaddr_to_ipv4(&lease.cinfo[0].pub_ip, &pub_ip);
 
                 struct bw_client_info bw_client;
                 memset(&bw_client, 0, sizeof(bw_client));

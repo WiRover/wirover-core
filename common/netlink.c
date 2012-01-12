@@ -39,14 +39,17 @@ static pthread_t    netlink_thread;
  */
 int init_interface_list()
 {
-    struct ifaddrs *ifap = 0;
-    if(getifaddrs(&ifap) < 0) {
+    struct ifaddrs *ifap_head = NULL;
+    struct ifaddrs *ifap = NULL;
+
+    if(getifaddrs(&ifap_head) < 0) {
         ERROR_MSG("getifaddrs failed");
         return -1;
     }
 
     obtain_write_lock(&interface_list_lock);
 
+    ifap = ifap_head;
     while(ifap) {
         if((ifap->ifa_flags & IFF_UP) && (ifap->ifa_flags & IFF_RUNNING) &&
                 !(ifap->ifa_flags & IFF_LOOPBACK)) {
@@ -69,7 +72,7 @@ int init_interface_list()
                 // Set to INACTIVE until connectivity is confirmed
                 ife->state = INACTIVE;
 
-                ife->data_port = htons(get_base_port());
+                ife->data_port = htons(get_data_port());
                 ife->priority = priority;
 
                 add_interface(ife);
@@ -90,7 +93,7 @@ next_ifap:
     update_interface_gateways();
 
     release_write_lock(&interface_list_lock);
-    freeifaddrs(ifap);
+    freeifaddrs(ifap_head);
 
     DEBUG_MSG("Initial interface list:");
     dump_interfaces(interface_list, "  ");
@@ -196,7 +199,7 @@ int handle_netlink_message(const char* msg, int msg_len)
                     ife->state = INACTIVE;
                     ife->priority = priority;
 
-                    ife->data_port = htons(get_base_port());
+                    ife->data_port = htons(get_data_port());
 
                     upgrade_read_lock(&interface_list_lock);
                     add_interface(ife);

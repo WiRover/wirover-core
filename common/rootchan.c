@@ -16,107 +16,147 @@
 #include "rwlock.h"
 #include "sockets.h"
 
-static int _obtain_lease(const char* wiroot_ip, unsigned short wiroot_port,
-        const struct rchan_request *request, 
-        const char *interface, struct rchan_response *response);
+static int _obtain_lease(const char *wiroot_ip, unsigned short wiroot_port,
+        const char *request, int request_len, const char *interface,
+        struct rchan_response *response);
 
-static struct lease_info* latest_lease = 0;
+static struct lease_info latest_lease;
 
-/*
- * OBTAIN LEASE
- */
-
-/*
- * Attempt to obtain a lease from the root server.  This will use any available
- * interface.  Returns a lease_info structure if successful, otherwise it returns
- * null.
- *
- * TODO: If the controller maintains a list of local interfaces, then the
- * implementations for the gateway and controller can be merged.
- */
 #ifdef CONTROLLER
-struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_port, unsigned short base_port)
+/* 
+ * register_controller - Register a controller with the root server.
+ */
+int register_controller(struct lease_info *lease, const char *wiroot_ip, 
+        unsigned short wiroot_port, unsigned short data_port, unsigned short control_port)
 {
+    char *buffer;
     int result;
+    int offset = 0;
 
-    struct rchan_request request;
-    request.type = RCHAN_CONTROLLER_CONFIG;
-    request.latitude = NAN;
-    request.longitude = NAN;
-    request.base_port = htons(base_port);
+    buffer = malloc(BUFSIZ);
+    if(!buffer) {
+        DEBUG_MSG("Out of memory.");
+        goto err_out;
+    }
+
+    memset(buffer, 0, BUFSIZ);
+    
+    struct rchanhdr *rchanhdr = (struct rchanhdr *)buffer;
+    offset += sizeof(struct rchanhdr);
+
+    rchanhdr->type = RCHAN_REGISTER_CONTROLLER;
 
     const char* internal_if = get_internal_interface();
     if(!internal_if) {
         DEBUG_MSG("get_internal_interface() returned null");
-        return 0;
+        goto free_and_err_out;
     }
 
-    result = get_device_mac(internal_if, request.hw_addr, sizeof(request.hw_addr));
+    result = get_device_mac(internal_if, rchanhdr->id, sizeof(rchanhdr->id));
     if(result == -1) {
         DEBUG_MSG("get_device_mac() failed");
-        return 0;
+        goto free_and_err_out;
     }
+
+    struct rchan_ctrlreg *ctrlreg = (struct rchan_ctrlreg *)(buffer + offset);
+    offset += sizeof(struct rchan_ctrlreg);
+
+    const char *register_address = get_register_address();
+    if(!register_address || strlen(register_address) == 0) {
+        ctrlreg->family = RCHAN_USE_SOURCE;
+    } else {
+        struct sockaddr_in sin;
+        result = resolve_address(register_address, 
+                (struct sockaddr *)&sin, sizeof(sin));
+        if(result < 0) {
+            DEBUG_MSG("Failed to resolve address string: %s", register_address);
+            goto free_and_err_out;
+        } else {
+            ctrlreg->family = AF_INET;
+            ctrlreg->addr.ip4 = sin.sin_addr.s_addr;
+        }
+    }
+
+    ctrlreg->data_port = htons(data_port);
+    ctrlreg->control_port = htons(control_port);
+    ctrlreg->latitude = NAN;
+    ctrlreg->longitude = NAN;
 
     struct rchan_response response;
-    if(_obtain_lease(wiroot_ip, wiroot_port, &request, 0, &response) < 0) {
-        DEBUG_MSG("Failed to obtain lease");
-        return 0;
-    }
 
-    struct lease_info* lease;
-    lease = (struct lease_info*)malloc(sizeof(struct lease_info));
-    ASSERT_OR_ELSE(lease) {
-        DEBUG_MSG("out of memory");
-        return 0;
+    result = _obtain_lease(wiroot_ip, wiroot_port, buffer, offset, 0, &response);
+    if(result < 0) {
+        DEBUG_MSG("Failed to obtain lease from root server");
+        goto free_and_err_out;
     }
-
+    
     copy_ipaddr(&response.priv_ip, &lease->priv_ip);
     lease->priv_subnet_size = response.priv_subnet_size;
     lease->unique_id = ntohs(response.unique_id);
     lease->controllers = 0;
-    lease->cinfo = 0;
-    
-    latest_lease = lease;
-    return lease;
-}
-#else /* GATEWAY */
-struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_port, unsigned short base_port)
-{
-    int result;
+   
+    memcpy(&latest_lease, lease, sizeof(latest_lease));
 
-    struct rchan_request request;
-#ifdef CONTROLLER
-    request.type = RCHAN_CONTROLLER_CONFIG;
-#else
-    request.type = RCHAN_GATEWAY_CONFIG;
-#endif
-    request.latitude = NAN;
-    request.longitude = NAN;
-    request.base_port = htons(base_port);
+    free(buffer);
+    return 0;
+
+free_and_err_out:
+    free(buffer);
+err_out:
+    return -1;
+}
+#endif /* CONTROLLER */
+
+#ifdef GATEWAY
+/* 
+ * register_gateway - Register a gateway with the root server.
+ */
+int register_gateway(struct lease_info *lease, const char *wiroot_ip, 
+        unsigned short wiroot_port)
+{
+    char *buffer;
+    int result;
+    int offset = 0;
+
+    buffer = malloc(BUFSIZ);
+    if(!buffer) {
+        DEBUG_MSG("Out of memory.");
+        goto err_out;
+    }
+
+    memset(buffer, 0, BUFSIZ);
+    
+    struct rchanhdr *rchanhdr = (struct rchanhdr *)buffer;
+    offset += sizeof(struct rchanhdr);
+
+    rchanhdr->type = RCHAN_REGISTER_GATEWAY;
 
     const char* internal_if = get_internal_interface();
     if(!internal_if) {
         DEBUG_MSG("get_internal_interface() returned null");
-        return 0;
+        goto free_and_err_out;
     }
 
-    result = get_device_mac(internal_if, request.hw_addr, sizeof(request.hw_addr));
+    result = get_device_mac(internal_if, rchanhdr->id, sizeof(rchanhdr->id));
     if(result == -1) {
         DEBUG_MSG("get_device_mac() failed");
-        return 0;
+        goto free_and_err_out;
     }
 
-    obtain_read_lock(&interface_list_lock);
+    struct rchan_gwreg *gwreg = (struct rchan_gwreg *)(buffer + offset);
+    offset += sizeof(struct rchan_gwreg);
 
+    gwreg->latitude = NAN;
+    gwreg->longitude = NAN;
+
+    obtain_read_lock(&interface_list_lock);
     struct interface_copy *iface_list;
     int num_ifaces = copy_all_interfaces(interface_list, &iface_list);
-
     release_read_lock(&interface_list_lock);
 
     if(num_ifaces <= 0) {
-        if(num_ifaces == 0)
-            DEBUG_MSG("Cannot request lease, no interfaces available");
-        return 0;
+        DEBUG_MSG("Cannot request lease, no interfaces available");
+        goto free_and_err_out;
     }
 
     int i;
@@ -126,7 +166,7 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
     for(i = 0; i < num_ifaces; i++) {
         const char *ifname = iface_list[i].name;
 
-        if(_obtain_lease(wiroot_ip, wiroot_port, &request, 
+        if(_obtain_lease(wiroot_ip, wiroot_port, buffer, offset, 
                     ifname, &response) == 0) {
             lease_obtained = 1;
             break;
@@ -137,14 +177,7 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
 
     if(!lease_obtained) {
         DEBUG_MSG("Failed to obtain lease, %d interfaces tried", num_ifaces);
-        return 0;
-    }
-
-    struct lease_info* lease;
-    lease = (struct lease_info*)malloc(sizeof(struct lease_info));
-    ASSERT_OR_ELSE(lease) {
-        DEBUG_MSG("out of memory");
-        return 0;
+        goto free_and_err_out;
     }
 
     copy_ipaddr(&response.priv_ip, &lease->priv_ip);
@@ -152,26 +185,26 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
     lease->unique_id = ntohs(response.unique_id);
     lease->controllers = response.controllers;
 
-    if(response.controllers == 0) {
-        lease->cinfo = 0;
-        latest_lease = lease;
-        return lease;
-    }
-   
-    const int cinfo_size = lease->controllers * sizeof(struct controller_info);
-    lease->cinfo = (struct controller_info*)malloc(cinfo_size);
-    ASSERT_OR_ELSE(lease->cinfo) {
-        DEBUG_MSG("out of memory");
-        free(lease);
-        return 0;
+    if(lease->controllers > 0) {
+        if(lease->controllers > MAX_CONTROLLERS)
+            lease->controllers = MAX_CONTROLLERS;
+
+        const int copy_size = lease->controllers * sizeof(struct controller_info);
+
+        memcpy(lease->cinfo, response.cinfo, copy_size);
     }
     
-    memcpy(lease->cinfo, response.cinfo, cinfo_size);
+    memcpy(&latest_lease, lease, sizeof(latest_lease));
 
-    latest_lease = lease;
-    return lease;
+    free(buffer);
+    return 0;
+
+free_and_err_out:
+    free(buffer);
+err_out:
+    return -1;
 }
-#endif /* CONTROLLER/GATEWAY */
+#endif /* GATEWAY */
 
 /*
  * Attempt to obtain a lease from the root server.  This will bind to the given
@@ -179,9 +212,9 @@ struct lease_info* obtain_lease(const char* wiroot_ip, unsigned short wiroot_por
  * in the response, otherwise it returns -1 and the contents of response are
  * undefined.
  */
-static int _obtain_lease(const char* wiroot_ip, unsigned short wiroot_port,
-        const struct rchan_request *request, 
-        const char *interface, struct rchan_response *response)
+static int _obtain_lease(const char *wiroot_ip, unsigned short wiroot_port,
+        const char *request, int request_len, const char *interface,
+        struct rchan_response *response)
 { 
     int result;
 
@@ -192,29 +225,33 @@ static int _obtain_lease(const char* wiroot_ip, unsigned short wiroot_port,
     int sockfd = tcp_active_open(wiroot_ip, wiroot_port, interface, &timeout);
     if(sockfd == -1) {
         DEBUG_MSG("failed to connect to wiroot server");
-        return -1;
+        goto err_out;
     }
 
-    result = send(sockfd, request, sizeof(struct rchan_request), 0);
+    result = send(sockfd, request, request_len, 0);
     if(result <= 0) {
         ERROR_MSG("error sending lease request");
-        close(sockfd);
-        return -1;
+        goto close_and_err_out;
     }
 
     result = recv(sockfd, response, sizeof(struct rchan_response), 0);
     if(result <= 0) {
         ERROR_MSG("error receiving lease response");
-        close(sockfd);
-        return -1;
+        goto close_and_err_out;
     } else if(result < MIN_RESPONSE_LEN) {
         DEBUG_MSG("lease response was too small to be valid");
+        goto close_and_err_out;
         close(sockfd);
         return -1;
     }
 
     close(sockfd);
     return 0;
+
+close_and_err_out:
+    close(sockfd);
+err_out:
+    return -1;
 }
 
 /*
@@ -252,25 +289,17 @@ int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, 
 
 void get_private_ip(ipaddr_t* dest)
 {
-    if(latest_lease) {
-        copy_ipaddr(&latest_lease->priv_ip, dest);
-    } else {
-        memset(dest, 0, sizeof(*dest));
-    }
+    copy_ipaddr(&latest_lease.priv_ip, dest);
+}
+
+const struct lease_info *get_lease_info()
+{
+    return &latest_lease;
 }
 
 uint16_t get_unique_id()
 {
-    if(latest_lease) {
-        return latest_lease->unique_id;
-    } else {
-        return 0;
-    }
-}
-
-const struct lease_info* get_lease_info()
-{
-    return latest_lease;
+    return latest_lease.unique_id;
 }
 
 /*
@@ -280,11 +309,10 @@ const struct lease_info* get_lease_info()
  */
 unsigned short get_controller_base_port()
 {
-    if(!latest_lease || latest_lease->controllers == 0) {
-        return FAILURE;
-    }
-
-    return ntohs(latest_lease->cinfo[0].base_port);
+    if(latest_lease.controllers > 0)
+        return latest_lease.cinfo[0].data_port;
+    else
+        return 0;
 }
 
 /*
@@ -295,12 +323,12 @@ unsigned short get_controller_base_port()
  */
 int get_controller_ip(char* dest, int dest_len)
 {
-    if(!latest_lease || latest_lease->controllers == 0) {
+    if(latest_lease.controllers > 0) {
+        ipaddr_to_string(&latest_lease.cinfo[0].pub_ip, dest, dest_len);
+        return 0;
+    } else {
         return FAILURE;
     }
-
-    ipaddr_to_string(&latest_lease->cinfo[0].pub_ip, dest, dest_len);
-    return 0;
 }
 
 

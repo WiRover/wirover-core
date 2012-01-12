@@ -68,36 +68,35 @@ const char* get_wiroot_ip()
     return address;
 }
 
-unsigned short get_wiroot_port()
+static unsigned short __get_port(const char *config_name)
 {
     const config_t* config = get_config();
 
     int tmp_port;
-    if(!config || config_lookup_int(config, "wiroot-port", &tmp_port) == CONFIG_FALSE) {
-        DEBUG_MSG("Failed to read wiroot-port from config file");
+    if(!config || config_lookup_int(config, config_name, &tmp_port) == CONFIG_FALSE) {
+        DEBUG_MSG("Failed to read %s from config file", config_name);
         return 0;
     } else if(tmp_port < 0 || tmp_port > 0x0000FFFF) {
-        DEBUG_MSG("wiroot-port in config file is out of range");
+        DEBUG_MSG("%s in config file is out of range", config_name);
         return 0;
     }
 
     return (unsigned short)tmp_port;
 }
 
-unsigned short get_base_port()
+unsigned short get_wiroot_port()
 {
-    const config_t* config = get_config();
+    return __get_port("wiroot-port");
+}
 
-    int tmp_port;
-    if(!config || config_lookup_int(config, "base-port", &tmp_port) == CONFIG_FALSE) {
-        DEBUG_MSG("Failed to read base-port from config file");
-        return 0;
-    } else if(tmp_port < 0 || tmp_port > 0x0000FFFF) {
-        DEBUG_MSG("base-port in config file is out of range");
-        return 0;
-    }
+unsigned short get_data_port()
+{
+    return __get_port("data-port");
+}
 
-    return (unsigned short)tmp_port;
+unsigned short get_control_port()
+{
+    return __get_port("control-port");
 }
 
 unsigned int get_ping_interval()
@@ -159,6 +158,18 @@ int get_interface_priority(const char *ifname)
 
 default_priority:
     return DEFAULT_INTERFACE_PRIORITY;
+}
+
+const char *get_register_address()
+{
+    const config_t* config = get_config();
+
+    const char* address = 0;
+    if(!config || config_lookup_string(config, "register-address", 
+                &address) == CONFIG_FALSE)
+        return DEFAULT_REGISTER_ADDRESS;
+    else
+        return address;
 }
 
 /*

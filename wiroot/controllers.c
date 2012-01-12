@@ -12,7 +12,7 @@ static struct controller*    controllers_ip_hash = 0;
  * Adds a controller to list of available controllers.
  */
 void add_controller(const ipaddr_t* priv_ip, const ipaddr_t* pub_ip, 
-        uint16_t base_port, double latitude, double longitude)
+        uint16_t data_port, uint16_t control_port, double latitude, double longitude)
 {
     struct controller* controller;
     int is_new = 0;
@@ -30,7 +30,8 @@ void add_controller(const ipaddr_t* priv_ip, const ipaddr_t* pub_ip,
 
     copy_ipaddr(priv_ip, &controller->priv_ip);
     copy_ipaddr(pub_ip, &controller->pub_ip);
-    controller->base_port = base_port;
+    controller->data_port = data_port;
+    controller->control_port = control_port;
     controller->latitude = latitude;
     controller->longitude = longitude;
 

@@ -142,7 +142,7 @@ static int send_ping(struct interface* ife,
     struct timeval now;
     int bytes;
 
-    sockfd = udp_bind_open(get_base_port(), ife->name);
+    sockfd = udp_bind_open(get_data_port(), ife->name);
     if(sockfd == FAILURE) {
         return FAILURE;
     }
@@ -217,7 +217,7 @@ void* ping_thread_func(void* arg)
     const unsigned int ping_interval = get_ping_interval();
     int sockfd;
 
-    sockfd = udp_bind_open(get_base_port(), 0);
+    sockfd = udp_bind_open(get_data_port(), 0);
     if(sockfd == FAILURE) {
         DEBUG_MSG("Ping thread cannot continue due to failure");
         return 0;
@@ -403,7 +403,7 @@ static int send_second_response(const struct interface *ife,
 {
     assert(len >= MIN_PING_PACKET_SIZE);
     
-    int sockfd = udp_bind_open(get_base_port(), ife->name);
+    int sockfd = udp_bind_open(get_data_port(), ife->name);
     if(sockfd < 0) {
         return -1;
     }

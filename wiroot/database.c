@@ -20,24 +20,28 @@ int db_connect()
     database = mysql_init(0);
     if(!database) {
         DEBUG_MSG("mysql_init() failed");
-        return -1;
+        goto err_out;
     }
 
     if(!mysql_real_connect(database, DB_HOST, DB_USER, DB_PASS, DB_NAME,
                                 0, 0, 0)) {
-        DEBUG_MSG("mysql_real_connect() failed");
-        mysql_close(database);
-        database = 0;
-        return -1;
+        DEBUG_MSG("mysql_real_connect() failed: %s", mysql_error(database));
+        goto close_and_err_out;
     }
     
     my_bool yes = 1;
     result = mysql_options(database, MYSQL_OPT_RECONNECT, &yes);
     if(result != 0) {
-        DEBUG_MSG("Warning: mysql_option() failed");
+        DEBUG_MSG("Warning: mysql_option() failed: %s", mysql_error(database));
     }
 
     return 0;
+
+close_and_err_out:
+    mysql_close(database);
+    database = NULL;
+err_out:
+    return -1;
 }
 
 void db_disconnect()

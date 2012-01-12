@@ -169,17 +169,17 @@ static void handle_incoming(struct client* client)
     } else if(bytes == 0) {
         handle_disconnection(&clients_head, client);
         return;
-    } else if(bytes < MIN_REQUEST_LEN) {
+    } else if(bytes < sizeof(struct rchanhdr)) {
         DEBUG_MSG("Client packet was too small to be a valid request.");
         return;
     }
 
     uint8_t type = packet[0];
     switch(type) {
-        case RCHAN_GATEWAY_CONFIG:
+        case RCHAN_REGISTER_GATEWAY:
             handle_gateway_config(client, packet, bytes);
             break;
-        case RCHAN_CONTROLLER_CONFIG:
+        case RCHAN_REGISTER_CONTROLLER:
             handle_controller_config(client, packet, bytes);
             break;
     }
@@ -191,30 +191,41 @@ static void handle_incoming(struct client* client)
  * Processes a request from a gateway and sends a response.
  */
 static void handle_gateway_config(struct client* client, const char* packet, int length) {
-    struct rchan_request* request = (struct rchan_request*)packet;
+    struct rchanhdr *rchanhdr = (struct rchanhdr *)packet;
+    unsigned offset = sizeof(struct rchanhdr);
+
+    struct rchan_gwreg *gwreg = (struct rchan_gwreg *)(packet + offset);
+    offset += sizeof(struct rchan_gwreg);
+
+    if(offset > length) {
+        DEBUG_MSG("Gateway registration packet was too short: %u bytes, expected %d",
+                length, offset);
+        return;
+    }
     
     // Query the database for the unique id of the client
     char p_hw_addr[DB_UNIQUE_ID_LEN+1];
-    to_hex_string((const char*)request->hw_addr, sizeof(request->hw_addr), p_hw_addr, sizeof(p_hw_addr));
+    to_hex_string((const char*)rchanhdr->id, sizeof(rchanhdr->id), p_hw_addr, sizeof(p_hw_addr));
     unsigned short unique_id = db_get_unique_id(p_hw_addr);
 
     const struct lease* lease;
     lease = grant_lease((int)unique_id);
   
     struct rchan_response response;
-    response.type = request->type;
+    response.type = rchanhdr->type;
     response.unique_id = htons(unique_id);
 
     if(lease) {
         struct controller* controller_list[MAX_CONTROLLERS];
         response.controllers = assign_controllers(controller_list, MAX_CONTROLLERS, 
-                request->latitude, request->longitude);
+                gwreg->latitude, gwreg->longitude);
 
         int i;
         for(i = 0; i < response.controllers && i < MAX_CONTROLLERS; i++) {
             copy_ipaddr(&controller_list[i]->priv_ip, &response.cinfo[i].priv_ip);
             copy_ipaddr(&controller_list[i]->pub_ip, &response.cinfo[i].pub_ip);
-            response.cinfo[i].base_port = controller_list[i]->base_port;
+            response.cinfo[i].data_port = controller_list[i]->data_port;
+            response.cinfo[i].control_port = controller_list[i]->control_port;
         }
 
         copy_ipaddr(&lease->ip, &response.priv_ip);
@@ -237,11 +248,21 @@ static void handle_gateway_config(struct client* client, const char* packet, int
  * Processes a request from a controller and sends a response.
  */
 static void handle_controller_config(struct client* client, const char* packet, int length) {
-    struct rchan_request* request = (struct rchan_request*)packet;
+    struct rchanhdr *rchanhdr = (struct rchanhdr *)packet;
+    unsigned offset = sizeof(struct rchanhdr);
+
+    struct rchan_ctrlreg *ctrlreg = (struct rchan_ctrlreg *)(packet + offset);
+    offset += sizeof(struct rchan_ctrlreg);
+
+    if(offset > length) {
+        DEBUG_MSG("Controller registration packet was too short: %u bytes, expected %d",
+                length, offset);
+        return;
+    }
     
     // Query the database for the unique id of the client
     char p_hw_addr[DB_UNIQUE_ID_LEN+1];
-    to_hex_string((const char*)request->hw_addr, sizeof(request->hw_addr), p_hw_addr, sizeof(p_hw_addr));
+    to_hex_string((const char*)rchanhdr->id, sizeof(rchanhdr->id), p_hw_addr, sizeof(p_hw_addr));
     unsigned short unique_id = db_get_unique_id(p_hw_addr);
 
     const struct lease* lease;
@@ -249,14 +270,46 @@ static void handle_controller_config(struct client* client, const char* packet, 
     
     char response_buffer[MTU];
     struct rchan_response* response = (struct rchan_response*)response_buffer;
-    response->type = request->type;
+    response->type = rchanhdr->type;
     response->unique_id = htons(unique_id);
 
     if(lease) {
-        ipaddr_t client_ip;
-        sockaddr_to_ipaddr((const struct sockaddr*)&client->addr, &client_ip);
+        ipaddr_t ctrl_ip;
 
-        add_controller(&lease->ip, &client_ip, request->base_port, request->latitude, request->longitude);
+        switch(ctrlreg->family) {
+            case RCHAN_USE_SOURCE:
+                sockaddr_to_ipaddr((const struct sockaddr *)&client->addr, &ctrl_ip);
+                break;
+            case AF_INET:
+            {
+                struct sockaddr_in sin;
+                sin.sin_family = AF_INET;
+                sin.sin_addr.s_addr = ctrlreg->addr.ip4;
+                sockaddr_to_ipaddr((const struct sockaddr *)&sin, &ctrl_ip);
+                break;
+            }
+            case AF_INET6:
+            {
+                struct sockaddr_in6 sin;
+                sin.sin6_family = AF_INET6;
+                memcpy(sin.sin6_addr.s6_addr, ctrlreg->addr.ip6, 
+                        sizeof(sin.sin6_addr.s6_addr));
+                sockaddr_to_ipaddr((const struct sockaddr *)&sin, &ctrl_ip);
+                break;
+            }
+            default:
+                DEBUG_MSG("Unrecognized address family: %hu", ctrlreg->family);
+                return;
+        }
+
+        add_controller(&lease->ip, &ctrl_ip, ctrlreg->data_port, ctrlreg->control_port,
+                ctrlreg->latitude, ctrlreg->longitude);
+
+        char p_ip[INET6_ADDRSTRLEN];
+        ipaddr_to_string(&ctrl_ip, p_ip, sizeof(p_ip));
+
+        DEBUG_MSG("Controller registered as %s data %hu control %hu",
+                p_ip, ntohs(ctrlreg->data_port), ntohs(ctrlreg->control_port));
 
         copy_ipaddr(&lease->ip, &response->priv_ip);
         response->priv_subnet_size = get_lease_subnet_size();

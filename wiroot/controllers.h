@@ -9,8 +9,7 @@ struct controller {
     ipaddr_t        pub_ip;
 
     uint16_t        data_port;
-    uint16_t        cchan_port;
-    uint16_t        base_port;
+    uint16_t        control_port;
 
     double          latitude;
     double          longitude;
@@ -18,8 +17,8 @@ struct controller {
     UT_hash_handle  hh_ip;
 };
 
-void add_controller(const ipaddr_t* priv_ip, const ipaddr_t* pub_ip, uint16_t base_port,
-                    double latitude, double longitude);
+void add_controller(const ipaddr_t* priv_ip, const ipaddr_t* pub_ip, uint16_t data_port,
+                    uint16_t control_port, double latitude, double longitude);
 int assign_controllers(struct controller** node_list, int list_size,
                        double latitude, double longitude);
 

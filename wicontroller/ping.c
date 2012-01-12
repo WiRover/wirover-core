@@ -73,7 +73,7 @@ int start_ping_thread()
 
 void* ping_thread_func(void* arg)
 {
-    const unsigned short base_port = get_base_port();
+    const unsigned short data_port = get_data_port();
     int sockfd;
 
     int link_timeout = DEFAULT_LINK_TIMEOUT;
@@ -94,7 +94,7 @@ void* ping_thread_func(void* arg)
         }
     }
 
-    sockfd = udp_bind_open(base_port, 0);
+    sockfd = udp_bind_open(data_port, 0);
     if(sockfd == FAILURE) {
         DEBUG_MSG("Ping thread cannot continue due to failure");
         return 0;

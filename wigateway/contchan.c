@@ -107,7 +107,7 @@ static int _send_notification(const char *ifname)
         dest->state = ife->state;
         dest->link_id = htonl(ife->index);
         dest->local_ip = ife->public_ip.s_addr;
-        dest->data_port = htons(get_base_port());
+        dest->data_port = htons(get_data_port());
 
         ife = ife->next;
         ife_ind++;

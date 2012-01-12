@@ -24,22 +24,25 @@ static int find_gateway_ip(const char *device, struct in_addr *gw_ip);
 
 int main(int argc, char* argv[])
 {
-    struct lease_info* lease;
+    struct lease_info lease;
     int result;
 
     const config_t *config = get_config();
 
     const char* wiroot_ip = get_wiroot_ip();
     const unsigned short wiroot_port = get_wiroot_port();
-    unsigned short base_port = get_base_port();
-    if(!(wiroot_ip && wiroot_port && base_port)) {
+    unsigned short data_port = get_data_port();
+    unsigned short control_port = get_control_port();
+    if(!(wiroot_ip && wiroot_port && data_port && control_port)) {
         DEBUG_MSG("You must fix the config file.");
         exit(1);
     }
 
-    lease = obtain_lease(wiroot_ip, wiroot_port, base_port);
-    if(!lease) {
+    result = register_controller(&lease, wiroot_ip, wiroot_port, 
+            data_port, control_port);
+    if(result < 0) {
         DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
+        exit(1);
     }
 
 #ifdef WITH_DATABASE
@@ -52,18 +55,18 @@ int main(int argc, char* argv[])
     uint32_t priv_netmask = 0;
     char p_ip[INET6_ADDRSTRLEN];
 
-    ipaddr_to_string(&lease->priv_ip, p_ip, sizeof(p_ip));
+    ipaddr_to_string(&lease.priv_ip, p_ip, sizeof(p_ip));
     DEBUG_MSG("Obtained lease of %s", p_ip);
 
-    ipaddr_to_ipv4(&lease->priv_ip, &priv_ip);
-    priv_netmask = htonl(~((1 << lease->priv_subnet_size) - 1));
+    ipaddr_to_ipv4(&lease.priv_ip, &priv_ip);
+    priv_netmask = htonl(~((1 << lease.priv_subnet_size) - 1));
 
     result = setup_virtual_interface(priv_ip, priv_netmask);
     if(result == -1) {
         DEBUG_MSG("Fatal error: failed to bring up virtual interface");
     }
 
-    int cchan_sock = tcp_passive_open(base_port + CONTROL_CHANNEL_OFFSET, SOMAXCONN);
+    int cchan_sock = tcp_passive_open(control_port, SOMAXCONN);
     if(cchan_sock == -1) {
         DEBUG_MSG("Failed to open control channel socket.");
         exit(1);
