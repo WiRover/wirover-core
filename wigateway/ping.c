@@ -72,8 +72,7 @@ int ping_all_interfaces()
     if(get_controller_ip(controller_ip, sizeof(controller_ip)) < 0)
         return FAILURE;
 
-    const unsigned short controller_port = 
-            get_controller_base_port() + DATA_CHANNEL_OFFSET;
+    const unsigned short controller_port = get_controller_data_port();
 
     struct sockaddr_storage dest_addr;
     unsigned dest_len;
@@ -113,8 +112,7 @@ int ping_interface(struct interface* ife)
     if(get_controller_ip(controller_ip, sizeof(controller_ip)) < 0)
         return FAILURE;
 
-    const unsigned short controller_port = 
-            get_controller_base_port() + DATA_CHANNEL_OFFSET;
+    const unsigned short controller_port = get_controller_data_port();
 
     struct sockaddr_storage dest_addr;
     unsigned dest_len;

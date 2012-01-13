@@ -303,14 +303,23 @@ uint16_t get_unique_id()
 }
 
 /*
- * GET CONTROLLER BASE PORT
- *
- * Returns controller's base port in host byte order.
+ * Returns controller's data port in host byte order.
  */
-unsigned short get_controller_base_port()
+unsigned short get_controller_data_port()
 {
     if(latest_lease.controllers > 0)
-        return latest_lease.cinfo[0].data_port;
+        return ntohs(latest_lease.cinfo[0].data_port);
+    else
+        return 0;
+}
+
+/*
+ * Returns controller's data port in host byte order.
+ */
+unsigned short get_controller_control_port()
+{
+    if(latest_lease.controllers > 0)
+        return ntohs(latest_lease.cinfo[0].control_port);
     else
         return 0;
 }

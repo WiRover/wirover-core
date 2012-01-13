@@ -70,8 +70,7 @@ static int _send_notification(const char *ifname)
         return FAILURE;
     }
 
-    const unsigned short controller_port =
-            get_controller_base_port() + CONTROL_CHANNEL_OFFSET;
+    const unsigned short controller_port = get_controller_control_port();
 
     struct timeval timeout;
     timeout.tv_sec  = CCHAN_CONNECT_TIMEOUT_SEC;

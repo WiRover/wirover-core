@@ -95,7 +95,8 @@ uint16_t get_unique_id();
 void    get_private_ip(ipaddr_t* dest);
 const struct lease_info* get_lease_info();
 
-unsigned short get_controller_base_port();
+unsigned short get_controller_data_port();
+unsigned short get_controller_control_port();
 int get_controller_ip(char* dest, int dest_len);
 
 #endif //_ROOTCHAN_H_

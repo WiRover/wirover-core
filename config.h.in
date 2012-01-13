@@ -6,19 +6,11 @@
 
 #define SPECIAL_SEQ_NO 0xFFFFFFFF
 
-#define DEFAULT_BASE_PORT           8000
+#define DEFAULT_DATA_PORT           8080
 #define DEFAULT_PING_INTERVAL       10
 #define DEFAULT_BANDWIDTH_TIMEOUT   5000000
 #define DEFAULT_BANDWIDTH_PORT      8002
 #define DEFAULT_BANDWIDTH_INTERVAL  60000000
-
-// Controllers pick a base port, then use subsequent port numbers for other
-// services.  Data, pings, and nat punches will go over the "data channel"
-// port.  Notification of interface changes will go over the control channel.
-// Active bandwidth tests will use the bandwidth channel.
-#define DATA_CHANNEL_OFFSET         0
-#define CONTROL_CHANNEL_OFFSET      1
-#define BANDWIDTH_CHANNEL_OFFSET    2
 
 // Enables cooperation with the virt module.  If this is not defined, only
 // user-level code is used.
