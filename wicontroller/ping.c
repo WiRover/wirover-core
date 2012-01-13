@@ -211,7 +211,7 @@ static int ping_request_valid(char *buffer, int len)
     if(len < MIN_PING_PACKET_SIZE)
         return PING_ERR_TOO_SHORT;
     
-    const struct ping_packet *ping = (struct ping_packet *)
+    struct ping_packet *ping = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
 
     /* node_id == 0 is invalid, gateway should have received a non-zero id from
@@ -223,7 +223,7 @@ static int ping_request_valid(char *buffer, int len)
     struct gateway *gw = lookup_gateway_by_id(node_id);
 
     if(gw) {
-        if(verify_ping_sender(buffer + sizeof(struct tunhdr), 
+        if(verify_ping_sender(ping, buffer + sizeof(struct tunhdr), 
                     len - sizeof(struct tunhdr), gw->private_key) == 0) {
             unsigned link_id = ntohl(ping->link_id);
 
@@ -269,13 +269,8 @@ static int send_response(int sockfd, const struct gateway *gw,
     ping->receiver_ts = htonl(timeval_to_usec(0));
     
     if(gw) {
-        memcpy(ping->digest, gw->private_key, sizeof(ping->digest));
-
-        SHA256_CTX sha;
-        SHA256_Init(&sha);
-        SHA256_Update(&sha, buffer + sizeof(struct tunhdr), 
-                MIN_PING_PACKET_SIZE - sizeof(struct tunhdr));
-        SHA256_Final(ping->digest, &sha);
+        fill_ping_digest(ping, response_buffer + sizeof(struct tunhdr),
+                MIN_PING_PACKET_SIZE - sizeof(struct tunhdr), gw->private_key);
     } else {
         memset(ping->digest, 0, sizeof(ping->digest));
     }

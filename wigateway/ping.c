@@ -181,14 +181,8 @@ static int send_ping(struct interface* ife,
     pkt->sender_ts = htonl(timeval_to_usec(0));
     pkt->receiver_ts = 0;
 
-    // Fill in the PSK before computing hash
-    memcpy(pkt->digest, private_key, sizeof(pkt->digest));
-
-    SHA256_CTX sha;
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, buffer + sizeof(struct tunhdr), 
-            send_size - sizeof(struct tunhdr));
-    SHA256_Final(pkt->digest, &sha);
+    fill_ping_digest(pkt, buffer + sizeof(struct tunhdr), 
+            send_size - sizeof(struct tunhdr), private_key);
 
     bytes = sendto(sockfd, buffer, send_size, 0, dest_addr, dest_len);
     if(bytes < 0) {
@@ -344,7 +338,7 @@ static int handle_incoming(int sockfd, int timeout)
 
     if(iszero(pkt->digest, sizeof(pkt->digest))) {
         send_response = 0;
-    } else if(verify_ping_sender(buffer + sizeof(struct tunhdr), 
+    } else if(verify_ping_sender(pkt, buffer + sizeof(struct tunhdr), 
                 bytes - sizeof(struct tunhdr), private_key) != 0) {
         DEBUG_MSG("SHA hash mismatch, ping packet discarded");
         return -1;
@@ -429,15 +423,9 @@ static int send_second_response(const struct interface *ife,
         send_size = MIN_PING_PACKET_SIZE;
     }
     
-    // Fill in the PSK before computing hash
-    memcpy(ping->digest, private_key, sizeof(ping->digest));
-
-    SHA256_CTX sha;
-    SHA256_Init(&sha);
-    SHA256_Update(&sha, response + sizeof(struct tunhdr), 
-            send_size - sizeof(struct tunhdr));
-    SHA256_Final(ping->digest, &sha);
-
+    fill_ping_digest(ping, response + sizeof(struct tunhdr), 
+            send_size - sizeof(struct tunhdr), private_key);
+    
     int result = sendto(sockfd, response, send_size, 0, to, to_len);
 
     free(response);

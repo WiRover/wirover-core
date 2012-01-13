@@ -94,7 +94,10 @@ static inline uint32_t timeval_to_usec(const struct timeval *tv)
     }
 }
 
-int verify_ping_sender(char *buffer, int len, const unsigned char *key);
+void fill_ping_digest(struct ping_packet *pkt, const char *data, int len, 
+        const unsigned char *key);
+int verify_ping_sender(struct ping_packet *pkt, const char *data, int len, 
+        const unsigned char *key);
 int iszero(const unsigned char *buffer, int len);
 
 #endif //_PING_H_

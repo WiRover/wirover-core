@@ -82,29 +82,41 @@ int fill_passive_payload(const char *ifname, struct passive_payload *dest)
 }
 
 /*
+ * Copies the private key into the pkt->digest field, computes the SHA hash
+ * and fills the pkt->digest field in with the result.
+ */
+void fill_ping_digest(struct ping_packet *pkt, const char *data, int len, const unsigned char *key)
+{
+    memcpy(pkt->digest, key, sizeof(pkt->digest));
+
+    SHA256_CTX sha;
+    SHA256_Init(&sha);
+    SHA256_Update(&sha, data, len);
+    SHA256_Final(pkt->digest, &sha);
+}
+
+/*
  * Verifies sender of ping packet by computing keyed SHA hash.
  *
  * Returns 0 on match.
  */
-int verify_ping_sender(char *buffer, int len, const unsigned char *key)
+int verify_ping_sender(struct ping_packet *pkt, const char *data, int len, const unsigned char *key)
 {
-    struct ping_packet *ping = (struct ping_packet *)buffer;
-
     unsigned char rcv_digest[SHA256_DIGEST_LENGTH];
-    memcpy(rcv_digest, ping->digest, sizeof(ping->digest));
+    memcpy(rcv_digest, pkt->digest, sizeof(pkt->digest));
 
-    memcpy(ping->digest, key, SHA256_DIGEST_LENGTH);
+    memcpy(pkt->digest, key, SHA256_DIGEST_LENGTH);
 
     SHA256_CTX sha;
     SHA256_Init(&sha);
-    SHA256_Update(&sha, buffer, len);
+    SHA256_Update(&sha, data, len);
 
     unsigned char cmp_digest[SHA256_DIGEST_LENGTH];
     SHA256_Final(cmp_digest, &sha);
 
     int result = memcmp(rcv_digest, cmp_digest, SHA256_DIGEST_LENGTH);
 
-    memcpy(ping->digest, rcv_digest, SHA256_DIGEST_LENGTH);
+    memcpy(pkt->digest, rcv_digest, SHA256_DIGEST_LENGTH);
 
     return result;
 }

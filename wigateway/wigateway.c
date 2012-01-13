@@ -37,6 +37,7 @@ enum {
 
 static struct option long_options[] = {
     {"no-kernel", no_argument, 0, 'k'},
+    {"debug",     no_argument, 0, 'd'},
     {0,           0,           0, 0  },
 };
 
@@ -45,10 +46,12 @@ static void print_usage(const char *cmd)
     printf("Usage: %s [--no-kernel]\n", cmd);
 }
 
+int with_kernel = 1;
+int debugging   = 0;
+
 int main(int argc, char* argv[])
 {
     int result;
-    int with_kernel = 1;
 
     srand(time(0));
 
@@ -63,6 +66,9 @@ int main(int argc, char* argv[])
         switch(c) {
             case 'k':
                 with_kernel = 0;
+                break;
+            case 'd':
+                debugging = 1;
                 break;
             default:
                 print_usage(argv[0]);
