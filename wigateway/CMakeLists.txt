@@ -6,6 +6,7 @@ add_executable(wigateway
     contchan.c
     gps_handler.c
     ping.c
+    arguments.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
     ${COMMON}/interface.c

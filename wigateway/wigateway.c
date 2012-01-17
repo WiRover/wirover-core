@@ -1,6 +1,5 @@
 #include <stdlib.h>
 #include <errno.h>
-#include <getopt.h>
 #include <time.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -8,6 +7,7 @@
 #include <openssl/rand.h>
 #include <openssl/sha.h>
 
+#include "arguments.h"
 #include "bandwidth.h"
 #include "config.h"
 #include "configuration.h"
@@ -35,46 +35,14 @@ enum {
     GATEWAY_NOTIFICATION_SUCCEEDED,
 };
 
-static struct option long_options[] = {
-    {"no-kernel", no_argument, 0, 'k'},
-    {"debug",     no_argument, 0, 'd'},
-    {0,           0,           0, 0  },
-};
-
-static void print_usage(const char *cmd)
-{
-    printf("Usage: %s [--no-kernel]\n", cmd);
-}
-
-int with_kernel = 1;
-int debugging   = 0;
-
 int main(int argc, char* argv[])
 {
     int result;
 
     srand(time(0));
 
-    int c;
-    while(1) {
-        int option_index = 0;
-
-        c = getopt_long(argc, argv, "", long_options, &option_index);
-        if(c == -1)
-            break;
-
-        switch(c) {
-            case 'k':
-                with_kernel = 0;
-                break;
-            case 'd':
-                debugging = 1;
-                break;
-            default:
-                print_usage(argv[0]);
-                exit(1);
-        }
-    }
+    if(parse_arguments(argc, argv) < 0)
+        exit(1);
 
     const char* wiroot_ip = get_wiroot_ip();
     const unsigned short wiroot_port = get_wiroot_port();
@@ -129,7 +97,7 @@ int main(int argc, char* argv[])
                 ipaddr_to_ipv4(&lease.priv_ip, &private_ip);
                 private_netmask = htonl(~((1 << lease.priv_subnet_size) - 1));
                 
-                if(with_kernel) {
+                if(ARGS.with_kernel) {
                     result = setup_virtual_interface(private_ip, private_netmask);
                     if(result == -1) {
                         DEBUG_MSG("Failed to bring up virtual interface");
@@ -142,7 +110,7 @@ int main(int argc, char* argv[])
                     ipaddr_to_string(&lease.cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
                     DEBUG_MSG("First controller is at: %s", cont_ip);
 
-                    if(with_kernel) {
+                    if(ARGS.with_kernel) {
                         uint32_t priv_ip;
                         uint32_t pub_ip;
 
@@ -172,7 +140,7 @@ int main(int argc, char* argv[])
 
         if(state == GATEWAY_LEASE_OBTAINED) {
             if(find_active_interface(interface_list)) {
-                if(with_kernel) {
+                if(ARGS.with_kernel) {
                     result = add_route(0, 0, 0, VIRT_DEVICE);
 
                     // EEXIST means the route was already present -> not a failure
