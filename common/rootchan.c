@@ -1,7 +1,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stropts.h>
+//#include <stropts.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>

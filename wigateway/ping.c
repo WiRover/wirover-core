@@ -1,12 +1,13 @@
 #include <stdlib.h>
 #include <libconfig.h>
-#include <stropts.h>
+//#include <stropts.h>
 #include <unistd.h>
 #include <asm-generic/sockios.h>
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <netinet/in.h>
 #include <sys/time.h>
+#include <sys/ioctl.h>
 
 #include "config.h"
 #include "configuration.h"

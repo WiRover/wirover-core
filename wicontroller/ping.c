@@ -1,13 +1,14 @@
 #define _BSD_SOURCE /* required for be64toh */
 
 #include <libconfig.h>
-#include <stropts.h>
+//#include <stropts.h>
 #include <unistd.h>
 #include <asm-generic/sockios.h>
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <netinet/in.h>
 #include <sys/time.h>
+#include <sys/ioctl.h>
 #include <netdb.h>
 #include <endian.h>
 

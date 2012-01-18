@@ -4,12 +4,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <stropts.h>
+//#include <stropts.h>
 #include <time.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <sys/ioctl.h>
 #include <sys/time.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>
