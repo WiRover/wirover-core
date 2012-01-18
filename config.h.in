@@ -30,6 +30,8 @@
  * No new lines please. */
 #define NETWORK_NAME_PATH    "/var/lib/wirover/networks"
 
+/* Compile in the GPS code. libgps has frequent API changes that break the code */
+#define COMPILE_GPS
 /* Invalidate GPS data after 5 seconds */
 #define GPS_DATA_TIMEOUT 5
 

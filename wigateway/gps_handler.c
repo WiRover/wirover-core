@@ -18,12 +18,19 @@
 #include <linux/udp.h>
 #include <linux/tcp.h>
 #include <netinet/ip.h>
-#include <gps.h>
 
 #include "config.h"
 #include "debug.h"
 #include "gps_handler.h"
 #include "ping.h"
+
+//#include <sys/types.h> // gpsd uses strange variable types
+//#include <linux/types.h> // gpsd uses strange variable types
+typedef unsigned short int ushort;
+typedef unsigned int uint;
+#include <gps.h>
+
+#ifdef COMPILE_GPS /* HACK */
 
 #if (GPSD_API_MAJOR_VERSION < 4 || GPSD_API_MAJOR_VERSION > 5)
     #error "GPSD version not recognized"
@@ -31,6 +38,7 @@
 
 #define RECONNECT_DELAY 10
 #define SECS_TO_USECS   1000000
+
 
 static int connect_to_gpsd();
 static void *gps_thread_func(void *arg);
@@ -210,4 +218,31 @@ void *gps_thread_func(void *arg)
 
     return 0;
 }
+
+#else /* COMPILE_GPS HACK */
+
+int init_gps_handler()
+{
+    return 0;
+}
+
+/*
+ * Copy the latest GPS fix into a payload structure suitable for sending to the
+ * controller.  If GPS data is unavailable, the status field will be set to
+ * MODE_NOT_SEEN or MODE_NO_FIX.
+ *
+ * Returns 0 if the payload contains valid GPS data or -1 otherwise.
+ */
+int fill_gps_payload(struct gps_payload *dest)
+{
+    assert(dest);
+    memset(dest, 0, sizeof(*dest));
+    dest->status = MODE_NOT_SEEN;
+
+    return -1;
+}
+
+
+
+#endif /* COMPILE_GPS HACK */
 
