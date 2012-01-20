@@ -72,6 +72,21 @@ void __error_msg(const char* file, int line, const char* func, const char* msg, 
 }
 #endif //DEBUG_PRINT
 
+void __print_warning(const char *msg, ...)
+{
+    print_time(stdout);
+    
+    va_list args;
+    char buffer[MAX_DEBUG_LEN];
+
+    va_start(args, msg);
+    vsnprintf(buffer, sizeof(buffer), msg, args);
+    va_end(args);
+
+    printf("\tWarning: %s\n", buffer);
+    fflush(stdout);
+}
+
 void to_hex_string(const char* __restrict__ src, int src_len,
                    char* __restrict__ dest, int dest_len)
 {

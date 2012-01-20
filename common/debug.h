@@ -27,6 +27,16 @@ void __error_msg(const char* file, int line, const char* func, const char* msg, 
 #define ERROR_MSG(...)
 #endif
 
+void __print_warning(const char *msg, ...);
+#define WARN_ONCE(...)                  \
+{                                       \
+    static int __print_warning = 1;     \
+    if(__print_warning) {               \
+        __warning_msg(__VA_ARGS__);     \
+        __print_warning = 0;            \
+    }                                   \
+}
+
 /*
  * ASSERT_OR_ELSE adds additional functionality to the assert function.
  *
