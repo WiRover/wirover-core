@@ -236,7 +236,11 @@ void* ping_thread_func(void* arg)
             release_read_lock(&interface_list_lock);
             
             curr_iface_pos = 0;
-            ping_spacing = ping_interval * USEC_PER_SEC / num_ifaces;
+
+            if(num_ifaces > 0)
+                ping_spacing = ping_interval * USEC_PER_SEC / num_ifaces;
+            else
+                ping_spacing = ping_interval * USEC_PER_SEC;
         }
 
         struct timeval now;
