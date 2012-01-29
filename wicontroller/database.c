@@ -31,6 +31,122 @@
 #include "ping.h"
 #include "timing.h"
 
+static const char CREATE_TABLE_GATEWAYS[] = "                       \
+    create table if not exists gateways (                           \
+        id          int unsigned not null,                          \
+        name        varchar(16) default null,                       \
+        state       tinyint(1) unsigned default 0,                  \
+        private_ip  varchar(46) default null,                       \
+        event_time  datetime default null,                          \
+        comment     text default null,                              \
+        primary key (id)                                            \
+    ) engine=InnoDB default charset=utf8                            \
+";
+
+static const char CREATE_TABLE_LINKS[] = "                          \
+    create table if not exists links (                              \
+        id          int unsigned not null auto_increment,           \
+        node_id     int unsigned not null,                          \
+        network     varchar(16) not null,                           \
+        ip          varchar(46) default null,                       \
+        state       tinyint(1) unsigned default 0,                  \
+        bytes_tx    bigint unsigned default 0,                      \
+        bytes_rx    bigint unsigned default 0,                      \
+        month_tx    bigint unsigned default 0,                      \
+        month_rx    bigint unsigned default 0,                      \
+        quota       bigint unsigned default null,                   \
+        avg_rtt     double default null,                            \
+        avg_bw_down double default null,                            \
+        avg_bw_up   double default null,                            \
+        updated     timestamp not null default                      \
+            current_timestamp on update current_timestamp,          \
+        comment     text default null,                              \
+        primary key (id),                                           \
+        unique key (node_id, network),                              \
+        foreign key (node_id) references gateways (id)              \
+            on delete cascade on update cascade                     \
+    ) engine=InnoDB default charset=utf8                            \
+";
+
+static const char CREATE_TABLE_GPS[] = "                            \
+    create table if not exists gps (                                \
+        id          int unsigned not null auto_increment,           \
+        node_id     int unsigned not null,                          \
+        time        timestamp not null default current_timestamp,   \
+        status      tinyint(1) default 0,                           \
+        latitude    double default null,                            \
+        longitude   double default null,                            \
+        altitude    double default null,                            \
+        track       double default null,                            \
+        speed       double default null,                            \
+        climb       double default null,                            \
+        primary key (id),                                           \
+        unique key (node_id, time),                                 \
+        foreign key (node_id) references gateways (id)              \
+            on delete cascade on update cascade                     \
+    ) engine=InnoDB default charset=utf8                            \
+";
+
+static const char CREATE_TABLE_PINGS[] = "                          \
+    create table if not exists pings (                              \
+        id          int unsigned not null auto_increment,           \
+        node_id     int unsigned not null,                          \
+        network     varchar(16) not null,                           \
+        time        timestamp not null default current_timestamp,   \
+        gps_id      int unsigned default null,                      \
+        rtt         int unsigned default null,                      \
+        primary key (id),                                           \
+        unique key (node_id, network, time),                        \
+        foreign key (node_id) references gateways (id)              \
+            on delete cascade on update cascade,                    \
+        foreign key (gps_id) references gps (id)                    \
+            on delete set null on update cascade                    \
+    ) engine=InnoDB default charset=utf8                            \
+";
+
+static const char CREATE_TABLE_BANDWIDTH[] = "                      \
+    create table if not exists bandwidth (                          \
+        id          int unsigned not null auto_increment,           \
+        node_id     int unsigned not null,                          \
+        network     varchar(16) not null,                           \
+        time        timestamp not null default current_timestamp,   \
+        gps_id      int unsigned default null,                      \
+        bw_down     double default null,                            \
+        bw_up       double default null,                            \
+        type        enum ('TCP', 'UDP') default null,               \
+        primary key (id),                                           \
+        unique key (node_id, network, time),                        \
+        foreign key (node_id) references gateways (id)              \
+            on delete cascade on update cascade,                    \
+        foreign key (gps_id) references gps (id)                    \
+            on delete set null on update cascade                    \
+    ) engine=InnoDB default charset=utf8                            \
+";
+
+static const char CREATE_TABLE_PASSIVE[] = "                        \
+    create table if not exists passive (                            \
+        id          int unsigned not null auto_increment,           \
+        node_id     int unsigned not null,                          \
+        network     varchar(16) not null,                           \
+        time        timestamp not null default current_timestamp,   \
+        interval_len    int unsigned default 0,                     \
+        bytes_tx    bigint unsigned default 0,                      \
+        bytes_rx    bigint unsigned default 0,                      \
+        rate_down   double default 0,                               \
+        rate_up     double default 0,                               \
+        packets_tx  int unsigned default 0,                         \
+        packets_rx  int unsigned default 0,                         \
+        losses      int unsigned default 0,                         \
+        outoforder  int unsigned default 0,                         \
+        primary key (id),                                           \
+        unique key (node_id, network, time),                        \
+        foreign key (node_id) references gateways (id)              \
+            on delete cascade on update cascade                     \
+    ) engine=InnoDB default charset=utf8                            \
+";
+
+static int create_tables();
+
 static MYSQL* database = 0;
 static char query_buffer[1024];
 static pthread_mutex_t database_lock = PTHREAD_MUTEX_INITIALIZER;
@@ -66,6 +182,9 @@ int init_database()
         database = 0;
         goto unlock_and_return;
     }
+
+    if(create_tables() < 0)
+        DEBUG_MSG("Warning: create_tables() failed");
 
     ret = 0;
 
@@ -379,6 +498,65 @@ int db_update_bandwidth(const struct gateway *gw, const struct interface *ife,
 
     pthread_mutex_unlock(&database_lock);
     return res;
+}
 
+/*
+ * Create all of the required tables if they do not already exist.
+ *
+ * Must be called with database_lock held.
+ */
+static int create_tables()
+{
+    int res;
+
+    if(!database)
+        goto err_out;
+
+    res = mysql_real_query(database, CREATE_TABLE_GATEWAYS, 
+            strlen(CREATE_TABLE_GATEWAYS));
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto err_out;
+    }
+
+    res = mysql_real_query(database, CREATE_TABLE_LINKS, 
+            strlen(CREATE_TABLE_LINKS));
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto err_out;
+    }
+
+    res = mysql_real_query(database, CREATE_TABLE_GPS, 
+            strlen(CREATE_TABLE_GPS));
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto err_out;
+    }
+
+    res = mysql_real_query(database, CREATE_TABLE_PINGS, 
+            strlen(CREATE_TABLE_PINGS));
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto err_out;
+    }
+
+    res = mysql_real_query(database, CREATE_TABLE_BANDWIDTH, 
+            strlen(CREATE_TABLE_BANDWIDTH));
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto err_out;
+    }
+
+    res = mysql_real_query(database, CREATE_TABLE_PASSIVE, 
+            strlen(CREATE_TABLE_PASSIVE));
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto err_out;
+    }
+
+    return 0;
+
+err_out:
+    return -1;
 }
 
