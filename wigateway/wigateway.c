@@ -18,15 +18,15 @@
 #include "ping.h"
 #include "rootchan.h"
 #include "kernel.h"
+#include "callback.h"
 
 // The virtual interface will use this IP address if we are unable to obtain a
 // private IP from the root server.
 #define DEFAULT_VIRT_ADDRESS    "172.31.25.1"
 #define DEFAULT_NETMASK         "255.255.255.0"
-
 #define VIRT_DEVICE             "virt0"
-
 #define RETRY_DELAY             5
+#define NODE_ID_FILE            "/var/lib/wirover/node_id"
 
 enum {
     GATEWAY_START,
@@ -34,6 +34,8 @@ enum {
     GATEWAY_PING_SUCCEEDED,
     GATEWAY_NOTIFICATION_SUCCEEDED,
 };
+
+static int write_node_id_file(int node_id);
 
 int main(int argc, char* argv[])
 {
@@ -44,11 +46,10 @@ int main(int argc, char* argv[])
     if(parse_arguments(argc, argv) < 0)
         exit(1);
 
-    const char* wiroot_ip = get_wiroot_ip();
+    const char* wiroot_address = get_wiroot_address();
     const unsigned short wiroot_port = get_wiroot_port();
     unsigned short data_port = get_data_port();
-    if(!(wiroot_ip && wiroot_port && data_port)) {
-        DEBUG_MSG("You must fix the config file.");
+    if(!(wiroot_address && wiroot_port && data_port)) {
         exit(1);
     } 
             
@@ -87,12 +88,15 @@ int main(int argc, char* argv[])
 
     while(1) {
         if(state == GATEWAY_START) {
-            result = register_gateway(&lease, wiroot_ip, wiroot_port);
+            result = register_gateway(&lease, wiroot_address, wiroot_port);
             if(result == 0) {
                 char my_ip[INET6_ADDRSTRLEN];
                 ipaddr_to_string(&lease.priv_ip, my_ip, sizeof(my_ip));
                 DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease.unique_id);
                 DEBUG_MSG("There are %d controllers available.", lease.controllers);
+
+                write_node_id_file(lease.unique_id);
+                call_on_lease(lease.unique_id);
 
                 ipaddr_to_ipv4(&lease.priv_ip, &private_ip);
                 private_netmask = htonl(~((1 << lease.priv_subnet_size) - 1));
@@ -180,6 +184,23 @@ int main(int argc, char* argv[])
         sleep(RETRY_DELAY);
     }
 
+    return 0;
+}
+
+/*
+ * Write the node_id to a known file so that other utilities may make use of it.
+ */
+static int write_node_id_file(int node_id)
+{
+    FILE *file = fopen(NODE_ID_FILE, "w");
+    if(!file) {
+        ERROR_MSG("Failed to open %s for writing", NODE_ID_FILE);
+        return -1;
+    }
+
+    fprintf(file, "%d", node_id);
+
+    fclose(file);
     return 0;
 }
 

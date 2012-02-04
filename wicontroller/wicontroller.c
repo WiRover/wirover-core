@@ -29,16 +29,16 @@ int main(int argc, char* argv[])
 
     const config_t *config = get_config();
 
-    const char* wiroot_ip = get_wiroot_ip();
+    const char* wiroot_address = get_wiroot_address();
     const unsigned short wiroot_port = get_wiroot_port();
     unsigned short data_port = get_data_port();
     unsigned short control_port = get_control_port();
-    if(!(wiroot_ip && wiroot_port && data_port && control_port)) {
+    if(!(wiroot_address && wiroot_port && data_port && control_port)) {
         DEBUG_MSG("You must fix the config file.");
         exit(1);
     }
 
-    result = register_controller(&lease, wiroot_ip, wiroot_port, 
+    result = register_controller(&lease, wiroot_address, wiroot_port, 
             data_port, control_port);
     if(result < 0) {
         DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
