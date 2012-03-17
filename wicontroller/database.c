@@ -24,6 +24,7 @@
 
 #include "bandwidth.h"
 #include "config.h"
+#include "configuration.h"
 #include "database.h"
 #include "debug.h"
 #include "gateway.h"
@@ -155,6 +156,12 @@ int init_database()
 {
     int ret = -1;
 
+    const config_t *config = get_config();
+    const char *db_host = DEFAULT_MYSQL_HOST;
+    const char *db_user = DEFAULT_MYSQL_USER;
+    const char *db_pass = DEFAULT_MYSQL_PASSWORD;
+    const char *db_name = DEFAULT_MYSQL_DATABASE;
+
     if(pthread_mutex_lock(&database_lock)) {
         DEBUG_MSG("pthread_mutex_lock failed");
         return -1;
@@ -163,6 +170,13 @@ int init_database()
     if(database) {
         ret = 0;
         goto unlock_and_return;
+    }
+
+    if(config) {
+        config_lookup_string(config, CONFIG_MYSQL_HOST, &db_host);
+        config_lookup_string(config, CONFIG_MYSQL_USER, &db_user);
+        config_lookup_string(config, CONFIG_MYSQL_PASSWORD, &db_pass);
+        config_lookup_string(config, CONFIG_MYSQL_DATABASE, &db_name);
     }
 
     database = mysql_init(0);
@@ -176,7 +190,7 @@ int init_database()
         DEBUG_MSG("Warning: mysql_option failed");
     }
 
-    if(!mysql_real_connect(database, DB_HOST, DB_USER, DB_PASS, DB_NAME, 0, 0, 0)) {
+    if(!mysql_real_connect(database, db_host, db_user, db_pass, db_name, 0, 0, 0)) {
         DEBUG_MSG("mysql_real_connect() failed");
         mysql_close(database);
         database = 0;

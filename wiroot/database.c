@@ -4,6 +4,7 @@
 #include <mysql/mysql.h>
 //#include <mysql/my_global.h>
 
+#include "configuration.h"
 #include "database.h"
 #include "debug.h"
 
@@ -13,8 +14,21 @@ int db_connect()
 {
     int result;
 
+    const config_t *config = get_config();
+    const char *db_host = DEFAULT_MYSQL_HOST;
+    const char *db_user = DEFAULT_MYSQL_USER;
+    const char *db_pass = DEFAULT_MYSQL_PASSWORD;
+    const char *db_name = DEFAULT_MYSQL_DATABASE;
+
     if(database) {
         return 0;
+    }
+
+    if(config) {
+        config_lookup_string(config, CONFIG_MYSQL_HOST, &db_host);
+        config_lookup_string(config, CONFIG_MYSQL_USER, &db_user);
+        config_lookup_string(config, CONFIG_MYSQL_PASSWORD, &db_pass);
+        config_lookup_string(config, CONFIG_MYSQL_DATABASE, &db_name);
     }
 
     database = mysql_init(0);
@@ -23,8 +37,7 @@ int db_connect()
         goto err_out;
     }
 
-    if(!mysql_real_connect(database, DB_HOST, DB_USER, DB_PASS, DB_NAME,
-                                0, 0, 0)) {
+    if(!mysql_real_connect(database, db_host, db_user, db_pass, db_name, 0, 0, 0)) {
         DEBUG_MSG("mysql_real_connect() failed: %s", mysql_error(database));
         goto close_and_err_out;
     }

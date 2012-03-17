@@ -21,6 +21,11 @@
 #define CONFIG_CONTROL_PORT         "control-port"
 #define CONFIG_PING_PORT            "ping-port"
 
+#define CONFIG_MYSQL_HOST           "mysql-host"
+#define CONFIG_MYSQL_USER           "mysql-user"
+#define CONFIG_MYSQL_PASSWORD       "mysql-password"
+#define CONFIG_MYSQL_DATABASE       "mysql-database"
+
 /* Default values for missing entries */
 #define DEFAULT_WIROOT_ADDRESS      NULL
 #define DEFAULT_WIROOT_PORT         8088
@@ -29,6 +34,11 @@
 #define DEFAULT_PING_PORT           8080
 
 #define DEFAULT_REGISTER_ADDRESS    ""
+
+#define DEFAULT_MYSQL_HOST          "localhost"
+#define DEFAULT_MYSQL_USER          "wirover"
+#define DEFAULT_MYSQL_PASSWORD      ""
+#define DEFAULT_MYSQL_DATABASE      "gateways"
 
 const config_t*     get_config();
 void                close_config();
