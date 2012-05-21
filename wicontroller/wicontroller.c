@@ -19,6 +19,11 @@
 const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_idle_clients()
 const unsigned int  CLIENT_TIMEOUT = 5;
 
+static struct bw_server_info bw_server = {
+    .timeout = DEFAULT_BANDWIDTH_TIMEOUT,
+    .port = DEFAULT_BANDWIDTH_PORT,
+};
+
 static void server_loop(int cchan_sock);
 static int find_gateway_ip(const char *device, struct in_addr *gw_ip);
 
@@ -77,11 +82,6 @@ int main(int argc, char* argv[])
         DEBUG_MSG("Failed to start ping thread");
         exit(1);
     }
-
-    struct bw_server_info bw_server;
-    memset(&bw_server, 0, sizeof(bw_server));
-    bw_server.timeout = DEFAULT_BANDWIDTH_TIMEOUT;
-    bw_server.port = DEFAULT_BANDWIDTH_PORT;
 
     if(config) {
         int tmp;
@@ -169,7 +169,7 @@ static void server_loop(int cchan_sock)
                     } else if(bytes == 0) {
                         handle_disconnection(&cchan_clients, client);
                     } else {
-                        process_notification(client->fd, buffer, bytes);
+                        process_notification(client->fd, buffer, bytes, bw_server.port);
                     }
                 }
             }

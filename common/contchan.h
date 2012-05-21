@@ -22,6 +22,7 @@
 
 
 #define MAX_INTERFACES    6
+
 #define CCHAN_NOTIFICATION         0x10
 
 #define CCHAN_CONNECT_TIMEOUT_SEC  5
@@ -42,6 +43,7 @@ struct cchan_notification {
     ipaddr_t    priv_ip;
     uint16_t    unique_id;
     uint8_t     key[SHA256_DIGEST_LENGTH];
+    uint16_t    bw_port;
     uint8_t     interfaces;
     struct interface_info if_info[MAX_INTERFACES];
 } __attribute__((__packed__));
@@ -49,14 +51,15 @@ struct cchan_notification {
 #define MAX_NOTIFICATION_LEN (sizeof(struct cchan_notification))
 
 #ifdef CONTROLLER
-int process_notification(int sockfd, const char* packet, unsigned int pkt_len);
+int process_notification(int sockfd, const char* packet, unsigned int pkt_len, uint16_t bw_port);
 #endif
 
 #ifdef GATEWAY
 int send_notification(int max_tries);
+uint16_t get_remote_bw_port();
 
 extern uint8_t private_key[SHA256_DIGEST_LENGTH];
-extern uint32_t remote_unique_id;
+extern uint16_t remote_unique_id;
 #endif
 
 #endif //_CONTCHAN_H_

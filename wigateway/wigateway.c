@@ -171,7 +171,7 @@ int main(int argc, char* argv[])
                 memset(&bw_client, 0, sizeof(bw_client));
                 bw_client.timeout = DEFAULT_BANDWIDTH_TIMEOUT;
                 bw_client.remote_addr = pub_ip;
-                bw_client.remote_port = DEFAULT_BANDWIDTH_PORT; // TODO: set this dynamically
+                bw_client.remote_port = get_remote_bw_port();
                 bw_client.interval = DEFAULT_BANDWIDTH_INTERVAL;
 
                 if(start_bandwidth_client_thread(&bw_client) < 0) {

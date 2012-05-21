@@ -18,7 +18,9 @@
  *
  * TODO: Separate keys for each controller */
 uint8_t private_key[SHA256_DIGEST_LENGTH] = { 0 };
-uint32_t remote_unique_id = 0;
+uint16_t remote_unique_id = 0;
+
+static uint16_t remote_bw_port = 0;
 
 static int _send_notification(const char *ifname);
 
@@ -147,8 +149,14 @@ static int _send_notification(const char *ifname)
     }
 
     remote_unique_id = ntohs(notification.unique_id);
+    remote_bw_port = ntohs(notification.bw_port);
 
     close(sockfd);
     return 0;
+}
+
+uint16_t get_remote_bw_port()
+{
+    return remote_bw_port;
 }
 

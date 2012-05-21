@@ -13,7 +13,7 @@
 
 static struct gateway* make_gateway(const struct cchan_notification* notif);
 static void update_gateway(struct gateway* gw, const struct cchan_notification* notif);
-static int send_response(int sockfd, const struct gateway *gw);
+static int send_response(int sockfd, const struct gateway *gw, uint16_t bw_port);
 
 /*
  * TODO: Use OpenSSL for control channel.
@@ -22,7 +22,7 @@ static int send_response(int sockfd, const struct gateway *gw);
 /*
  * Parse a notification packet and update the list of gateways accordingly.
  */
-int process_notification(int sockfd, const char *packet, unsigned int pkt_len)
+int process_notification(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port)
 {
     assert(packet);
 
@@ -59,7 +59,7 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len)
     }
 
     if(gw) {
-        send_response(sockfd, gw);
+        send_response(sockfd, gw, bw_port);
 
 #ifdef WITH_DATABASE
         db_update_gateway(gw, state_change);
@@ -206,7 +206,7 @@ static void update_gateway(struct gateway* gw, const struct cchan_notification* 
               p_ip, gw->unique_id, gw->active_interfaces);
 }
 
-static int send_response(int sockfd, const struct gateway *gw)
+static int send_response(int sockfd, const struct gateway *gw, uint16_t bw_port)
 {
     struct cchan_notification response;
     memset(&response, 0, sizeof(response));
@@ -214,6 +214,7 @@ static int send_response(int sockfd, const struct gateway *gw)
     response.type = CCHAN_NOTIFICATION;
     get_private_ip(&response.priv_ip);
     response.unique_id = htons(get_unique_id());
+    response.bw_port = htons(bw_port);
     response.interfaces = 0;
 
     memset(response.key, 0, sizeof(response.key));
