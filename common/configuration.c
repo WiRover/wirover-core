@@ -122,6 +122,22 @@ unsigned int get_ping_interval()
     return interval;
 }
 
+unsigned int get_mtu()
+{
+    const config_t* config = get_config();
+
+    int mtu;
+    if(!config || config_lookup_int(config, "mtu", &mtu) == CONFIG_FALSE) {
+        DEBUG_MSG("failed to read mtu from config file");
+        mtu = DEFAULT_MTU;
+    } else if(mtu <= 0) {
+        DEBUG_MSG("mtu %d is invalid", mtu);
+        mtu = DEFAULT_MTU;
+    }
+
+    return mtu;
+}
+
 const char* get_internal_interface()
 {
     const config_t* config = get_config();

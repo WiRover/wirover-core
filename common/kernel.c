@@ -20,7 +20,7 @@ const char* VIRT_DEVICE = "virt0";
 /*
  * Bring up the virtual interface and set its IP address, netmask, and MTU.
  */
-int setup_virtual_interface(__be32 ip, __be32 netmask)
+int setup_virtual_interface(__be32 ip, __be32 netmask, unsigned mtu)
 {
     int sockfd;
     int result;
@@ -72,7 +72,7 @@ int setup_virtual_interface(__be32 ip, __be32 netmask)
         return -1;
     }
 
-    master_ifr.ifr_mtu = VIRT_MTU;
+    master_ifr.ifr_mtu = mtu;
 
     result = ioctl(sockfd, SIOCSIFMTU, &master_ifr);
     if(result < 0) {

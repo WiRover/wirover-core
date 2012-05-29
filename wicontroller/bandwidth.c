@@ -22,6 +22,7 @@
 
 #include "bandwidth.h"
 #include "config.h"
+#include "configuration.h"
 #include "database.h"
 #include "debug.h"
 #include "gateway.h"
@@ -250,7 +251,7 @@ static int send_cts_udp(int sockfd, struct sockaddr *dest_addr, socklen_t dest_l
 
     struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
     bw_hdr->type = BW_TYPE_CTS;
-    bw_hdr->size = htonl(DEFAULT_MTU);
+    bw_hdr->size = htonl(get_mtu());
     bw_hdr->bandwidth = 0.0;
 
     int rtn = sendto(sockfd, buffer, packet_size, 0, dest_addr, dest_len);

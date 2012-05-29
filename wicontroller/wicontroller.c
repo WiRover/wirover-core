@@ -66,7 +66,7 @@ int main(int argc, char* argv[])
     ipaddr_to_ipv4(&lease.priv_ip, &priv_ip);
     priv_netmask = htonl(~((1 << lease.priv_subnet_size) - 1));
 
-    result = setup_virtual_interface(priv_ip, priv_netmask);
+    result = setup_virtual_interface(priv_ip, priv_netmask, get_mtu());
     if(result == -1) {
         DEBUG_MSG("Fatal error: failed to bring up virtual interface");
     }

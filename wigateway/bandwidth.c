@@ -24,6 +24,7 @@
 
 #include "bandwidth.h"
 #include "config.h"
+#include "configuration.h"
 #include "contchan.h"
 #include "debug.h"
 #include "interface.h"
@@ -206,7 +207,7 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
 
     struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
     bw_hdr->type = BW_TYPE_RTS;
-    bw_hdr->size = htonl(DEFAULT_MTU);
+    bw_hdr->size = htonl(get_mtu());
     bw_hdr->bandwidth = 0.0;
     bw_hdr->node_id = htons(get_unique_id());
     bw_hdr->link_id = htons(stats->link_id);
@@ -233,7 +234,7 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
      // Send some packets for BW estimation
     // Never exceed the maximum size the server gave us.
     //unsigned int burst_size = MIN(clientInfo->numBytes, max_burst);
-    int burst_size = DEFAULT_MTU;    
+    int burst_size = get_mtu();    
 
     // The burst needs to fit the header at least.  If this check fails,
     // someone made a silly mistake somewhere.
@@ -365,12 +366,12 @@ static int sendBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_clien
         struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
 
         bw_hdr->type = BW_TYPE_BURST;
-        bw_hdr->size = htonl(DEFAULT_MTU);
+        bw_hdr->size = htonl(get_mtu());
         bw_hdr->bandwidth = i; //bandwidth not known yet
         bw_hdr->node_id = htons(get_unique_id());
         bw_hdr->link_id = htons(stats->link_id);
 
-        rtn = sendto(sockfd, buffer, DEFAULT_MTU, 0, 
+        rtn = sendto(sockfd, buffer, get_mtu(), 0, 
                 (struct sockaddr*)&remoteAddr, sizeof(struct sockaddr));
     }
 

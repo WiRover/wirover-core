@@ -48,6 +48,7 @@ unsigned short  get_wiroot_port();
 unsigned short  get_data_port();
 unsigned short  get_control_port();
 unsigned int    get_ping_interval();
+unsigned int    get_mtu();
 const char*     get_internal_interface();
 int             get_interface_priority(const char *ifname);
 

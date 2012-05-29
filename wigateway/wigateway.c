@@ -102,7 +102,8 @@ int main(int argc, char* argv[])
                 private_netmask = htonl(~((1 << lease.priv_subnet_size) - 1));
                 
                 if(ARGS.with_kernel) {
-                    result = setup_virtual_interface(private_ip, private_netmask);
+                    result = setup_virtual_interface(private_ip, 
+                            private_netmask, get_mtu());
                     if(result == -1) {
                         DEBUG_MSG("Failed to bring up virtual interface");
                         exit(1);

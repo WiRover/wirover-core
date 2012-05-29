@@ -35,7 +35,7 @@
 /* Invalidate GPS data after 5 seconds */
 #define GPS_DATA_TIMEOUT 5
 
-#define MTU             1600
+#define MTU             1500
 #define DEFAULT_MTU     1400
 
 #define ACTIVE_BW_BYTES     14480
