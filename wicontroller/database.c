@@ -146,6 +146,16 @@ static const char CREATE_TABLE_PASSIVE[] = "                        \
     ) engine=InnoDB default charset=utf8                            \
 ";
 
+static const char *REQUIRED_TABLES[] = {
+    CREATE_TABLE_GATEWAYS,
+    CREATE_TABLE_LINKS,
+    CREATE_TABLE_GPS,
+    CREATE_TABLE_PINGS,
+    CREATE_TABLE_BANDWIDTH,
+    CREATE_TABLE_PASSIVE,
+    NULL,
+};
+
 static int create_tables();
 
 static MYSQL* database = 0;
@@ -524,53 +534,17 @@ static int create_tables()
     int res;
 
     if(!database)
-        goto err_out;
+        return -1;
 
-    res = mysql_real_query(database, CREATE_TABLE_GATEWAYS, 
-            strlen(CREATE_TABLE_GATEWAYS));
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        goto err_out;
-    }
+    const char **table = REQUIRED_TABLES;
+    while(*table) {
+        res = mysql_real_query(database, *table, strlen(*table));
+        if(res != 0) 
+            DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
 
-    res = mysql_real_query(database, CREATE_TABLE_LINKS, 
-            strlen(CREATE_TABLE_LINKS));
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        goto err_out;
-    }
-
-    res = mysql_real_query(database, CREATE_TABLE_GPS, 
-            strlen(CREATE_TABLE_GPS));
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        goto err_out;
-    }
-
-    res = mysql_real_query(database, CREATE_TABLE_PINGS, 
-            strlen(CREATE_TABLE_PINGS));
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        goto err_out;
-    }
-
-    res = mysql_real_query(database, CREATE_TABLE_BANDWIDTH, 
-            strlen(CREATE_TABLE_BANDWIDTH));
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        goto err_out;
-    }
-
-    res = mysql_real_query(database, CREATE_TABLE_PASSIVE, 
-            strlen(CREATE_TABLE_PASSIVE));
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        goto err_out;
+        table++;
     }
 
     return 0;
-
-err_out:
-    return -1;
 }
 

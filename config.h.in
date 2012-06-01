@@ -61,5 +61,12 @@
 // Use the bonding driver enlave and release ioctls instead of custom ones.
 #define USE_BOND_ENSLAVE 1
 
+// Path to file containing cryptographic node ID.
+#define NODE_ID_PATH "/etc/wirover.d/node_id"
+
+// Maximum length of node ID hexadecimal string (128 is sufficient for up to SHA-512).
+#define NODE_ID_MAX_HEX_LEN 128
+#define NODE_ID_MAX_BIN_LEN 64
+
 #endif //_CONFIG_H_
 

@@ -8,7 +8,9 @@
 #include <netinet/in.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <netdb.h>
 
+#include "config.h"
 #include "configuration.h"
 #include "contchan.h"
 #include "controllers.h"
@@ -18,8 +20,8 @@
 #include "rootchan.h"
 #include "sockets.h"
 #include "utlist.h"
+#include "format.h"
 
-const unsigned int  MTU = 1500;
 const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_stale_leases()
 
 // This default value will be writted during configuration.
@@ -33,6 +35,10 @@ static int  configure_wiroot(const char* filename);
 static void handle_incoming(struct client* client);
 static void handle_gateway_config(struct client* client, const char* packet, int length);
 static void handle_controller_config(struct client* client, const char* packet, int length);
+static void handle_access_request(struct client *client, const char *packet, int length);
+
+static int log_access_request(int type, const char *node_id, 
+        struct client *client, int result);
 
 int main(int argc, char* argv[])
 {
@@ -182,6 +188,9 @@ static void handle_incoming(struct client* client)
         case RCHAN_REGISTER_CONTROLLER:
             handle_controller_config(client, packet, bytes);
             break;
+        case RCHAN_ACCESS_REQUEST:
+            handle_access_request(client, packet, bytes);
+            break;
     }
 }
 
@@ -194,6 +203,9 @@ static void handle_gateway_config(struct client* client, const char* packet, int
     struct rchanhdr *rchanhdr = (struct rchanhdr *)packet;
     unsigned offset = sizeof(struct rchanhdr);
 
+    const char *node_id = packet + offset;
+    offset += rchanhdr->id_len;
+
     struct rchan_gwreg *gwreg = (struct rchan_gwreg *)(packet + offset);
     offset += sizeof(struct rchan_gwreg);
 
@@ -203,42 +215,65 @@ static void handle_gateway_config(struct client* client, const char* packet, int
         return;
     }
     
-    // Query the database for the unique id of the client
-    char p_hw_addr[DB_UNIQUE_ID_LEN+1];
-    to_hex_string((const char*)rchanhdr->id, sizeof(rchanhdr->id), p_hw_addr, sizeof(p_hw_addr));
-    unsigned short unique_id = db_get_unique_id(p_hw_addr);
-
-    const struct lease* lease;
-    lease = grant_lease((int)unique_id);
-  
-    struct rchan_response response;
-    response.type = rchanhdr->type;
-    response.unique_id = htons(unique_id);
-
-    if(lease) {
-        struct controller* controller_list[MAX_CONTROLLERS];
-        response.controllers = assign_controllers(controller_list, MAX_CONTROLLERS, 
-                gwreg->latitude, gwreg->longitude);
-
-        int i;
-        for(i = 0; i < response.controllers && i < MAX_CONTROLLERS; i++) {
-            copy_ipaddr(&controller_list[i]->priv_ip, &response.cinfo[i].priv_ip);
-            copy_ipaddr(&controller_list[i]->pub_ip, &response.cinfo[i].pub_ip);
-            response.cinfo[i].data_port = controller_list[i]->data_port;
-            response.cinfo[i].control_port = controller_list[i]->control_port;
-        }
-
-        copy_ipaddr(&lease->ip, &response.priv_ip);
-        response.priv_subnet_size = get_lease_subnet_size();
-        response.lease_time = (lease->end - lease->start);
+    char node_id_hex[NODE_ID_MAX_HEX_LEN+1];
+    int result = bin_to_hex(node_id, rchanhdr->id_len,
+            node_id_hex, sizeof(node_id_hex));
+    if(result < 0) {
+        DEBUG_MSG("Conversion of node_id failed");
+        return;
     }
 
-    const unsigned int response_len = MIN_RESPONSE_LEN +
-            response.controllers * sizeof(struct controller_info);
+    int unique_id = db_check_privilege(node_id_hex, PRIV_REG_GATEWAY);
+    if(unique_id > 0) {
+        const struct lease* lease;
+        lease = grant_lease(unique_id);
+      
+        struct rchan_response response;
+        response.type = rchanhdr->type;
+        response.unique_id = htons(unique_id);
 
-    int bytes = send(client->fd, &response, response_len, 0);
-    if(bytes < response_len) {
-        DEBUG_MSG("Failed to send lease response");
+        if(lease) {
+            struct controller* controller_list[MAX_CONTROLLERS];
+            response.controllers = assign_controllers(controller_list, MAX_CONTROLLERS, 
+                    gwreg->latitude, gwreg->longitude);
+
+            int i;
+            for(i = 0; i < response.controllers && i < MAX_CONTROLLERS; i++) {
+                copy_ipaddr(&controller_list[i]->priv_ip, &response.cinfo[i].priv_ip);
+                copy_ipaddr(&controller_list[i]->pub_ip, &response.cinfo[i].pub_ip);
+                response.cinfo[i].data_port = controller_list[i]->data_port;
+                response.cinfo[i].control_port = controller_list[i]->control_port;
+            }
+
+            copy_ipaddr(&lease->ip, &response.priv_ip);
+            response.priv_subnet_size = get_lease_subnet_size();
+            response.lease_time = (lease->end - lease->start);
+        }
+
+        const unsigned int response_len = MIN_RESPONSE_LEN +
+                response.controllers * sizeof(struct controller_info);
+
+        int bytes = send(client->fd, &response, response_len, 0);
+        if(bytes < response_len) {
+            DEBUG_MSG("Failed to send lease response");
+        }
+        
+        log_access_request(PRIV_REG_GATEWAY, node_id_hex, 
+                client, RCHAN_RESULT_SUCCESS);
+    } else {
+        struct rchan_response response;
+        memset(&response, 0, sizeof(response));
+        response.type = RCHAN_REGISTRATION_DENIED;
+
+        const unsigned response_len = MIN_RESPONSE_LEN;
+
+        int bytes = send(client->fd, &response, response_len, 0);
+        if(bytes < response_len) {
+            DEBUG_MSG("Failed to send lease response");
+        }
+
+        log_access_request(PRIV_REG_GATEWAY, node_id_hex,
+                client, RCHAN_RESULT_DENIED);
     }
 }
 
@@ -250,6 +285,9 @@ static void handle_gateway_config(struct client* client, const char* packet, int
 static void handle_controller_config(struct client* client, const char* packet, int length) {
     struct rchanhdr *rchanhdr = (struct rchanhdr *)packet;
     unsigned offset = sizeof(struct rchanhdr);
+    
+    const char *node_id = packet + offset;
+    offset += rchanhdr->id_len;
 
     struct rchan_ctrlreg *ctrlreg = (struct rchan_ctrlreg *)(packet + offset);
     offset += sizeof(struct rchan_ctrlreg);
@@ -259,67 +297,133 @@ static void handle_controller_config(struct client* client, const char* packet, 
                 length, offset);
         return;
     }
-    
-    // Query the database for the unique id of the client
-    char p_hw_addr[DB_UNIQUE_ID_LEN+1];
-    to_hex_string((const char*)rchanhdr->id, sizeof(rchanhdr->id), p_hw_addr, sizeof(p_hw_addr));
-    unsigned short unique_id = db_get_unique_id(p_hw_addr);
 
-    const struct lease* lease;
-    lease = grant_lease((int)unique_id);
-    
-    char response_buffer[MTU];
-    struct rchan_response* response = (struct rchan_response*)response_buffer;
-    response->type = rchanhdr->type;
-    response->unique_id = htons(unique_id);
+    char node_id_hex[NODE_ID_MAX_HEX_LEN+1];
+    int result = bin_to_hex(node_id, rchanhdr->id_len,
+            node_id_hex, sizeof(node_id_hex));
+    if(result < 0) {
+        DEBUG_MSG("Conversion of node_id failed");
+        return;
+    }
 
-    if(lease) {
-        ipaddr_t ctrl_ip;
+    int unique_id = db_check_privilege(node_id_hex, PRIV_REG_CONTROLLER);
+    if(unique_id > 0) {
+        const struct lease* lease;
+        lease = grant_lease(unique_id);
+        
+        char response_buffer[MTU];
+        struct rchan_response* response = (struct rchan_response*)response_buffer;
+        response->type = rchanhdr->type;
+        response->unique_id = htons(unique_id);
 
-        switch(ctrlreg->family) {
-            case RCHAN_USE_SOURCE:
-                sockaddr_to_ipaddr((const struct sockaddr *)&client->addr, &ctrl_ip);
-                break;
-            case AF_INET:
-            {
-                struct sockaddr_in sin;
-                sin.sin_family = AF_INET;
-                sin.sin_addr.s_addr = ctrlreg->addr.ip4;
-                sockaddr_to_ipaddr((const struct sockaddr *)&sin, &ctrl_ip);
-                break;
+        if(lease) {
+            ipaddr_t ctrl_ip;
+
+            switch(ctrlreg->family) {
+                case RCHAN_USE_SOURCE:
+                    sockaddr_to_ipaddr((const struct sockaddr *)&client->addr, &ctrl_ip);
+                    break;
+                case AF_INET:
+                {
+                    struct sockaddr_in sin;
+                    sin.sin_family = AF_INET;
+                    sin.sin_addr.s_addr = ctrlreg->addr.ip4;
+                    sockaddr_to_ipaddr((const struct sockaddr *)&sin, &ctrl_ip);
+                    break;
+                }
+                case AF_INET6:
+                {
+                    struct sockaddr_in6 sin;
+                    sin.sin6_family = AF_INET6;
+                    memcpy(sin.sin6_addr.s6_addr, ctrlreg->addr.ip6, 
+                            sizeof(sin.sin6_addr.s6_addr));
+                    sockaddr_to_ipaddr((const struct sockaddr *)&sin, &ctrl_ip);
+                    break;
+                }
+                default:
+                    DEBUG_MSG("Unrecognized address family: %hu", ctrlreg->family);
+                    return;
             }
-            case AF_INET6:
-            {
-                struct sockaddr_in6 sin;
-                sin.sin6_family = AF_INET6;
-                memcpy(sin.sin6_addr.s6_addr, ctrlreg->addr.ip6, 
-                        sizeof(sin.sin6_addr.s6_addr));
-                sockaddr_to_ipaddr((const struct sockaddr *)&sin, &ctrl_ip);
-                break;
-            }
-            default:
-                DEBUG_MSG("Unrecognized address family: %hu", ctrlreg->family);
-                return;
+
+            add_controller(&lease->ip, &ctrl_ip, ctrlreg->data_port, ctrlreg->control_port,
+                    ctrlreg->latitude, ctrlreg->longitude);
+
+            char p_ip[INET6_ADDRSTRLEN];
+            ipaddr_to_string(&ctrl_ip, p_ip, sizeof(p_ip));
+
+            DEBUG_MSG("Controller registered as %s data %hu control %hu",
+                    p_ip, ntohs(ctrlreg->data_port), ntohs(ctrlreg->control_port));
+
+            copy_ipaddr(&lease->ip, &response->priv_ip);
+            response->priv_subnet_size = get_lease_subnet_size();
+            response->lease_time = (lease->end - lease->start);
+            response->controllers = 0;
         }
 
-        add_controller(&lease->ip, &ctrl_ip, ctrlreg->data_port, ctrlreg->control_port,
-                ctrlreg->latitude, ctrlreg->longitude);
+        int bytes = send(client->fd, response, sizeof(struct rchan_response), 0);
+        if(bytes < sizeof(response)) {
+            DEBUG_MSG("Failed to send lease response");
+        }
 
-        char p_ip[INET6_ADDRSTRLEN];
-        ipaddr_to_string(&ctrl_ip, p_ip, sizeof(p_ip));
+        log_access_request(PRIV_REG_CONTROLLER, node_id_hex, 
+                client, RCHAN_RESULT_SUCCESS);
+    } else {
+        struct rchan_response response;
+        memset(&response, 0, sizeof(response));
+        response.type = RCHAN_REGISTRATION_DENIED;
 
-        DEBUG_MSG("Controller registered as %s data %hu control %hu",
-                p_ip, ntohs(ctrlreg->data_port), ntohs(ctrlreg->control_port));
+        const unsigned response_len = MIN_RESPONSE_LEN;
 
-        copy_ipaddr(&lease->ip, &response->priv_ip);
-        response->priv_subnet_size = get_lease_subnet_size();
-        response->lease_time = (lease->end - lease->start);
-        response->controllers = 0;
+        int bytes = send(client->fd, &response, response_len, 0);
+        if(bytes < response_len) {
+            DEBUG_MSG("Failed to send lease response");
+        }
+    
+        log_access_request(PRIV_REG_CONTROLLER, node_id_hex, 
+                client, RCHAN_RESULT_DENIED);
+    }
+}
+
+/*
+ * Process an access request message.
+ */
+static void handle_access_request(struct client *client, const char *packet, int length) {
+    struct rchanhdr *rchanhdr = (struct rchanhdr *)packet;
+    unsigned offset = sizeof(struct rchanhdr);
+
+    const char *node_id = packet + offset;
+    offset += rchanhdr->id_len;
+
+    if(offset > length) {
+        DEBUG_MSG("Access request packet was too short: %u bytes, expected %d",
+                length, offset);
+        return;
+    }
+    
+    char node_id_hex[NODE_ID_MAX_HEX_LEN+1];
+    int result = bin_to_hex(node_id, rchanhdr->id_len,
+            node_id_hex, sizeof(node_id_hex));
+    if(result < 0) {
+        DEBUG_MSG("Conversion of node_id failed");
+        return;
     }
 
-    int bytes = send(client->fd, response, sizeof(struct rchan_response), 0);
-    if(bytes < sizeof(response)) {
-        DEBUG_MSG("Failed to send lease response");
+    /* TODO: We need to get a public key from the client and store it somewhere. */
+}
+
+static int log_access_request(int type, const char *node_id, 
+        struct client *client, int result)
+{
+    char src_ip[INET6_ADDRSTRLEN];
+    int ret;
+
+    ret = getnameinfo((struct sockaddr *)&client->addr, client->addr_len, 
+            src_ip, sizeof(src_ip), NULL, 0, NI_NUMERICHOST);
+    if(ret != 0) {
+        DEBUG_MSG("getnameinfo failed: %d", ret);
+        return -1;
     }
+
+    return db_add_access_request(type, node_id, src_ip, result);
 }
 

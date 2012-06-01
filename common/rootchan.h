@@ -37,6 +37,11 @@ struct rchan_response {
 /* Types for rchanhdr */
 #define RCHAN_REGISTER_CONTROLLER   0x01
 #define RCHAN_REGISTER_GATEWAY      0x02
+#define RCHAN_REGISTRATION_DENIED   0x03
+#define RCHAN_ACCESS_REQUEST        0x04
+
+#define RCHAN_RESULT_SUCCESS    0
+#define RCHAN_RESULT_DENIED     1
 
 /* Option types */
 #define RCHAN_OPTION_END            0x00
@@ -44,9 +49,10 @@ struct rchan_response {
 #define RCHAN_OPTION_GSP            0x02
     
 struct rchanhdr {
-    uint8_t     type;
-    uint8_t     flags;
-    uint8_t     id[ETH_ALEN];
+    uint8_t type;
+    uint8_t flags;
+    uint8_t id_len;
+    /* node_id follows */
 } __attribute__((__packed__));
 
 /* If the address family is sent as 0, root server will use the connection
@@ -87,6 +93,9 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
         unsigned short wiroot_port, unsigned short data_port, unsigned short control_port);
 int register_gateway(struct lease_info *lease, const char *wiroot_ip,
         unsigned short wiroot_port);
+
+int get_node_id_hex(char *dst, int dst_len);
+int get_node_id_bin(char *dst, int dst_len);
 
 int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, int destlen);
 

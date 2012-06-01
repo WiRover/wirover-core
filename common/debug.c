@@ -1,6 +1,7 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 #include <sys/time.h>
 
@@ -85,31 +86,5 @@ void __print_warning(const char *msg, ...)
 
     printf("\tWarning: %s\n", buffer);
     fflush(stdout);
-}
-
-void to_hex_string(const char* __restrict__ src, int src_len,
-                   char* __restrict__ dest, int dest_len)
-{
-    if((2 * src_len + 1) > dest_len) {
-        DEBUG_MSG("Source is too long for destination");
-    }
-
-    int s = 0;
-    int d = 0;
-    while(s < src_len && d < dest_len) {
-        int high = (src[s] & 0xF0) >> 4;
-        int low = (src[s] & 0x0F);
-
-        dest[d++] = HEX_CHAR(high);
-        dest[d++] = HEX_CHAR(low);
-        s++;
-    }
-
-    // null terminate the string
-    if(d < dest_len) {
-        dest[d] = 0;
-    } else {
-        dest[dest_len-1] = 0;
-    }
 }
 

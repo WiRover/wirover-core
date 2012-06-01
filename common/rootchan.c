@@ -8,6 +8,7 @@
 #include <sys/ioctl.h>
 #include <linux/if.h>
 
+#include "config.h"
 #include "configuration.h"
 #include "debug.h"
 #include "interface.h"
@@ -15,6 +16,7 @@
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
+#include "format.h"
 
 static int _obtain_lease(const char *wiroot_ip, unsigned short wiroot_port,
         const char *request, int request_len, const char *interface,
@@ -41,22 +43,22 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
 
     memset(buffer, 0, BUFSIZ);
     
+    char node_id[NODE_ID_MAX_BIN_LEN];
+    int node_id_len = get_node_id_bin(node_id, sizeof(node_id));
+    if(node_id_len < 0) {
+        DEBUG_MSG("get_node_id_bin failed");
+        goto free_and_err_out;
+    }
+
     struct rchanhdr *rchanhdr = (struct rchanhdr *)buffer;
     offset += sizeof(struct rchanhdr);
 
     rchanhdr->type = RCHAN_REGISTER_CONTROLLER;
+    rchanhdr->id_len = node_id_len;
 
-    const char* internal_if = get_internal_interface();
-    if(!internal_if) {
-        DEBUG_MSG("get_internal_interface() returned null");
-        goto free_and_err_out;
-    }
-
-    result = get_device_mac(internal_if, rchanhdr->id, sizeof(rchanhdr->id));
-    if(result == -1) {
-        DEBUG_MSG("get_device_mac() failed");
-        goto free_and_err_out;
-    }
+    /* Copy node_id into the packet. */
+    memcpy(buffer + offset, node_id, node_id_len);
+    offset += node_id_len;
 
     struct rchan_ctrlreg *ctrlreg = (struct rchan_ctrlreg *)(buffer + offset);
     offset += sizeof(struct rchan_ctrlreg);
@@ -115,7 +117,6 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
         unsigned short wiroot_port)
 {
     char *buffer;
-    int result;
     int offset = 0;
 
     buffer = malloc(BUFSIZ);
@@ -126,22 +127,22 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
 
     memset(buffer, 0, BUFSIZ);
     
+    char node_id[NODE_ID_MAX_BIN_LEN];
+    int node_id_len = get_node_id_bin(node_id, sizeof(node_id));
+    if(node_id_len < 0) {
+        DEBUG_MSG("get_node_id_bin failed");
+        goto free_and_err_out;
+    }
+
     struct rchanhdr *rchanhdr = (struct rchanhdr *)buffer;
     offset += sizeof(struct rchanhdr);
 
     rchanhdr->type = RCHAN_REGISTER_GATEWAY;
+    rchanhdr->id_len = node_id_len;
 
-    const char* internal_if = get_internal_interface();
-    if(!internal_if) {
-        DEBUG_MSG("get_internal_interface() returned null");
-        goto free_and_err_out;
-    }
-
-    result = get_device_mac(internal_if, rchanhdr->id, sizeof(rchanhdr->id));
-    if(result == -1) {
-        DEBUG_MSG("get_device_mac() failed");
-        goto free_and_err_out;
-    }
+    /* Copy node_id into the packet. */
+    memcpy(buffer + offset, node_id, node_id_len);
+    offset += node_id_len;
 
     struct rchan_gwreg *gwreg = (struct rchan_gwreg *)(buffer + offset);
     offset += sizeof(struct rchan_gwreg);
@@ -252,6 +253,58 @@ close_and_err_out:
     close(sockfd);
 err_out:
     return -1;
+}
+
+/*
+ * Read cryptographic node_id from a file as a hexadecimal string.
+ *
+ * Returns the length of the string written to dst or a negative value if an
+ * error occurred.
+ *
+ * The result may not be null-terminated, so the caller must check the return
+ * value.
+ */
+int get_node_id_hex(char *dst, int dst_len)
+{
+    FILE *file = fopen(NODE_ID_PATH, "r");
+    if(!file) {
+        ERROR_MSG("Opening %s failed", NODE_ID_PATH);
+        return -1;
+    }
+
+    int read = fread(dst, sizeof(char), dst_len, file);
+    fclose(file);
+
+    return read;
+}
+
+/*
+ * Read the cryptographic node_id from a file.
+ *
+ * Returns the size of the node_id in bytes or a negative value if an error
+ * occurred.
+ */
+int get_node_id_bin(char *dst, int dst_len)
+{
+    char buffer[NODE_ID_MAX_HEX_LEN];
+
+    int hex_len = get_node_id_hex(buffer, sizeof(buffer));
+    if(hex_len <= 0) {
+        DEBUG_MSG("Failed to read node_id");
+        return -1;
+    } else if(hex_len > 2 * dst_len) {
+        DEBUG_MSG("Length of node_id (0.5 * %d) is too large for buffer (%d)",
+                hex_len, dst_len);
+        return -1;
+    }
+
+    int bin_len = hex_to_bin(buffer, hex_len, dst, dst_len);
+    if(bin_len < 0) {
+        DEBUG_MSG("Error converting hexadecimal node_id (error code: %d)", bin_len);
+        return -1;
+    }
+    
+    return bin_len;
 }
 
 /*

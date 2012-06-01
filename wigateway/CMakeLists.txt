@@ -19,6 +19,7 @@ add_executable(wigateway
     ${COMMON}/timing.c
     ${COMMON}/kernel.c
     ${COMMON}/callback.c
+    ${COMMON}/format.c
 )
 
 target_link_libraries(wigateway pthread config gps ssl crypto)

@@ -62,9 +62,5 @@ void __print_warning(const char *msg, ...);
 #define ASSERT_OR_ELSE(expr) assert(expr); if(0)
 #endif
 
-#define HEX_CHAR(x) ((x < 0x0A) ? ('0' + x) : ('A' + x - 0x0A))
-void to_hex_string(const char* __restrict__ src, int src_len,
-                   char* __restrict__ dest, int dest_len);
-
 #endif //_DEBUG_H_
 

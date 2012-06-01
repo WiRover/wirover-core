@@ -17,6 +17,7 @@ add_executable(wicontroller
     ${COMMON}/sockets.c
     ${COMMON}/timing.c
     ${COMMON}/kernel.c
+    ${COMMON}/format.c
 )
 
 target_link_libraries(wicontroller pthread config mysqlclient ssl crypto)

@@ -7,6 +7,38 @@
 #include "configuration.h"
 #include "database.h"
 #include "debug.h"
+#include "rootchan.h"
+
+static const char CREATE_TABLE_PRIVILEGES[] = "                     \
+    create table if not exists privileges (                         \
+        id          int unsigned not null auto_increment,           \
+        node_id     varchar(128) not null,                          \
+        controller_priv boolean not null,                           \
+        gateway_priv    boolean not null,                           \
+        primary key (id),                                           \
+        unique key (node_id)                                        \
+    ) engine=InnoDB default charset=utf8                            \
+";
+
+static const char CREATE_TABLE_ACCESS_REQUESTS[] = "                \
+    create table if not exists access_requests (                    \
+        id          int unsigned not null auto_increment,           \
+        timestamp   timestamp not null default current_timestamp,   \
+        type        enum('CONTROLLER', 'GATEWAY') not null,         \
+        result      enum('SUCCESS', 'DENIED') not null,             \
+        node_id     varchar(128) not null,                          \
+        src_ip      varchar(46) not null,                           \
+        primary key (id)                                            \
+    ) engine=InnoDB default charset=utf8                            \
+";
+
+static const char *REQUIRED_TABLES[] = {
+    CREATE_TABLE_PRIVILEGES,
+    CREATE_TABLE_ACCESS_REQUESTS,
+    NULL,
+};
+
+static int create_tables();
 
 static MYSQL* database = 0;
 
@@ -47,6 +79,9 @@ int db_connect()
     if(result != 0) {
         DEBUG_MSG("Warning: mysql_option() failed: %s", mysql_error(database));
     }
+
+    if(create_tables() < 0)
+        DEBUG_MSG("Warning: create_tables failed");
 
     return 0;
 
@@ -98,41 +133,111 @@ int db_query(const char* format, ...)
 }
 
 /*
- * DB GET UNIQUEID
+ * Check if the node should be granted the requested privilege.
+ *
+ * Returns a positive ID if the privilege is to be granted, 0 if not, or
+ * negative if there is an error.
  */
-unsigned short db_get_unique_id(const char* hwaddr)
+int db_check_privilege(const char *node_id, int priv)
 {
     int result;
-    unsigned short unique_id = 0;
+    int id = 0;
 
-    result = db_query("select id from uniqueid where hwaddr='%s' limit 1", hwaddr);
-    if(result == -1) {
-        return 0;
-    }
+    int node_id_len = strlen(node_id);
+    char *node_id_esc = malloc(2 * node_id_len + 1);
+    if(!node_id_esc)
+        return -1;
+    mysql_real_escape_string(database, node_id_esc, node_id, node_id_len);
 
-    MYSQL_RES* qr = mysql_store_result(database);
+    result = db_query("select id, controller_priv, gateway_priv from privileges where node_id='%s' limit 1", node_id_esc);
+    free(node_id_esc);
+
+    if(result < 0)
+        return -1;
+
+    MYSQL_RES *qr = mysql_store_result(database);
     if(!qr) {
         DEBUG_MSG("mysql_store_result failed - %s", mysql_error(database));
-        return 0;
+        return -1;
     }
-    
+
     MYSQL_ROW row = mysql_fetch_row(qr);
-    
     if(row) {
-        unique_id = atoi(row[0]);
-        
-    } else {
-        // Make an entry for the node
-        result = db_query("insert into uniqueid (hwaddr) values ('%s')", hwaddr);
-        if(result == 0) {
-            unique_id = mysql_insert_id(database);
-        }
+        if((priv == PRIV_REG_CONTROLLER && atoi(row[1]) > 0) ||
+                (priv == PRIV_REG_GATEWAY && atoi(row[2]) > 0))
+            id = atoi(row[0]);
     }
 
     mysql_free_result(qr);
-    return unique_id;
+    return id;
 }
 
+/*
+ * Record an access request so that a network admin can approve it.
+ */
+int db_add_access_request(int priv, const char *node_id, const char *src_ip, int result)
+{
+    const char *type;
+    switch(priv) {
+        case PRIV_REG_CONTROLLER:
+            type = "CONTROLLER";
+            break;
+        case PRIV_REG_GATEWAY:
+            type = "GATEWAY";
+            break;
+        default:
+            DEBUG_MSG("Unrecognized access type: %d", priv);
+            return -1;
+    }
 
+    const char *result_str;
+    switch(result) {
+        case RCHAN_RESULT_SUCCESS:
+            result_str = "SUCCESS";
+            break;
+        case RCHAN_RESULT_DENIED:
+            result_str = "DENIED";
+            break;
+        default:
+            DEBUG_MSG("Unrecognized access result: %d", result);
+            return -1;
+    }
 
+    int node_id_len = strlen(node_id);
+    char *node_id_esc = malloc(2 * node_id_len + 1);
+    if(!node_id_esc)
+        return -1;
+    mysql_real_escape_string(database, node_id_esc, node_id, node_id_len);
+
+    int ret = db_query("insert into access_requests (type, result, node_id, src_ip) values ('%s', '%s', '%s', '%s')", 
+            type, result_str, node_id_esc, src_ip);
+    free(node_id_esc);
+
+    if(ret < 0)
+        return -1;
+
+    return 0;
+}
+
+/*
+ * Create all of the required tables if they do not already exist.
+ */
+static int create_tables()
+{
+    int res;
+
+    if(!database)
+        return -1;
+
+    const char **table = REQUIRED_TABLES;
+    while(*table) {
+        res = mysql_real_query(database, *table, strlen(*table));
+        if(res != 0)
+            DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+    
+        table++;
+    }
+
+    return 0;
+}
 
