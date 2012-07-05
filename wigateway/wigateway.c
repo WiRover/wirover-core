@@ -41,6 +41,8 @@ int main(int argc, char* argv[])
 {
     int result;
 
+    printf("WiRover version %d.%d\n", WIROVER_VERSION_MAJOR, WIROVER_VERSION_MINOR);
+
     srand(time(0));
 
     if(parse_arguments(argc, argv) < 0)

@@ -45,6 +45,8 @@ int main(int argc, char* argv[])
     int server_sock;
     int result;
 
+    printf("WiRover version %d.%d\n", WIROVER_VERSION_MAJOR, WIROVER_VERSION_MINOR);
+
     result = configure_wiroot(CONFIG_FILENAME);
     if(result == -1) {
         return 1;

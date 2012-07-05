@@ -32,6 +32,8 @@ int main(int argc, char* argv[])
     struct lease_info lease;
     int result;
 
+    printf("WiRover version %d.%d\n", WIROVER_VERSION_MAJOR, WIROVER_VERSION_MINOR);
+
     const config_t *config = get_config();
 
     const char* wiroot_address = get_wiroot_address();
