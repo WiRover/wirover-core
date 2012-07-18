@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
 
+#include "configuration.h"
 #include "debug.h"
 #include "lease.h"
 #include "utlist.h"
@@ -54,7 +55,7 @@ int read_lease_config(const config_t* config)
     }
     
     int subnet_size = 0;
-    result = config_lookup_int(config, "lease.subnet-size", &subnet_size);
+    result = config_lookup_int_compat(config, "lease.subnet-size", &subnet_size);
     if(result == CONFIG_FALSE) {
         DEBUG_MSG("lease.subnet-size missing in config file");
     } else if(subnet_size <= 0 || subnet_size > UCHAR_MAX) {
@@ -63,7 +64,7 @@ int read_lease_config(const config_t* config)
         LEASE_SUBNET_SIZE = subnet_size;
     }
 
-    result = config_lookup_int(config, "lease.time-limit", &LEASE_TIME_LIMIT);
+    result = config_lookup_int_compat(config, "lease.time-limit", &LEASE_TIME_LIMIT);
     if(result == CONFIG_FALSE) {
         DEBUG_MSG("lease.time-limit missing in config file");
     }

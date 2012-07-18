@@ -88,13 +88,13 @@ int main(int argc, char* argv[])
     if(config) {
         int tmp;
         
-        config_lookup_int(config, "bandwidth-server.timeout", &tmp);
+        config_lookup_int_compat(config, "bandwidth-server.timeout", &tmp);
         if(tmp > 0)
             bw_server.timeout = tmp;
         else
             DEBUG_MSG("Invalid: bandwidth-server.timeout = %d", tmp);
 
-        config_lookup_int(config, "bandwidth-server.port", &tmp);
+        config_lookup_int_compat(config, "bandwidth-server.port", &tmp);
         if(tmp > 0 && tmp <= USHRT_MAX)
             bw_server.port = tmp;
         else

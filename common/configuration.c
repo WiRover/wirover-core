@@ -56,6 +56,26 @@ void close_config()
     }
 }
 
+/*
+ * This function is a wrapper around libconfig's config_lookup_int, which
+ * unfortunately changed the parameter type from (long *) to (int *) in a
+ * recent version.  Use this wrapper to maintain compatibility across versions
+ * of libconfig and on 32-bit and 64-bit architectures.
+ */
+int config_lookup_int_compat(const config_t *config, const char *path, int *value)
+{
+    // I think LIBCONFIG_VER_MAJOR is undefined in the older versions which
+    // also used (long *) instead of (int *).
+#ifndef LIBCONFIG_VER_MAJOR
+    long tmp;
+    int result = config_lookup_int(config, path, &tmp);
+    if(result == CONFIG_TRUE)
+        *value = (int)tmp;
+#else
+    return config_lookup_int(config, path, value);
+#endif
+}
+
 const char* get_wiroot_address()
 {
     const config_t* config = get_config();
@@ -73,7 +93,7 @@ static int __get_port(const char *config_name, unsigned short *port)
     const config_t* config = get_config();
 
     int tmp_port;
-    if(!config || config_lookup_int(config, config_name, &tmp_port) == CONFIG_FALSE) {
+    if(!config || config_lookup_int_compat(config, config_name, &tmp_port) == CONFIG_FALSE) {
         DEBUG_MSG("Failed to read %s from config file", config_name);
         return -1;
     } else if(tmp_port < 0 || tmp_port > 0x0000FFFF) {
@@ -111,7 +131,7 @@ unsigned int get_ping_interval()
     const config_t* config = get_config();
 
     int interval;
-    if(!config || config_lookup_int(config, "ping-interval", &interval) == CONFIG_FALSE) {
+    if(!config || config_lookup_int_compat(config, "ping-interval", &interval) == CONFIG_FALSE) {
         DEBUG_MSG("failed to read ping-interval from config file");
         interval = DEFAULT_PING_INTERVAL;
     } else if(interval <= 0) {
@@ -127,7 +147,7 @@ unsigned int get_mtu()
     const config_t* config = get_config();
 
     int mtu;
-    if(!config || config_lookup_int(config, "mtu", &mtu) == CONFIG_FALSE) {
+    if(!config || config_lookup_int_compat(config, "mtu", &mtu) == CONFIG_FALSE) {
         DEBUG_MSG("failed to read mtu from config file");
         mtu = DEFAULT_MTU;
     } else if(mtu <= 0) {

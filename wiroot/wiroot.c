@@ -128,7 +128,7 @@ static int configure_wiroot(const char* filename)
     }
 
     int port;
-    result = config_lookup_int(config, "server.port", &port);
+    result = config_lookup_int_compat(config, "server.port", &port);
     if(result == CONFIG_FALSE) {
         DEBUG_MSG("Error reading server.port from config file");
     } else if(port < 0 || port > 0x0000FFFF) {
@@ -138,7 +138,7 @@ static int configure_wiroot(const char* filename)
     }
     
     int timeout;
-    result = config_lookup_int(config, "server.client-timeout", &timeout);
+    result = config_lookup_int_compat(config, "server.client-timeout", &timeout);
     if(result == CONFIG_FALSE) {
         DEBUG_MSG("Error reading server.client-timeout from config file");
     } else if(timeout < 0) {
