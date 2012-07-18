@@ -10,7 +10,6 @@
 #define DEFAULT_PING_INTERVAL       10
 #define DEFAULT_BANDWIDTH_TIMEOUT   5000000
 #define DEFAULT_BANDWIDTH_PORT      8082
-#define DEFAULT_BANDWIDTH_INTERVAL  60000000
 
 // Enables cooperation with the virt module.  If this is not defined, only
 // user-level code is used.

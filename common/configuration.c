@@ -203,6 +203,23 @@ default_priority:
     return DEFAULT_INTERFACE_PRIORITY;
 }
 
+unsigned int get_bandwidth_test_interval()
+{
+    const config_t* config = get_config();
+
+    int interval;
+    if(!config || config_lookup_int_compat(config, CONFIG_BANDWIDTH_TEST_INTERVAL, 
+                &interval) == CONFIG_FALSE) {
+        DEBUG_MSG("failed to read %s from config file", CONFIG_BANDWIDTH_TEST_INTERVAL);
+        interval = DEFAULT_BANDWIDTH_TEST_INTERVAL;
+    } else if(interval <= 0) {
+        DEBUG_MSG("%s %d is not valid", CONFIG_BANDWIDTH_TEST_INTERVAL, interval);
+        interval = DEFAULT_BANDWIDTH_TEST_INTERVAL;
+    }
+
+    return interval;
+}
+
 const char *get_register_address()
 {
     const config_t* config = get_config();
