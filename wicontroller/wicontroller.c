@@ -45,8 +45,19 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
+    // reg_data_port and reg_control_port are the ports we will advertise to
+    // the root server.  They may differ from the ports we listen on if we are
+    // behind a DNAT.
+    unsigned short reg_data_port = get_register_data_port();
+    if(!reg_data_port)
+        reg_data_port = data_port;
+
+    unsigned short reg_control_port = get_register_control_port();
+    if(!reg_control_port)
+        reg_control_port = control_port;
+
     result = register_controller(&lease, wiroot_address, wiroot_port, 
-            data_port, control_port);
+            reg_data_port, reg_control_port);
     if(result < 0) {
         DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
         exit(1);

@@ -208,11 +208,25 @@ const char *get_register_address()
     const config_t* config = get_config();
 
     const char* address = 0;
-    if(!config || config_lookup_string(config, "register-address", 
+    if(!config || config_lookup_string(config, CONFIG_REGISTER_ADDRESS, 
                 &address) == CONFIG_FALSE)
         return DEFAULT_REGISTER_ADDRESS;
     else
         return address;
+}
+
+unsigned short get_register_data_port()
+{
+    unsigned short port = DEFAULT_REGISTER_DATA_PORT;
+    __get_port(CONFIG_REGISTER_DATA_PORT, &port);
+    return port;
+}
+
+unsigned short get_register_control_port()
+{
+    unsigned short port = DEFAULT_REGISTER_CONTROL_PORT;
+    __get_port(CONFIG_REGISTER_CONTROL_PORT, &port);
+    return port;
 }
 
 /*
