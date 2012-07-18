@@ -52,6 +52,7 @@ const config_t*     get_config();
 void                close_config();
 
 int config_lookup_int_compat(const config_t *config, const char *path, int *value);
+int config_setting_lookup_int_compat(const config_setting_t *setting, const char *path, int *value);
 
 const char*     get_wiroot_address();
 unsigned short  get_wiroot_port();

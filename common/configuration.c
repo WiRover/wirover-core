@@ -71,8 +71,28 @@ int config_lookup_int_compat(const config_t *config, const char *path, int *valu
     int result = config_lookup_int(config, path, &tmp);
     if(result == CONFIG_TRUE)
         *value = (int)tmp;
+    return result;
 #else
     return config_lookup_int(config, path, value);
+#endif
+}
+
+/*
+ * This is a wrapper function for config_setting_lookup_int.  See the comment
+ * for config_lookup_int_compat for why this is necessary.
+ */
+int config_setting_lookup_int_compat(const config_setting_t *setting, const char *path, int *value)
+{
+    // I think LIBCONFIG_VER_MAJOR is undefined in the older versions which
+    // also used (long *) instead of (int *).
+#ifndef LIBCONFIG_VER_MAJOR
+    long tmp;
+    int result = config_setting_lookup_int(setting, path, &tmp);
+    if(result == CONFIG_TRUE)
+        *value = (int)tmp;
+    return result;
+#else
+    return config_setting_lookup_int(setting, path, value);
 #endif
 }
 
@@ -194,7 +214,7 @@ int get_interface_priority(const char *ifname)
 
         if(fnmatch(curr_ifname, ifname, 0) == 0) {
             int curr_priority;
-            if(config_setting_lookup_int(curr_item, "priority", &curr_priority))
+            if(config_setting_lookup_int_compat(curr_item, "priority", &curr_priority))
                 return curr_priority;
         }
     }
