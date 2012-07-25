@@ -376,6 +376,15 @@ static int handle_incoming(int sockfd, int timeout)
             notif_needed = 1;
         }
 
+        char network[NETWORK_NAME_LENGTH];
+        read_network_name(ife->name, network, sizeof(network));
+
+        if(strncmp(network, ife->network, sizeof(network)) != 0) {
+            // If we detect a different network name, send another notification.
+            strncpy(ife->network, network, sizeof(ife->network));
+            notif_needed = 1;
+        }
+
         ife->last_ping_seq_no = ntohl(pkt->seq_no);
 
         DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f", 

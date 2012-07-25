@@ -23,6 +23,7 @@
 #define CONFIG_REGISTER_ADDRESS         "register-address"
 #define CONFIG_REGISTER_DATA_PORT       "register-data-port"
 #define CONFIG_REGISTER_CONTROL_PORT    "register-control-port"
+#define CONFIG_REGISTER_BANDWIDTH_PORT  "register-bandwidth-port"
 #define CONFIG_BANDWIDTH_TEST_INTERVAL  "bandwidth-test-interval"
 
 #define CONFIG_MYSQL_HOST           "mysql-host"
@@ -40,6 +41,7 @@
 #define DEFAULT_REGISTER_ADDRESS        ""
 #define DEFAULT_REGISTER_DATA_PORT      0
 #define DEFAULT_REGISTER_CONTROL_PORT   0
+#define DEFAULT_REGISTER_BANDWIDTH_PORT 0
 
 #define DEFAULT_BANDWIDTH_TEST_INTERVAL 60
 
@@ -67,6 +69,7 @@ unsigned int    get_bandwidth_test_interval();
 const char      *get_register_address();
 unsigned short  get_register_data_port();
 unsigned short  get_register_control_port();
+unsigned short  get_register_bandwidth_port();
 
 #endif //_CONFIGURATION_H_
 

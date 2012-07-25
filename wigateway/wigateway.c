@@ -175,7 +175,7 @@ int main(int argc, char* argv[])
                 bw_client.timeout = DEFAULT_BANDWIDTH_TIMEOUT;
                 bw_client.remote_addr = pub_ip;
                 bw_client.remote_port = get_remote_bw_port();
-                bw_client.interval = get_bandwidth_test_interval();
+                bw_client.interval = USEC_PER_SEC * get_bandwidth_test_interval();
 
                 if(start_bandwidth_client_thread(&bw_client) < 0) {
                     DEBUG_MSG("Failed to start bandwidth client thread");

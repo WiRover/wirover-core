@@ -23,6 +23,7 @@ static struct bw_server_info bw_server = {
     .timeout = DEFAULT_BANDWIDTH_TIMEOUT,
     .port = DEFAULT_BANDWIDTH_PORT,
 };
+static unsigned short bw_ext_port = DEFAULT_BANDWIDTH_PORT;
 
 static void server_loop(int cchan_sock);
 static int find_gateway_ip(const char *device, struct in_addr *gw_ip);
@@ -110,6 +111,10 @@ int main(int argc, char* argv[])
             bw_server.port = tmp;
         else
             DEBUG_MSG("Invalid: bandwidth-server.port = %d", tmp);
+
+        bw_ext_port = get_register_bandwidth_port();
+        if(!bw_ext_port)
+            bw_ext_port = bw_server.port;
     }
 
     if(start_bandwidth_server_thread(&bw_server) < 0) {
@@ -182,7 +187,7 @@ static void server_loop(int cchan_sock)
                     } else if(bytes == 0) {
                         handle_disconnection(&cchan_clients, client);
                     } else {
-                        process_notification(client->fd, buffer, bytes, bw_server.port);
+                        process_notification(client->fd, buffer, bytes, bw_ext_port);
                     }
                 }
             }

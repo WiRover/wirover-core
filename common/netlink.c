@@ -195,7 +195,6 @@ int handle_netlink_message(const char* msg, int msg_len)
 
                     ife->index = ifa->ifa_index;
                     strncpy(ife->name, device, sizeof(ife->name));
-                    read_network_name(ife->name, ife->network, sizeof(ife->network));
                     ife->state = INACTIVE;
                     ife->priority = priority;
 
@@ -220,6 +219,8 @@ int handle_netlink_message(const char* msg, int msg_len)
                             ife->public_ip.s_addr = new_ip;
                     }
                 }
+                    
+                read_network_name(ife->name, ife->network, sizeof(ife->network));
 
                 ping_interface(ife);
                 should_notify = 1;
@@ -272,7 +273,7 @@ int handle_netlink_message(const char* msg, int msg_len)
 
                 downgrade_write_lock(&interface_list_lock);
             }
-
+                
             release_read_lock(&interface_list_lock);
             
             should_notify = 1;
@@ -316,9 +317,12 @@ int handle_netlink_message(const char* msg, int msg_len)
                         DEBUG_MSG("RTM_NEWROUTE gw %s dev %s",
                                 gwaddr_p, ife->name);
 
+                        read_network_name(ife->name, ife->network, sizeof(ife->network));
+
                         memcpy(&ife->gateway_ip, &gwaddr, 
                                 sizeof(ife->gateway_ip));
                         virt_set_gateway_ip(ife->name, &gwaddr);
+
                         ping_interface(ife);
                     }
 
@@ -397,8 +401,11 @@ void read_network_name(const char * __restrict__ ifname,
     }
 
     if(!fgets(dest, destlen, file)) {
+        DEBUG_MSG("failed to read %s", filename);
         strncpy(dest, ifname, destlen);
     }
+
+    DEBUG_MSG("interface %s network %s", ifname, dest);
 
     fclose(file);
 }

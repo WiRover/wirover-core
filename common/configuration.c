@@ -266,6 +266,13 @@ unsigned short get_register_control_port()
     return port;
 }
 
+unsigned short get_register_bandwidth_port()
+{
+    unsigned short port = DEFAULT_REGISTER_BANDWIDTH_PORT;
+    __get_port(CONFIG_REGISTER_BANDWIDTH_PORT, &port);
+    return port;
+}
+
 /*
  * FIND CONFIG FILE
  *
