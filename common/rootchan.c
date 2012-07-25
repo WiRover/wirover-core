@@ -1,7 +1,7 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
-//#include <stropts.h>
+#include <ctype.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -261,6 +261,10 @@ err_out:
  * Returns the length of the string written to dst or a negative value if an
  * error occurred.
  *
+ * If a whitespace character is encountered, the string is truncated at the
+ * whitespace character, a null character is written in its place, and only the
+ * length up to the whitespace character is returned.
+ *
  * The result may not be null-terminated, so the caller must check the return
  * value.
  */
@@ -274,6 +278,15 @@ int get_node_id_hex(char *dst, int dst_len)
 
     int read = fread(dst, sizeof(char), dst_len, file);
     fclose(file);
+
+    int i;
+    for(i = 0; i < read; i++) {
+        if(!dst[i] || isspace(dst[i])) {
+            dst[i] = '\0';
+            read = i;
+            break;
+        }
+    }
 
     return read;
 }
