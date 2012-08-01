@@ -246,6 +246,9 @@ void dump_interfaces(const struct interface *head, const char *prepend)
     while(head) {
         const char *state;
         switch(head->state) {
+            case INIT_INACTIVE:
+                state = "INIT";
+                break;
             case ACTIVE:
                 state = "ACTIVE";
                 break;

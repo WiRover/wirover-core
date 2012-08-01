@@ -11,7 +11,8 @@
 #define NETWORK_NAME_LENGTH 16
 
 enum if_state {
-    ACTIVE = 1,
+    INIT_INACTIVE = 0,
+    ACTIVE,
     INACTIVE,
     DEAD
 };

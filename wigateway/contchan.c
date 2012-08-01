@@ -101,17 +101,21 @@ static int _send_notification(const char *ifname)
     while(ife && ife_ind < MAX_INTERFACES) {
         struct interface_info* dest = &notification.if_info[ife_ind];
 
-        memset(dest, 0, sizeof(*dest));
+        /* Avoid sending interfaces that have not passed the init state. */
+        if(ife->state != INIT_INACTIVE) {
+            memset(dest, 0, sizeof(*dest));
 
-        strncpy(dest->ifname, ife->name, sizeof(dest->ifname));
-        strncpy(dest->network, ife->network, sizeof(dest->network));
-        dest->state = ife->state;
-        dest->link_id = htonl(ife->index);
-        dest->local_ip = ife->public_ip.s_addr;
-        dest->data_port = htons(get_data_port());
+            strncpy(dest->ifname, ife->name, sizeof(dest->ifname));
+            strncpy(dest->network, ife->network, sizeof(dest->network));
+            dest->state = ife->state;
+            dest->link_id = htonl(ife->index);
+            dest->local_ip = ife->public_ip.s_addr;
+            dest->data_port = htons(get_data_port());
+        
+            ife_ind++;
+        }
 
         ife = ife->next;
-        ife_ind++;
     }
     
     release_read_lock(&interface_list_lock);

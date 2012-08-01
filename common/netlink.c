@@ -69,8 +69,8 @@ int init_interface_list()
                 strncpy(ife->name, ifap->ifa_name, sizeof(ife->name));
                 read_network_name(ife->name, ife->network, sizeof(ife->network));
 
-                // Set to INACTIVE until connectivity is confirmed
-                ife->state = INACTIVE;
+                // Set to INIT_INACTIVE until connectivity is confirmed
+                ife->state = INIT_INACTIVE;
 
                 ife->data_port = htons(get_data_port());
                 ife->priority = priority;
@@ -184,9 +184,11 @@ int handle_netlink_message(const char* msg, int msg_len)
             ife = find_interface_by_index(interface_list, ifa->ifa_index);
 
             if(ife) {
-                upgrade_read_lock(&interface_list_lock);
-                change_interface_state(ife, INACTIVE);
-                downgrade_write_lock(&interface_list_lock);
+                if(ife->state != INIT_INACTIVE) {
+                    upgrade_read_lock(&interface_list_lock);
+                    change_interface_state(ife, INACTIVE);
+                    downgrade_write_lock(&interface_list_lock);
+                }
             } else {
                 int priority = get_interface_priority(device);
                 if(priority >= 0) {
@@ -195,7 +197,7 @@ int handle_netlink_message(const char* msg, int msg_len)
 
                     ife->index = ifa->ifa_index;
                     strncpy(ife->name, device, sizeof(ife->name));
-                    ife->state = INACTIVE;
+                    ife->state = INIT_INACTIVE;
                     ife->priority = priority;
 
                     ife->data_port = htons(get_data_port());

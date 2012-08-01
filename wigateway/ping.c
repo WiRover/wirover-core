@@ -371,7 +371,7 @@ static int handle_incoming(int sockfd, int timeout)
     // If the ping response is older than timeout seconds, we just ignore it.
     if((diff / USEC_PER_SEC) < timeout) {
         ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
-        if(ife->state == INACTIVE) {
+        if(ife->state == INIT_INACTIVE || ife->state == INACTIVE) {
             change_interface_state(ife, ACTIVE);
             notif_needed = 1;
         }
