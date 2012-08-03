@@ -407,8 +407,6 @@ void read_network_name(const char * __restrict__ ifname,
         strncpy(dest, ifname, destlen);
     }
 
-    DEBUG_MSG("interface %s network %s", ifname, dest);
-
     fclose(file);
 }
 

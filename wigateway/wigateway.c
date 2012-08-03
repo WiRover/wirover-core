@@ -19,6 +19,7 @@
 #include "rootchan.h"
 #include "kernel.h"
 #include "callback.h"
+#include "sockets.h"
 
 // The virtual interface will use this IP address if we are unable to obtain a
 // private IP from the root server.
@@ -101,7 +102,7 @@ int main(int argc, char* argv[])
                 call_on_lease(lease.unique_id);
 
                 ipaddr_to_ipv4(&lease.priv_ip, &private_ip);
-                private_netmask = htonl(~((1 << lease.priv_subnet_size) - 1));
+                private_netmask = htonl(slash_to_netmask(lease.priv_subnet_size));
                 
                 if(ARGS.with_kernel) {
                     result = setup_virtual_interface(private_ip, 

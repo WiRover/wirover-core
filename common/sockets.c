@@ -434,7 +434,7 @@ int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage*
     struct addrinfo hints;
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET6;
-    hints.ai_flags = AI_ADDRCONFIG | AI_V4MAPPED | AI_NUMERICSERV;
+    hints.ai_flags = AI_V4MAPPED | AI_NUMERICSERV;
 
     struct addrinfo* results = 0;
     int err;

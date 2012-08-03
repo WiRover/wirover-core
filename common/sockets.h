@@ -46,5 +46,21 @@ void fill_buffer_random(void *buffer, int size);
 
 int get_recv_timestamp(int sockfd, struct timeval *timestamp);
 
+
+/*
+ * Get the netmask associated with a network size in slash notation.
+ *
+ * E.g. /24 -> 255.255.255.0, so 
+ */
+static inline uint32_t slash_to_netmask(int slash)
+{
+    if(slash <= 0)
+        return 0;
+    else if(slash >= 32)
+        return 0xFFFFFFFF;
+    else
+        return ~((1 << (32 - slash)) - 1);
+}
+
 #endif //_SOCKETS_H_
 
