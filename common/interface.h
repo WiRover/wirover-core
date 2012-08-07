@@ -29,6 +29,7 @@ struct interface {
     uint16_t          data_port;
 
     time_t            last_ping_time;
+    time_t            last_ping_success;
 
     uint32_t    next_ping_seq_no;
     uint32_t    last_ping_seq_no;

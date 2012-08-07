@@ -77,17 +77,11 @@ void* ping_thread_func(void* arg)
     const unsigned short data_port = get_data_port();
     int sockfd;
 
-    int link_timeout = DEFAULT_LINK_TIMEOUT;
+    int link_timeout = get_link_timeout();
     int node_timeout = DEFAULT_NODE_TIMEOUT;
 
     const config_t *config = get_config();
     if(config) {
-        config_lookup_int_compat(config, "link-timeout", &link_timeout);
-        if(link_timeout <= 0) {
-            DEBUG_MSG("Invalid value for link-timeout (%d)", link_timeout);
-            link_timeout = DEFAULT_LINK_TIMEOUT;
-        }
-
         config_lookup_int_compat(config, "node-timeout", &node_timeout);
         if(node_timeout <= 0) {
             DEBUG_MSG("Invalid value for node-timeout (%d)", node_timeout);

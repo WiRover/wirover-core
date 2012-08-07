@@ -26,7 +26,8 @@ struct interface* alloc_interface()
     ife->avg_uplink_bw = NAN;
 
     // Prevent early timeouts
-    ife->last_ping_time = time(0);
+    ife->last_ping_time = time(NULL);
+    ife->last_ping_success = time(NULL);
 
     return ife;
 }

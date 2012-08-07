@@ -29,7 +29,7 @@ static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd, int timeout);
 static int send_second_response(const struct interface *ife, 
         const char *buffer, int len, const struct sockaddr *to, socklen_t to_len);
-static void mark_inactive_interfaces();
+static void mark_inactive_interfaces(int link_timeout);
 
 static int          running;
 static pthread_t    ping_thread;
@@ -208,6 +208,7 @@ static int send_ping(struct interface* ife,
 void* ping_thread_func(void* arg)
 {
     const unsigned int ping_interval = get_ping_interval();
+    const unsigned int link_timeout = get_link_timeout();
     int sockfd;
 
     sockfd = udp_bind_open(get_data_port(), 0);
@@ -248,7 +249,7 @@ void* ping_thread_func(void* arg)
 
         long time_diff = timeval_diff(&now, &last_ping_time);
         if(time_diff >= ping_spacing) {
-            mark_inactive_interfaces();
+            mark_inactive_interfaces(link_timeout);
 
             obtain_read_lock(&interface_list_lock);
             struct interface *ife = find_interface_at_pos(
@@ -385,6 +386,7 @@ static int handle_incoming(int sockfd, int timeout)
             notif_needed = 1;
         }
 
+        ife->last_ping_success = time(NULL);
         ife->last_ping_seq_no = ntohl(pkt->seq_no);
 
         DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f", 
@@ -454,15 +456,19 @@ static int send_second_response(const struct interface *ife,
     return 0;
 }
 
-static void mark_inactive_interfaces()
+static void mark_inactive_interfaces(int link_timeout)
 {
     int notif_needed = 0;
+    time_t now = time(NULL);
 
     obtain_read_lock(&interface_list_lock);
 
     struct interface* curr_ife = interface_list;
     while(curr_ife) {
-        if(curr_ife->state == ACTIVE) {
+        if(curr_ife->state == ACTIVE && 
+                (now - curr_ife->last_ping_success) >= link_timeout) {
+            change_interface_state(curr_ife, INACTIVE);
+            notif_needed = 1;
         }
 
         assert(curr_ife != curr_ife->next);

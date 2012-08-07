@@ -240,6 +240,23 @@ unsigned int get_bandwidth_test_interval()
     return interval;
 }
 
+int get_link_timeout()
+{
+    const config_t* config = get_config();
+
+    int timeout;
+    if(!config || config_lookup_int_compat(config, CONFIG_LINK_TIMEOUT, 
+                &timeout) == CONFIG_FALSE) {
+        DEBUG_MSG("failed to read %s from config file", CONFIG_LINK_TIMEOUT);
+        timeout = DEFAULT_LINK_TIMEOUT;
+    } else if(timeout <= 0) {
+        DEBUG_MSG("%s %d is not valid", CONFIG_LINK_TIMEOUT, timeout);
+        timeout = DEFAULT_LINK_TIMEOUT;
+    }
+
+    return timeout;
+}
+
 const char *get_register_address()
 {
     const config_t* config = get_config();

@@ -18,8 +18,7 @@
 // Enable logging of data to database.
 #define WITH_DATABASE
 
-/* Default timeouts for removing a remote link or node. */
-#define DEFAULT_LINK_TIMEOUT 30
+/* Default timeouts for removing a remote node. */
 #define DEFAULT_NODE_TIMEOUT 300
 
 /* The network name is a descriptive name for an interface such as "verizon" or
