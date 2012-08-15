@@ -14,10 +14,12 @@
 
 static const char *PING_ERR_STR[] = {
     "PING_ERR_OK",
+    "PING_ERR_TOO_SHORT",
     "PING_ERR_BAD_NODE",
     "PING_ERR_BAD_LINK",
     "PING_ERR_BAD_HASH",
     "PING_ERR_NOT_PING",
+    "PING_ERR_BAD_TYPE",
 };  
 
 /*
