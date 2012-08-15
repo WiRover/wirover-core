@@ -84,6 +84,20 @@ free_and_return:
     return -1;
 }
 
+const static struct addrinfo tcp_active_hints = {
+    .ai_family = AF_UNSPEC,
+    .ai_socktype = SOCK_STREAM,
+    .ai_protocol = IPPROTO_TCP,
+    .ai_flags = AI_NUMERICSERV | AI_V4MAPPED | AI_ADDRCONFIG,
+};
+
+const static struct addrinfo tcp_active_hints_fallback = {
+    .ai_family = AF_INET,
+    .ai_socktype = SOCK_STREAM,
+    .ai_protocol = IPPROTO_TCP,
+    .ai_flags = AI_NUMERICSERV | AI_V4MAPPED,
+};
+
 /*
  * TCP ACTIVE OPEN
  */
@@ -93,21 +107,23 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
     int sockfd;
     int rtn;
 
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_protocol = IPPROTO_TCP;
-    hints.ai_flags = AI_V4MAPPED | AI_ADDRCONFIG | AI_NUMERICSERV;
-
     char port_string[16];
     snprintf(port_string, sizeof(port_string), "%d", remote_port);
 
     struct addrinfo* results = 0;
-    rtn = getaddrinfo(remote_addr, port_string, &hints, &results);
+    rtn = getaddrinfo(remote_addr, port_string, &tcp_active_hints, &results);
     if(rtn != 0) {
         DEBUG_MSG("getaddrinfo failed - %s", gai_strerror(rtn));
-        return -1;
+
+        /* TODO: There seems to be a problem with the AI_ADDRCONFIG option on
+         * some systems.  This fallback code is in here to make sure the system
+         * will run anyway, but we should try to understand this problem
+         * better. */
+        rtn = getaddrinfo(remote_addr, port_string, &tcp_active_hints_fallback, &results);
+        if(rtn != 0) {
+            DEBUG_MSG("getaddrinfo fallback failed - %s", gai_strerror(rtn));
+            return -1;
+        }
     }
 
     // If getaddrinfo completed successfully, these pointers should not be
@@ -166,6 +182,20 @@ close_and_return:
     return -1;
 }
 
+const static struct addrinfo udp_bind_hints = {
+    .ai_family = AF_INET6,
+    .ai_socktype = SOCK_DGRAM,
+    .ai_protocol = IPPROTO_UDP,
+    .ai_flags = AI_NUMERICSERV | AI_PASSIVE | AI_ADDRCONFIG,
+};
+
+const static struct addrinfo udp_bind_hints_fallback = {
+    .ai_family = AF_INET,
+    .ai_socktype = SOCK_DGRAM,
+    .ai_protocol = IPPROTO_UDP,
+    .ai_flags = AI_NUMERICSERV | AI_PASSIVE,
+};
+
 /*
  * Opens a UDP socket and binds it to the given port.  If device is non-null,
  * it also binds the socket to the device.
@@ -178,18 +208,20 @@ int udp_bind_open(unsigned short local_port, const char* device)
     char port_str[16];
     snprintf(port_str, sizeof(port_str), "%d", local_port);
 
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET6;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_protocol = IPPROTO_UDP;
-    hints.ai_flags = AI_PASSIVE | AI_NUMERICSERV;
-
     struct addrinfo* results = 0;
-    int err = getaddrinfo(0, port_str, &hints, &results);
-    if(err != 0) {
-        DEBUG_MSG("getaddrinfo failed: %s", gai_strerror(err));
-        return FAILURE;
+    int rtn = getaddrinfo(NULL, port_str, &udp_bind_hints, &results);
+    if(rtn != 0) {
+        DEBUG_MSG("getaddrinfo failed - %s", gai_strerror(rtn));
+
+        /* TODO: There seems to be a problem with the AI_ADDRCONFIG option on
+         * some systems.  This fallback code is in here to make sure the system
+         * will run anyway, but we should try to understand this problem
+         * better. */
+        rtn = getaddrinfo(NULL, port_str, &udp_bind_hints_fallback, &results);
+        if(rtn != 0) {
+            DEBUG_MSG("getaddrinfo fallback failed - %s", gai_strerror(rtn));
+            return FAILURE;
+        }
     }
 
     sockfd = socket(results->ai_family, results->ai_socktype, results->ai_protocol);
@@ -424,6 +456,16 @@ int set_nonblock(int sockfd, int enable)
     return 0;
 }
 
+const static struct addrinfo build_sockaddr_hints = {
+    .ai_family = AF_INET6,
+    .ai_flags = AI_NUMERICSERV | AI_V4MAPPED | AI_ADDRCONFIG,
+};
+
+const static struct addrinfo build_sockaddr_hints_fallback = {
+    .ai_family = AF_INET,
+    .ai_flags = AI_NUMERICSERV | AI_V4MAPPED,
+};
+
 /*
  * BUILD SOCKADDR
  */
@@ -431,21 +473,29 @@ int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage*
 {
     assert(ip && dest);
 
-    struct addrinfo hints;
-    memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET6;
-    hints.ai_flags = AI_V4MAPPED | AI_NUMERICSERV;
-
     struct addrinfo* results = 0;
     int err;
 
+    char *serv = NULL;
+    char serv_buffer[16];
     if(port > 0) {
-        char port_str[16];
-        snprintf(port_str, sizeof(port_str), "%d", port);
+        snprintf(serv_buffer, sizeof(serv_buffer), "%hu", port);
+        serv = serv_buffer;
+    }
 
-        err = getaddrinfo(ip, port_str, &hints, &results);
-    } else {
-        err = getaddrinfo(ip, 0, &hints, &results);
+    err = getaddrinfo(ip, serv, &build_sockaddr_hints, &results);
+    if(err != 0) {
+        DEBUG_MSG("getaddrinfo failed - %s", gai_strerror(err));
+
+        /* TODO: There seems to be a problem with the AI_ADDRCONFIG option on
+         * some systems.  This fallback code is in here to make sure the system
+         * will run anyway, but we should try to understand this problem
+         * better. */
+        err = getaddrinfo(ip, serv, &build_sockaddr_hints_fallback, &results);
+        if(err != 0) {
+            DEBUG_MSG("getaddrinfo fallback failed - %s", gai_strerror(err));
+            return FAILURE;
+        }
     }
 
     if(err != 0) {
