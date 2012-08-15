@@ -33,7 +33,8 @@ int main(int argc, char* argv[])
     struct lease_info lease;
     int result;
 
-    printf("WiRover version %d.%d\n", WIROVER_VERSION_MAJOR, WIROVER_VERSION_MINOR);
+    printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR, 
+            WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);
 
     const config_t *config = get_config();
 
