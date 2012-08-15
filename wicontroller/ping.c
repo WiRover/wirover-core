@@ -269,10 +269,18 @@ static int send_response(int sockfd, const struct gateway *gw,
         unsigned char type, const char *buffer, 
         int len, const struct sockaddr *to, socklen_t to_len)
 {
-    assert(len >= MIN_PING_PACKET_SIZE);
-
     char response_buffer[MIN_PING_PACKET_SIZE];
-    memcpy(response_buffer, buffer, MIN_PING_PACKET_SIZE);
+
+    if(len < sizeof(response_buffer)) {
+        memset(response_buffer, 0, sizeof(response_buffer));
+        memcpy(response_buffer, buffer, len);
+    } else {
+        memcpy(response_buffer, buffer, sizeof(response_buffer));
+    }
+
+    struct tunhdr *tunhdr = (struct tunhdr *)response_buffer;
+    
+    tunhdr->flags = TUNFLAG_PING;
 
     struct ping_packet *ping = (struct ping_packet *)
         (response_buffer + sizeof(struct tunhdr));
