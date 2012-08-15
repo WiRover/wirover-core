@@ -28,6 +28,9 @@ void    copy_ipaddr(const ipaddr_t* src, ipaddr_t* dest);
 int get_interface_address(const char *dev, struct sockaddr *dest, int dest_len);
 int resolve_address(const char *address, struct sockaddr *dest, int dest_len);
 
+const char *sockaddr_ntop(const struct sockaddr *src, char *dst, socklen_t size);
+unsigned short sockaddr_port(const struct sockaddr *addr);
+
 int sockaddr_to_sockaddr_in(const struct sockaddr *src, 
         socklen_t src_len, struct sockaddr_in *dst);
 

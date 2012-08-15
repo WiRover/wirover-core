@@ -12,6 +12,14 @@
 #include "debug.h"
 #include "ping.h"
 
+static const char *PING_ERR_STR[] = {
+    "PING_ERR_OK",
+    "PING_ERR_BAD_NODE",
+    "PING_ERR_BAD_LINK",
+    "PING_ERR_BAD_HASH",
+    "PING_ERR_NOT_PING",
+};  
+
 /*
  * Searches /proc/net/dev for stats for the requested interface.
  *
@@ -132,4 +140,11 @@ int iszero(const unsigned char *buffer, int len)
     return 1;
 }
 
+const char *ping_err_str(int error)
+{
+    if(error < 0 || error >= MAX_PING_ERR)
+        return "INVALID_ERROR_CODE";
+    else
+        return PING_ERR_STR[error];
+}
 

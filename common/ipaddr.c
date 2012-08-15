@@ -232,6 +232,48 @@ int resolve_address(const char *address, struct sockaddr *dest, int dest_len)
     }
 }
 
+/*
+ * Produces a human-readable IP address string from sockaddr structure.
+ */
+const char *sockaddr_ntop(const struct sockaddr *src, char *dst, socklen_t size)
+{
+    switch(src->sa_family) {
+        case AF_INET:
+            {
+                struct sockaddr_in *sin = (struct sockaddr_in *)src;
+                return inet_ntop(AF_INET, &sin->sin_addr, dst, size);
+            }
+        case AF_INET6:
+            {
+                struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)src;
+                return inet_ntop(AF_INET6, &sin6->sin6_addr, dst, size);
+            }
+    }
+
+    return NULL;
+}
+
+/*
+ * Returns port from sockaddr structure in host byte order.
+ */
+unsigned short sockaddr_port(const struct sockaddr *addr)
+{
+    switch(addr->sa_family) {
+        case AF_INET:
+            {
+                struct sockaddr_in *sin = (struct sockaddr_in *)addr;
+                return ntohs(sin->sin_port);
+            }
+        case AF_INET6:
+            {
+                struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)addr;
+                return ntohs(sin6->sin6_port);
+            }
+    }
+
+    return 0;
+}
+
 /* Copy from a generic sockaddr structure to a sockaddr_in structure.  If the
  * source is already a sockaddr_in, then this always succeeds.  If the source
  * is a sockaddr_in6, this is possible only if the address is an IPv4 mapped to

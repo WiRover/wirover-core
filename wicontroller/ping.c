@@ -141,6 +141,22 @@ static int handle_incoming(int sockfd)
     }
     
     int valid = ping_request_valid(buffer, bytes_recvd);
+    if(valid != PING_ERR_OK) {
+        char src_addr[INET6_ADDRSTRLEN];
+        sockaddr_ntop((struct sockaddr *)&from, src_addr, sizeof(src_addr));
+
+        unsigned short src_port = sockaddr_port((struct sockaddr *)&from);
+
+        DEBUG_MSG("Packet from %s:%hu produced error: %s", src_addr, src_port, 
+                ping_err_str(valid));
+
+        if(send_response(sockfd, 0, PING_RESPONSE_ERROR, buffer, 
+                    bytes_recvd, (struct sockaddr *)&from, from_len) < 0) {
+            ERROR_MSG("Failed to send error response");
+        }
+
+        return 0;
+    }
 
     const struct ping_packet *ping = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
@@ -151,39 +167,27 @@ static int handle_incoming(int sockfd)
 
     switch(PING_TYPE(ping->type)) {
         case PING_REQUEST:
-            if(valid == PING_ERR_OK) {
-                if(send_response(sockfd, gw, PING_RESPONSE, buffer, bytes_recvd, 
-                            (struct sockaddr *)&from, from_len) < 0) {
-                    ERROR_MSG("Failed to send ping response");
-                    return 0;
-                }
-
-                process_ping_request(buffer, bytes_recvd, 
-                        (struct sockaddr *)&from, from_len);
-            } else {
-                if(send_response(sockfd, 0, PING_RESPONSE_ERROR, buffer, 
-                            bytes_recvd, (struct sockaddr *)&from, from_len) < 0) {
-                    ERROR_MSG("Failed to send ping response");
-                    return 0;
-                }
+            if(send_response(sockfd, gw, PING_RESPONSE, buffer, bytes_recvd, 
+                        (struct sockaddr *)&from, from_len) < 0) {
+                ERROR_MSG("Failed to send ping response");
+                return 0;
             }
+
+            process_ping_request(buffer, bytes_recvd, 
+                    (struct sockaddr *)&from, from_len);
 
             break;
         case PING_SECOND_RESPONSE:
-            if(valid == PING_ERR_OK) {
-                // The receive timestamp recorded by the kernel will be more accurate
-                // than if we call gettimeofday() at this point.
-                if(ioctl(sockfd, SIOCGSTAMP, &recv_time) == -1) {
-                    DEBUG_MSG("ioctl SIOCGSTAMP failed");
-                    gettimeofday(&recv_time, 0);
-                }
-                        
-                process_ping_response(buffer, bytes_recvd,
-                        (struct sockaddr *)&from, from_len, &recv_time);
+            // The receive timestamp recorded by the kernel will be more accurate
+            // than if we call gettimeofday() at this point.
+            if(ioctl(sockfd, SIOCGSTAMP, &recv_time) == -1) {
+                DEBUG_MSG("ioctl SIOCGSTAMP failed");
+                gettimeofday(&recv_time, 0);
             }
+                    
+            process_ping_response(buffer, bytes_recvd,
+                    (struct sockaddr *)&from, from_len, &recv_time);
 
-            break;
-        default:
             break;
     }
 
@@ -200,14 +204,28 @@ static int handle_incoming(int sockfd)
  *  PING_ERR_BAD_NODE
  *  PING_ERR_BAD_LINK
  *  PING_ERR_BAD_HASH
+ *  PING_ERR_NOT_PING
+ *  PING_ERR_BAD_TYPE
  */
 static int ping_request_valid(char *buffer, int len)
 {
     if(len < MIN_PING_PACKET_SIZE)
         return PING_ERR_TOO_SHORT;
-    
+
+    const struct tunhdr *tunhdr = (struct tunhdr *)buffer;
+    if(!(tunhdr->flags & TUNFLAG_PING))
+        return PING_ERR_NOT_PING;
+
     struct ping_packet *ping = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
+
+    switch(PING_TYPE(ping->type)) {
+        case PING_REQUEST:
+        case PING_SECOND_RESPONSE:
+            break;
+        default:
+            return PING_ERR_BAD_TYPE;
+    }
 
     /* node_id == 0 is invalid, gateway should have received a non-zero id from
      * the root server. */

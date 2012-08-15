@@ -23,11 +23,16 @@
 #define PROC_NET_DEV_STAT_COLS  8
 
 /* Ping error codes */
-#define PING_ERR_OK         0
-#define PING_ERR_TOO_SHORT  1
-#define PING_ERR_BAD_NODE   2
-#define PING_ERR_BAD_LINK   3
-#define PING_ERR_BAD_HASH   4
+enum {
+    PING_ERR_OK = 0,
+    PING_ERR_TOO_SHORT,
+    PING_ERR_BAD_NODE,
+    PING_ERR_BAD_LINK,
+    PING_ERR_BAD_HASH,
+    PING_ERR_NOT_PING,
+    PING_ERR_BAD_TYPE,
+    MAX_PING_ERR,
+};
 
 struct ping_packet {
     uint8_t  type;
@@ -99,6 +104,8 @@ void fill_ping_digest(struct ping_packet *pkt, const char *data, int len,
 int verify_ping_sender(struct ping_packet *pkt, const char *data, int len, 
         const unsigned char *key);
 int iszero(const unsigned char *buffer, int len);
+
+const char *ping_err_str(int error);
 
 #endif //_PING_H_
 

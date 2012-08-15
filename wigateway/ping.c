@@ -156,7 +156,7 @@ static int send_ping(struct interface* ife,
     unsigned send_size = MIN_PING_PACKET_SIZE;
 
     struct tunhdr *tunhdr = (struct tunhdr *)buffer;
-    tunhdr->flags = TUNFLAG_DONT_DECAP;
+    tunhdr->flags = TUNFLAG_PING;
 
     struct ping_packet *pkt = (struct ping_packet *)
         (buffer + sizeof(struct tunhdr));
