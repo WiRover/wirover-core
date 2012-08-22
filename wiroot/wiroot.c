@@ -9,6 +9,7 @@
 #include <sys/select.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <signal.h>
 
 #include "config.h"
 #include "configuration.h"
@@ -44,6 +45,8 @@ int main(int argc, char* argv[])
 {
     int server_sock;
     int result;
+
+    signal(SIGSEGV, segfault_handler);
 
     printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR, 
             WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);

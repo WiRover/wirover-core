@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <time.h>
 #include <sys/time.h>
+#include <execinfo.h>
+#include <signal.h>
 
 #include "debug.h"
 
@@ -86,5 +88,35 @@ void __print_warning(const char *msg, ...)
 
     printf("\tWarning: %s\n", buffer);
     fflush(stdout);
+}
+
+void print_backtrace(FILE *out)
+{
+    void* ptrs[MAX_BACKTRACE_LEN];
+    int nptrs = backtrace(ptrs, MAX_BACKTRACE_LEN);
+
+    char** symbols;
+    symbols = backtrace_symbols(ptrs, nptrs);
+    if(!symbols) {
+        perror("backtrace_symbols");
+        return;
+    }
+
+    fprintf(out, "Backtrace:\n");
+
+    int i;
+    for(i = 0; i < nptrs; i++) {
+        fprintf(out, "%2d %s\n", i, symbols[i]);
+    }
+
+    free(symbols);
+}
+
+void segfault_handler(int signo)
+{
+    if(signo == SIGSEGV) {
+        print_backtrace(stderr);
+        exit(1);
+    }
 }
 

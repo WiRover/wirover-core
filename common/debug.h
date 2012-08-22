@@ -6,6 +6,7 @@
 #include <string.h> //for strerror
 
 #define MAX_DEBUG_LEN 1024
+#define MAX_BACKTRACE_LEN 100
 
 #ifndef FAILURE
 #define FAILURE -1
@@ -15,7 +16,7 @@
 #define SUCCESS 0
 #endif
 
-void print_time(FILE* out);
+void print_time(FILE *out);
 
 #ifdef DEBUG_PRINT
 void __debug_msg(const char* file, int line, const char* func, const char* msg, ...);
@@ -36,6 +37,9 @@ void __print_warning(const char *msg, ...);
         __print_warning = 0;            \
     }                                   \
 }
+
+void print_backtrace(FILE *out);
+void segfault_handler(int signo);
 
 /*
  * ASSERT_OR_ELSE adds additional functionality to the assert function.

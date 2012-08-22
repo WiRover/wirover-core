@@ -6,7 +6,7 @@ set(WIROVER_VERSION_MINOR 1)
 set(WIROVER_VERSION_REVISION 2)
 
 # Add -DNDEBUG for release versions to ignore assert()s
-set(CMAKE_C_FLAGS "-g -Wall -pedantic -std=c99 -D_POSIX_C_SOURCE=200809L -DDEBUG_PRINT")
+set(CMAKE_C_FLAGS "-g -rdynamic -Wall -pedantic -std=c99 -D_POSIX_C_SOURCE=200809L -DDEBUG_PRINT")
 
 # Include the common header files
 include_directories(${CMAKE_CURRENT_BINARY_DIR} ${WIROVER_SOURCE_DIR}/common)

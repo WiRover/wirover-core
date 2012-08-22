@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <signal.h>
 
 #include "bandwidth.h"
 #include "configuration.h"
@@ -32,6 +33,8 @@ int main(int argc, char* argv[])
 {
     struct lease_info lease;
     int result;
+
+    signal(SIGSEGV, segfault_handler);
 
     printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR, 
             WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);

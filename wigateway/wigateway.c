@@ -3,6 +3,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <signal.h>
 
 #include <openssl/rand.h>
 #include <openssl/sha.h>
@@ -41,6 +42,8 @@ static int write_node_id_file(int node_id);
 int main(int argc, char* argv[])
 {
     int result;
+
+    signal(SIGSEGV, segfault_handler);
 
     printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR, 
             WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);
