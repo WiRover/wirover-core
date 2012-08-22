@@ -35,6 +35,7 @@
 static const char CREATE_TABLE_GATEWAYS[] = "                       \
     create table if not exists gateways (                           \
         id          int unsigned not null,                          \
+        last_gps_id int unsigned default null,                      \
         name        varchar(16) default null,                       \
         state       tinyint(1) unsigned default 0,                  \
         private_ip  varchar(46) default null,                       \
@@ -355,6 +356,17 @@ int db_update_gps(struct gateway *gw, const struct gps_payload *gps)
 
     gw->last_gps_time = now;
     gw->last_gps_row_id = mysql_insert_id(database);
+
+    /* Update the last_gps_id for the gateway. */
+    len = snprintf(query_buffer, sizeof(query_buffer),
+            "update gateways set last_gps_id=%u where id=%hu",
+            gw->last_gps_row_id, gw->unique_id);
+
+    res = mysql_real_query(database, query_buffer, len);
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto unlock_and_return;
+    }
 
 unlock_and_return:
     pthread_mutex_unlock(&database_lock);
