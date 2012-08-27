@@ -339,6 +339,50 @@ int virt_delete_vroute(uint32_t dest, uint32_t netmask, uint32_t node_ip)
     return 0;
 }
 
+static int send_perf_hint(const char *master, struct virt_perf_hint *hint)
+{
+    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if(sockfd < 0) {
+        ERROR_MSG("creating socket failed");
+        return FAILURE;
+    }
+
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, master, sizeof(ifr.ifr_name));
+    ifr.ifr_data = hint;
+
+    if(ioctl(sockfd, SIOCVIRTPERFHINT, &ifr) < 0) {
+        ERROR_MSG("SIOCVIRTPERFHINT ioctl failed");
+        close(sockfd);
+        return FAILURE;
+    }
+
+    close(sockfd);
+
+    return 0;
+}
+
+int virt_local_bandwidth_hint(int local_dev, long bandwidth)
+{
+    struct virt_perf_hint hint;
+    hint.type = LOCAL_BANDWIDTH_HINT;
+    hint.vph_local_dev = local_dev;
+    hint.bandwidth = bandwidth;
+
+    return send_perf_hint(VIRT_DEVICE, &hint);
+}
+
+int virt_remote_bandwidth_hint(__be32 remote_addr, long bandwidth)
+{
+    struct virt_perf_hint hint;
+    hint.type = REMOTE_BANDWIDTH_HINT;
+    hint.vph_remote_addr = remote_addr;
+    hint.bandwidth = bandwidth;
+
+    return send_perf_hint(VIRT_DEVICE, &hint);
+}
+
 int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device)
 {
     struct rtentry rt;

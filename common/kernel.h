@@ -8,6 +8,9 @@
 #define SIOCVIRTADDVROUTE (SIOCDEVPRIVATE + 4)
 #define SIOCVIRTDELVROUTE (SIOCDEVPRIVATE + 5)
 #define SIOCVIRTSETPOLICY (SIOCDEVPRIVATE + 6)
+#define SIOCVIRTSETLPRIO  (SIOCDEVPRIVATE + 7)
+#define SIOCVIRTSETRPRIO  (SIOCDEVPRIVATE + 8)
+#define SIOCVIRTPERFHINT  (SIOCDEVPRIVATE + 9)
 
 #define VIRT_PROC_REMOTE_ADD     0
 #define VIRT_PROC_REMOTE_DELETE  1
@@ -44,6 +47,26 @@ struct vroute_req {
     __be32 node_ip;
 };
 
+
+enum {
+    LOCAL_BANDWIDTH_HINT = 0,
+    REMOTE_BANDWIDTH_HINT,
+};
+
+struct virt_perf_hint {
+    int type;
+
+    union {
+        int local_dev;
+        __be32 remote_addr;
+    } vph_dev;
+#define vph_local_dev vph_dev.local_dev
+#define vph_remote_addr vph_dev.remote_addr
+
+    long bandwidth;
+};
+
+
 int setup_virtual_interface(__be32 ip, __be32 netmask, unsigned mtu);
 
 int kernel_enslave_device(const char* device);
@@ -61,6 +84,9 @@ int virt_set_gateway_ip(const char *device, const struct in_addr *gw_ip);
 
 int virt_add_vroute(uint32_t dest, uint32_t netmask, uint32_t node_ip);
 int virt_delete_vroute(uint32_t dest, uint32_t netmask, uint32_t node_ip);
+
+int virt_local_bandwidth_hint(int local_dev, long bandwidth);
+int virt_remote_bandwidth_hint(__be32 remote_addr, long bandwidth);
 
 int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device);
 int delete_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device);

@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <limits.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -22,12 +23,14 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 
+#include "arguments.h"
 #include "bandwidth.h"
 #include "config.h"
 #include "configuration.h"
 #include "contchan.h"
 #include "debug.h"
 #include "interface.h"
+#include "kernel.h"
 #include "netlink.h"
 #include "rootchan.h"
 #include "sockets.h"
@@ -426,6 +429,17 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
 
     long elapsed_us = timeval_diff(&last_pkt_time, &first_pkt_time);
     stats->downlink_bw = (double)(bytes_recvd * 8) / (double)elapsed_us; //in Mbps
+
+    if(ARGS.with_kernel && stats->uplink_bw > 0) {
+        long bps;
+
+        if(stats->uplink_bw < (LONG_MAX / 1000000))
+            bps = (long)round(1000000.0 * stats->uplink_bw);
+        else
+            bps = LONG_MAX;
+
+        virt_local_bandwidth_hint(stats->link_id, bps);
+    }
 
     DEBUG_MSG("bytes: %d, time: %ld, downlink_bw: %f Mbps, uplink_bw: %f Mbps",
             bytes_recvd, elapsed_us, stats->downlink_bw, stats->uplink_bw);

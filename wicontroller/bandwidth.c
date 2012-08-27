@@ -9,6 +9,7 @@
 #include <string.h>
 #include <signal.h>
 #include <pthread.h>
+#include <limits.h>
 #include <sys/time.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
@@ -27,6 +28,7 @@
 #include "debug.h"
 #include "gateway.h"
 #include "interface.h"
+#include "kernel.h"
 #include "sockets.h"
 #include "timing.h"
 #include "tunnel.h"
@@ -187,18 +189,29 @@ static int handle_bandwidth_client_udp(struct bw_server_info *serverInfo,
         struct gateway *gw = lookup_gateway_by_id(h_node_id);
         if(gw) {
             time(&gw->last_bw_time);
-
-#ifdef WITH_DATABASE
+            
             struct interface *ife = find_interface_by_index(gw->head_interface, 
                     h_link_id);
             if(ife) {
+                if(gw_downlink_bw > 0) {
+                    long bps;
+
+                    if(gw_downlink_bw < (LONG_MAX / 1000000))
+                        bps = (long)round(1000000.0 * gw_downlink_bw);
+                    else
+                        bps = LONG_MAX;
+
+                    virt_remote_bandwidth_hint(ife->public_ip.s_addr, bps);
+                }
+
+#ifdef WITH_DATABASE
                 ife->avg_downlink_bw = ewma_update(ife->avg_downlink_bw, gw_downlink_bw, BW_EWMA_WEIGHT);
                 ife->avg_uplink_bw = ewma_update(ife->avg_uplink_bw, client->uplink_bw, BW_EWMA_WEIGHT);
 
                 db_update_bandwidth(gw, ife, BW_UDP, gw_downlink_bw, client->uplink_bw);
                 db_update_link(gw, ife);
-            }
 #endif
+            }
         }
     }
 
