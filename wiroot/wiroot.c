@@ -253,7 +253,7 @@ static void handle_gateway_config(struct client* client, const char* packet, int
 
             copy_ipaddr(&lease->ip, &response.priv_ip);
             response.priv_subnet_size = get_lease_subnet_size();
-            response.lease_time = (lease->end - lease->start);
+            response.lease_time = htonl(lease->end - lease->start);
         }
 
         const unsigned int response_len = MIN_RESPONSE_LEN +
@@ -362,7 +362,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
 
             copy_ipaddr(&lease->ip, &response->priv_ip);
             response->priv_subnet_size = get_lease_subnet_size();
-            response->lease_time = (lease->end - lease->start);
+            response->lease_time = htonl(lease->end - lease->start);
             response->controllers = 0;
         }
 

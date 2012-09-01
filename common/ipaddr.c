@@ -154,6 +154,11 @@ void copy_ipaddr(const ipaddr_t* src, ipaddr_t* dest)
     }
 }
 
+int ipaddr_cmp(const ipaddr_t *a, const ipaddr_t *b)
+{
+    return memcmp(a->addr, b->addr, IPADDR_SIZE);
+}
+
 int get_interface_address(const char *dev, struct sockaddr *dest, int dest_len)
 {
     struct ifaddrs *ifap_head = NULL;

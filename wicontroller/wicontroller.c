@@ -28,10 +28,13 @@ static unsigned short bw_ext_port = DEFAULT_BANDWIDTH_PORT;
 
 static void server_loop(int cchan_sock);
 static int find_gateway_ip(const char *device, struct in_addr *gw_ip);
+static int request_lease(const struct lease_info *old_lease, struct lease_info *new_lease);
+
+static struct lease_info lease;
+static time_t lease_renewal_time = 0;
 
 int main(int argc, char* argv[])
 {
-    struct lease_info lease;
     int result;
 
     signal(SIGSEGV, segfault_handler);
@@ -50,23 +53,12 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-    // reg_data_port and reg_control_port are the ports we will advertise to
-    // the root server.  They may differ from the ports we listen on if we are
-    // behind a DNAT.
-    unsigned short reg_data_port = get_register_data_port();
-    if(!reg_data_port)
-        reg_data_port = data_port;
-
-    unsigned short reg_control_port = get_register_control_port();
-    if(!reg_control_port)
-        reg_control_port = control_port;
-
-    result = register_controller(&lease, wiroot_address, wiroot_port, 
-            reg_data_port, reg_control_port);
-    if(result < 0) {
-        DEBUG_MSG("Fatal error: failed to obtain a lease from wiroot server");
-        exit(1);
+    while(request_lease(NULL, &lease) < 0) {
+        DEBUG_MSG("Failed to obtain a lease from root server, retry in %u seconds",
+                LEASE_RETRY_DELAY);
+        sleep(LEASE_RETRY_DELAY);
     }
+    lease_renewal_time = time(NULL) + lease.time_limit - RENEW_BEFORE_EXPIRATION;
 
 #ifdef WITH_DATABASE
     if(init_database() < 0) {
@@ -196,6 +188,18 @@ static void server_loop(int cchan_sock)
                 }
             }
         }
+
+        if(time(NULL) >= lease_renewal_time) {
+            struct lease_info new_lease;
+            if(request_lease(&lease, &new_lease) == 0) {
+                memcpy(&lease, &new_lease, sizeof(lease));
+                lease_renewal_time = time(NULL) + new_lease.time_limit - 
+                    RENEW_BEFORE_EXPIRATION;
+            } else {
+                DEBUG_MSG("Lease renewal failed, will retry in %u seconds");
+                lease_renewal_time = time(NULL) + LEASE_RETRY_DELAY;
+            }
+        }
     }
 }
 
@@ -245,6 +249,66 @@ static int find_gateway_ip(const char *device, struct in_addr *gw_ip)
 
     fclose(file);
     return 0;
+}
+
+/*
+ * Request a lease from root server.  If successful, the new lease is stored in
+ * new_lease.  
+ *
+ * If old_lease is null or new_lease differs from old_lease (eg. received a
+ * different IP address), this function will make the appropriate system
+ * changes.
+ *
+ * Return 0 on success or a negative value on failure.
+ */
+static int request_lease(const struct lease_info *old_lease, struct lease_info *new_lease)
+{
+    const char* wiroot_address = get_wiroot_address();
+    const unsigned short wiroot_port = get_wiroot_port();
+
+    // reg_data_port and reg_control_port are the ports we will advertise to
+    // the root server.  They may differ from the ports we listen on if we are
+    // behind a DNAT.
+    unsigned short reg_data_port = get_register_data_port();
+    if(!reg_data_port)
+        reg_data_port = get_data_port();
+
+    unsigned short reg_control_port = get_register_control_port();
+    if(!reg_control_port)
+        reg_control_port = get_control_port();
+
+    int result = register_controller(new_lease, wiroot_address, wiroot_port, 
+            reg_data_port, reg_control_port);
+    if(result == 0) {
+        if(new_lease->unique_id == 0) {
+            DEBUG_MSG("Lease request rejected");
+            return -1;
+        }
+
+        char my_ip[INET6_ADDRSTRLEN];
+        ipaddr_to_string(&new_lease->priv_ip, my_ip, sizeof(my_ip));
+
+        if(!old_lease || ipaddr_cmp(&new_lease->priv_ip, &old_lease->priv_ip) != 0 ||
+                new_lease->priv_subnet_size != old_lease->priv_subnet_size) {
+            DEBUG_MSG("Obtained lease of %s/%hhu",
+                    my_ip, new_lease->priv_subnet_size);
+
+            uint32_t priv_ip;
+            ipaddr_to_ipv4(&new_lease->priv_ip, &priv_ip);
+    
+            uint32_t priv_netmask = htonl(slash_to_netmask(new_lease->priv_subnet_size));
+            
+            result = setup_virtual_interface(priv_ip, priv_netmask, get_mtu());
+            if(result < 0) {
+                DEBUG_MSG("Fatal error: failed to bring up virtual interface");
+                exit(1);
+            }
+        }
+
+        return 0;
+    } else {
+        return -1;
+    }
 }
 
 

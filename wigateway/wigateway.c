@@ -38,6 +38,9 @@ enum {
 };
 
 static int write_node_id_file(int node_id);
+static int renew_lease(const struct lease_info *old_lease, struct lease_info *new_lease);
+
+static time_t lease_renewal_time = 0;
 
 int main(int argc, char* argv[])
 {
@@ -97,6 +100,20 @@ int main(int argc, char* argv[])
         if(state == GATEWAY_START) {
             result = register_gateway(&lease, wiroot_address, wiroot_port);
             if(result == 0) {
+                if(lease.unique_id == 0) {
+                    DEBUG_MSG("Lease request rejected, will retry in %u seconds",
+                            LEASE_RETRY_DELAY);
+                    sleep(LEASE_RETRY_DELAY);
+                    continue;
+                }
+
+                if(lease.controllers <= 0) {
+                    DEBUG_MSG("Could not find any controllers, will retry in %u seconds",
+                            LEASE_RETRY_DELAY);
+                    sleep(LEASE_RETRY_DELAY);
+                    continue;
+                }
+
                 char my_ip[INET6_ADDRSTRLEN];
                 ipaddr_to_string(&lease.priv_ip, my_ip, sizeof(my_ip));
                 DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease.unique_id);
@@ -108,6 +125,9 @@ int main(int argc, char* argv[])
                 ipaddr_to_ipv4(&lease.priv_ip, &private_ip);
                 private_netmask = htonl(slash_to_netmask(lease.priv_subnet_size));
                 
+                lease_renewal_time = time(NULL) + lease.time_limit -
+                    RENEW_BEFORE_EXPIRATION;
+                
                 if(ARGS.with_kernel) {
                     result = setup_virtual_interface(private_ip, 
                             private_netmask, get_mtu());
@@ -117,36 +137,43 @@ int main(int argc, char* argv[])
                     }
                 }
 
-                if(lease.controllers > 0) {
-                    char cont_ip[INET6_ADDRSTRLEN];
-                    ipaddr_to_string(&lease.cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
-                    DEBUG_MSG("First controller is at: %s", cont_ip);
+                char cont_ip[INET6_ADDRSTRLEN];
+                ipaddr_to_string(&lease.cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
+                DEBUG_MSG("First controller is at: %s", cont_ip);
 
-                    if(ARGS.with_kernel) {
-                        uint32_t priv_ip;
-                        uint32_t pub_ip;
+                if(ARGS.with_kernel) {
+                    uint32_t priv_ip;
+                    uint32_t pub_ip;
 
-                        ipaddr_to_ipv4(&lease.cinfo[0].priv_ip, &priv_ip);
-                        ipaddr_to_ipv4(&lease.cinfo[0].pub_ip, &pub_ip);
+                    ipaddr_to_ipv4(&lease.cinfo[0].priv_ip, &priv_ip);
+                    ipaddr_to_ipv4(&lease.cinfo[0].pub_ip, &pub_ip);
 
-                        virt_add_remote_node((struct in_addr *)&priv_ip);
-                        virt_add_remote_link((struct in_addr *)&priv_ip, 
-                            (struct in_addr *)&pub_ip, lease.cinfo[0].data_port);
-                    
-                        // Add a default vroute that directs all traffic to the controller
-                        virt_add_vroute(0, 0, priv_ip);
-                    }
+                    virt_add_remote_node((struct in_addr *)&priv_ip);
+                    virt_add_remote_link((struct in_addr *)&priv_ip, 
+                        (struct in_addr *)&pub_ip, lease.cinfo[0].data_port);
+                
+                    // Add a default vroute that directs all traffic to the controller
+                    virt_add_vroute(0, 0, priv_ip);
+                }
 
-                    if(start_ping_thread() == FAILURE) {
-                        DEBUG_MSG("Failed to start ping thread");
-                        exit(1);
-                    }
-                } else {
-                    DEBUG_MSG("Cannot continue without a controller");
+                if(start_ping_thread() == FAILURE) {
+                    DEBUG_MSG("Failed to start ping thread");
                     exit(1);
                 }
                 
                 state = GATEWAY_LEASE_OBTAINED;
+            }
+        } else if(time(NULL) >= lease_renewal_time) {
+            struct lease_info new_lease;
+            if(renew_lease(&lease, &new_lease) == 0) {
+                memcpy(&lease, &new_lease, sizeof(lease));
+                lease_renewal_time = time(NULL) + lease.time_limit -
+                    RENEW_BEFORE_EXPIRATION;
+            } else {
+                DEBUG_MSG("Lease renewal failed, will retry in %u seconds",
+                        LEASE_RETRY_DELAY);
+                sleep(LEASE_RETRY_DELAY);
+                continue;
             }
         }
 
@@ -210,5 +237,63 @@ static int write_node_id_file(int node_id)
 
     fclose(file);
     return 0;
+}
+
+/*
+ * Attempt to renew lease with root server.  If successful, the new lease is
+ * stored in new_lease.  If new_lease differs from old_lease (eg. received a
+ * different IP address), this function will make the appropriate changes.
+ *
+ * Return 0 on success or a negative value on failure.
+ */
+static int renew_lease(const struct lease_info *old_lease, struct lease_info *new_lease)
+{
+    const char* wiroot_address = get_wiroot_address();
+    const unsigned short wiroot_port = get_wiroot_port();
+
+    int result = register_gateway(new_lease, wiroot_address, wiroot_port);
+    if(result == 0) {
+        char my_ip[INET6_ADDRSTRLEN];
+        ipaddr_to_string(&new_lease->priv_ip, my_ip, sizeof(my_ip));
+
+        if(new_lease->unique_id == 0) {
+            DEBUG_MSG("Lease renewal rejected");
+            return -1;
+        }
+
+        if(ipaddr_cmp(&new_lease->priv_ip, &old_lease->priv_ip) != 0 ||
+                new_lease->priv_subnet_size != old_lease->priv_subnet_size) {
+            DEBUG_MSG("Obtained lease of %s/%hhu", 
+                    my_ip, new_lease->priv_subnet_size);
+
+            if(ARGS.with_kernel) {
+                uint32_t private_ip;
+                ipaddr_to_ipv4(&new_lease->priv_ip, &private_ip);
+                
+                uint32_t private_netmask = htonl(slash_to_netmask(new_lease->priv_subnet_size));
+            
+                result = setup_virtual_interface(private_ip, private_netmask, get_mtu());
+                if(result == -1) {
+                    DEBUG_MSG("Failed to bring up virtual interface");
+                    exit(1);
+                }
+            }
+        } else {
+            DEBUG_MSG("Renewed lease of %s/%hhu", 
+                    my_ip, new_lease->priv_subnet_size);
+        }
+        
+        if(new_lease->unique_id != old_lease->unique_id) {
+            DEBUG_MSG("Changing unique_id from %u to %u\n");
+            write_node_id_file(new_lease->unique_id);
+            call_on_lease(new_lease->unique_id);
+        }
+
+        /* TODO: Handle potential change of controller */
+
+        return 0;
+    } else {
+        return -1;
+    }
 }
 

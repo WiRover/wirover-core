@@ -67,5 +67,8 @@
 #define NODE_ID_MAX_HEX_LEN 128
 #define NODE_ID_MAX_BIN_LEN 64
 
+#define LEASE_RETRY_DELAY   60
+#define RENEW_BEFORE_EXPIRATION   600
+
 #endif //_CONFIG_H_
 

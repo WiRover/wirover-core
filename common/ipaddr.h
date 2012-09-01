@@ -25,6 +25,8 @@ int     ipv4_to_ipaddr(uint32_t addr, ipaddr_t* dest);
 int     ipaddr_to_ipv4(const ipaddr_t* addr, uint32_t* dest);
 void    copy_ipaddr(const ipaddr_t* src, ipaddr_t* dest);
 
+int ipaddr_cmp(const ipaddr_t *a, const ipaddr_t *b);
+
 int get_interface_address(const char *dev, struct sockaddr *dest, int dest_len);
 int resolve_address(const char *address, struct sockaddr *dest, int dest_len);
 

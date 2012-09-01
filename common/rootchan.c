@@ -94,6 +94,7 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
     
     copy_ipaddr(&response.priv_ip, &lease->priv_ip);
     lease->priv_subnet_size = response.priv_subnet_size;
+    lease->time_limit = ntohl(response.lease_time);
     lease->unique_id = ntohs(response.unique_id);
     lease->controllers = 0;
    
@@ -183,6 +184,7 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
 
     copy_ipaddr(&response.priv_ip, &lease->priv_ip);
     lease->priv_subnet_size = response.priv_subnet_size;
+    lease->time_limit = ntohl(response.lease_time);
     lease->unique_id = ntohs(response.unique_id);
     lease->controllers = response.controllers;
 

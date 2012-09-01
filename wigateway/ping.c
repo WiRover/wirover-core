@@ -31,13 +31,20 @@ static int send_second_response(const struct interface *ife,
         const char *buffer, int len, const struct sockaddr *to, socklen_t to_len);
 static void mark_inactive_interfaces(int link_timeout);
 
-static int          running;
+static int          running = 0;
 static pthread_t    ping_thread;
+static int          ping_socket = -1;
 
 int start_ping_thread()
 {
     if(running) {
         DEBUG_MSG("Ping thread already running");
+        return 0;
+    }
+ 
+    ping_socket = udp_bind_open(get_data_port(), 0);
+    if(ping_socket == FAILURE) {
+        DEBUG_MSG("Ping thread cannot start due to failure");
         return FAILURE;
     }
 
@@ -47,10 +54,11 @@ int start_ping_thread()
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-    int result;
-    result = pthread_create(&ping_thread, &attr, ping_thread_func, 0);
+    int result = pthread_create(&ping_thread, &attr, ping_thread_func, 0);
     if(result != 0) {
         ERROR_MSG("Creating thread failed");
+        close(ping_socket);
+        ping_socket = -1;
         return FAILURE;
     }
 
@@ -209,16 +217,9 @@ void* ping_thread_func(void* arg)
 {
     const unsigned int ping_interval = get_ping_interval();
     const unsigned int link_timeout = get_link_timeout();
-    int sockfd;
-
-    sockfd = udp_bind_open(get_data_port(), 0);
-    if(sockfd == FAILURE) {
-        DEBUG_MSG("Ping thread cannot continue due to failure");
-        return 0;
-    }
 
     // We never want reads to hold up the thread.
-    set_nonblock(sockfd, NONBLOCKING);
+    set_nonblock(ping_socket, NONBLOCKING);
 
     // Initialize this so that the first ping will be sent immediately.
     struct timeval last_ping_time = {
@@ -271,20 +272,22 @@ void* ping_thread_func(void* arg)
 
         fd_set read_set;
         FD_ZERO(&read_set);
-        FD_SET(sockfd, &read_set);
+        FD_SET(ping_socket, &read_set);
 
         struct timeval timeout;
         set_timeval_usec(next_timeout, &timeout);
 
-        int result = select(sockfd+1, &read_set, 0, 0, &timeout);
-        if(result > 0 && FD_ISSET(sockfd, &read_set)) {
-            handle_incoming(sockfd, ping_interval);
+        int result = select(ping_socket+1, &read_set, 0, 0, &timeout);
+        if(result > 0 && FD_ISSET(ping_socket, &read_set)) {
+            handle_incoming(ping_socket, ping_interval);
         } else if(result < 0) {
-            ERROR_MSG("select failed for ping socket (%d)", sockfd);
+            ERROR_MSG("select failed for ping socket (%d)", ping_socket);
         }
     }
 
-    close(sockfd);
+    close(ping_socket);
+    ping_socket = -1;
+
     running = 0;
     return 0;
 }
