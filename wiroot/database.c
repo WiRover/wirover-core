@@ -173,6 +173,38 @@ int db_check_privilege(const char *node_id, int priv)
 }
 
 /*
+ * Grant a privilege to the given node_id.
+ *
+ * Returns a positive ID if the privilege is to be granted, 0 if not, or
+ * negative if there is an error.
+ */
+int db_grant_privilege(const char *node_id, int priv)
+{
+    int result;
+    int id = 0;
+
+    int node_id_len = strlen(node_id);
+    char *node_id_esc = malloc(2 * node_id_len + 1);
+    if(!node_id_esc)
+        return -1;
+    mysql_real_escape_string(database, node_id_esc, node_id, node_id_len);
+
+    const char *priv_str = (priv == PRIV_REG_CONTROLLER) ?
+        "controller_priv" : "gateway_priv";
+
+    result = db_query("insert into privileges (node_id, %s) values ('%s', 1) on duplicate key update %s=1",
+            priv_str, node_id_esc, priv_str);
+    free(node_id_esc);
+
+    if(result < 0)
+        return -1;
+
+    id = mysql_insert_id(database);
+
+    return id;
+}
+
+/*
  * Record an access request so that a network admin can approve it.
  */
 int db_add_access_request(int priv, const char *node_id, const char *src_ip, int result)

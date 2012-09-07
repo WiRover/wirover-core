@@ -32,6 +32,9 @@ static int            CLIENT_TIMEOUT = 5;
 // Doubly-linked list of connected clients
 static struct client* clients_head = 0;
 
+// Whether or not to automatically grant new privileges.
+static int auto_grant = 0;
+
 static int  configure_wiroot(const char* filename);
 static void handle_incoming(struct client* client);
 static void handle_gateway_config(struct client* client, const char* packet, int length);
@@ -157,6 +160,8 @@ static int configure_wiroot(const char* filename)
         return -1;
     }
 
+    config_lookup_bool(config, "auto-grant", &auto_grant);
+
     return 0;
 }
 
@@ -230,6 +235,9 @@ static void handle_gateway_config(struct client* client, const char* packet, int
     }
 
     int unique_id = db_check_privilege(node_id_hex, PRIV_REG_GATEWAY);
+    if(unique_id <= 0 && auto_grant)
+        unique_id = db_grant_privilege(node_id_hex, PRIV_REG_GATEWAY);
+
     if(unique_id > 0) {
         const struct lease* lease;
         lease = grant_lease(unique_id);
@@ -313,6 +321,9 @@ static void handle_controller_config(struct client* client, const char* packet, 
     }
 
     int unique_id = db_check_privilege(node_id_hex, PRIV_REG_CONTROLLER);
+    if(unique_id <= 0 && auto_grant)
+        unique_id = db_grant_privilege(node_id_hex, PRIV_REG_CONTROLLER);
+
     if(unique_id > 0) {
         const struct lease* lease;
         lease = grant_lease(unique_id);
