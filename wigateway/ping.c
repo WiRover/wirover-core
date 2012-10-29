@@ -29,7 +29,7 @@ static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd, int timeout);
 static int send_second_response(const struct interface *ife, 
         const char *buffer, int len, const struct sockaddr *to, socklen_t to_len);
-static void mark_inactive_interfaces(int link_timeout);
+static void mark_inactive_interfaces(int ping_timeout);
 
 static int          running = 0;
 static pthread_t    ping_thread;
@@ -205,7 +205,8 @@ static int send_ping(struct interface* ife,
     // response packet to make sure the response is for the most recent
     // request.
     upgrade_read_lock(&interface_list_lock);
-    ife->last_ping_time = now.tv_sec;
+    //ife->last_ping_time = now.tv_sec;
+    ife->last_ping_time = time(NULL);
     downgrade_write_lock(&interface_list_lock);
 
     free(buffer);
@@ -214,82 +215,82 @@ static int send_ping(struct interface* ife,
 }
 
 void* ping_thread_func(void* arg)
-{
-    const unsigned int ping_interval = get_ping_interval();
-    const unsigned int link_timeout = get_link_timeout();
+{   
+	const unsigned int ping_interval = get_ping_interval();
+	const unsigned int ping_timeout  = get_ping_timeout();
 
-    // We never want reads to hold up the thread.
-    set_nonblock(ping_socket, NONBLOCKING);
+	// We never want reads to hold up the thread.
+	set_nonblock(ping_socket, NONBLOCKING);
 
-    // Initialize this so that the first ping will be sent immediately.
-    struct timeval last_ping_time = {
-        .tv_sec = time(0) - ping_interval, .tv_usec = 0};
+	// Initialize this so that the first ping will be sent immediately.
+	struct timeval last_ping_time = {
+		.tv_sec = time(0) - ping_interval, .tv_usec = 0};
 
-    int num_ifaces = 0;
-    int curr_iface_pos = 0;
+	int num_ifaces = 0;
+	int curr_iface_pos = 0;
 
-    unsigned ping_spacing = ping_interval * USEC_PER_SEC;
-    unsigned next_timeout;
+	unsigned ping_spacing = ping_interval * USEC_PER_SEC;
+	unsigned next_timeout;
 
-    while(1) {
-        if(curr_iface_pos >= num_ifaces) {
-            obtain_read_lock(&interface_list_lock);
-            num_ifaces = count_all_interfaces(interface_list);
-            release_read_lock(&interface_list_lock);
+	while(1) {
+		if(curr_iface_pos >= num_ifaces) {
+			obtain_read_lock(&interface_list_lock);
+			num_ifaces = count_all_interfaces(interface_list);
+			release_read_lock(&interface_list_lock);
             
-            curr_iface_pos = 0;
+			curr_iface_pos = 0;
 
-            if(num_ifaces > 0)
-                ping_spacing = ping_interval * USEC_PER_SEC / num_ifaces;
-            else
-                ping_spacing = ping_interval * USEC_PER_SEC;
-        }
+			if(num_ifaces > 0)
+				ping_spacing = ping_interval * USEC_PER_SEC / num_ifaces;
+			else
+				ping_spacing = ping_interval * USEC_PER_SEC;
+		}
 
-        struct timeval now;
-        gettimeofday(&now, 0);
+		struct timeval now;
+		gettimeofday(&now, 0);
 
-        long time_diff = timeval_diff(&now, &last_ping_time);
-        if(time_diff >= ping_spacing) {
-            mark_inactive_interfaces(link_timeout);
+		long time_diff = timeval_diff(&now, &last_ping_time);
+		if(time_diff >= ping_spacing) {
+			mark_inactive_interfaces(ping_timeout);
 
-            obtain_read_lock(&interface_list_lock);
-            struct interface *ife = find_interface_at_pos(
-                    interface_list, curr_iface_pos);
-            if(ife) {
-                ping_interface(ife);
-            }
-            release_read_lock(&interface_list_lock);
+			obtain_read_lock(&interface_list_lock);
+			struct interface *ife = find_interface_at_pos(
+				interface_list, curr_iface_pos);
+			if(ife && ife->num_ping_failures == 0) {
+				ping_interface(ife);
+			}
+			release_read_lock(&interface_list_lock);
 
-            memcpy(&last_ping_time, &now, sizeof(last_ping_time));
-            next_timeout = ping_spacing;
+			memcpy(&last_ping_time, &now, sizeof(last_ping_time));
+			next_timeout = ping_spacing;
 
-            curr_iface_pos++;
-        } else {
-            // Set the timeout on select such that it will return in time for
-            // the next ping.
-            next_timeout = ping_spacing - time_diff;
-        }
+			curr_iface_pos++;
+		} else {
+			// Set the timeout on select such that it will return in time for
+			// the next ping.
+			next_timeout = ping_spacing - time_diff;
+		}
 
-        fd_set read_set;
-        FD_ZERO(&read_set);
-        FD_SET(ping_socket, &read_set);
+		fd_set read_set;
+		FD_ZERO(&read_set);
+		FD_SET(ping_socket, &read_set);
 
-        struct timeval timeout;
-        set_timeval_usec(next_timeout, &timeout);
+		struct timeval timeout;
+		set_timeval_usec(next_timeout, &timeout);
 
-        int result = select(ping_socket+1, &read_set, 0, 0, &timeout);
-        if(result > 0 && FD_ISSET(ping_socket, &read_set)) {
-            handle_incoming(ping_socket, ping_interval);
-        } else if(result < 0) {
-            ERROR_MSG("select failed for ping socket (%d)", ping_socket);
-        }
-    }
+		int result = select(ping_socket+1, &read_set, 0, 0, &timeout);
+		if(result > 0 && FD_ISSET(ping_socket, &read_set)) {
+			handle_incoming(ping_socket, ping_interval);
+		} else if(result < 0) {
+			ERROR_MSG("select failed for ping socket (%d)", ping_socket);
+		}
+	}
+	
+	close(ping_socket);
+	ping_socket = -1;
 
-    close(ping_socket);
-    ping_socket = -1;
-
-    running = 0;
-    return 0;
+	running = 0;
+	return 0;
 }
 
 /*
@@ -422,7 +423,7 @@ static int send_second_response(const struct interface *ife,
     int send_size = MIN_PING_PACKET_SIZE + sizeof(struct passive_payload);
     char *response = malloc(send_size);
     if(!response) {
-        DEBUG_MSG("out of memory");
+    	DEBUG_MSG("out of memory");
         return -1;
     }
 
@@ -459,30 +460,58 @@ static int send_second_response(const struct interface *ife,
     return 0;
 }
 
-static void mark_inactive_interfaces(int link_timeout)
+static void mark_inactive_interfaces(int ping_timeout)
 {
-    int notif_needed = 0;
-    time_t now = time(NULL);
+	int notif_needed = 0;
+	time_t now = time(NULL);
 
-    obtain_read_lock(&interface_list_lock);
+	const int PING_TIMEOUT      = ping_timeout;
+	const int MAX_PING_FAILURES = get_max_ping_failures();
 
-    struct interface* curr_ife = interface_list;
-    while(curr_ife) {
-        if(curr_ife->state == ACTIVE && 
-                (now - curr_ife->last_ping_success) >= link_timeout) {
-            change_interface_state(curr_ife, INACTIVE);
-            notif_needed = 1;
-        }
+	obtain_read_lock(&interface_list_lock);
 
-        assert(curr_ife != curr_ife->next);
-        curr_ife = curr_ife->next;
-    }
+	struct interface* curr_ife = interface_list;
+	while (curr_ife) {
+		// Ping has returned if last success > last ping time
+		int ping_has_returned = 
+			(curr_ife->last_ping_time <= curr_ife->last_ping_success) ? 1 : 0;
+		// If ping doesn't return within timeout
+		int waited_timeout = 
+			(now - curr_ife->last_ping_time > PING_TIMEOUT) ? 1 : 0;
+		// If ping returned but took longer than a timeout
+		int ping_timeout_exceeded =
+			(curr_ife->last_ping_success - curr_ife->last_ping_time > PING_TIMEOUT) 
+			? 1 : 0;
+	
+		if (curr_ife->state == ACTIVE &&
+			((!ping_has_returned && waited_timeout) ||
+			(ping_has_returned && ping_timeout_exceeded))) {
+	
+			// Increment failures and ping interface
+			curr_ife->num_ping_failures++;
+			ping_interface(curr_ife);
+	    
+			// If interface has failed too many times, mark inactive
+			if (curr_ife->num_ping_failures >= MAX_PING_FAILURES) {
+				change_interface_state(curr_ife, INACTIVE);
+				notif_needed = 1;
+				curr_ife->num_ping_failures = 0;
+			}
+		}
+		else if (ping_has_returned && !ping_timeout_exceeded) {
+			curr_ife->num_ping_failures = 0;
+		}
 
-    release_read_lock(&interface_list_lock);
+		assert(curr_ife->num_ping_failures >= 0 && 
+			curr_ife->num_ping_failures <= MAX_PING_FAILURES);
+		assert(curr_ife != curr_ife->next);
 
-    if(notif_needed) {
-        send_notification(1);
-    }
+		curr_ife = curr_ife->next;
+	}
+
+	release_read_lock(&interface_list_lock);
+
+	if(notif_needed) {
+		send_notification(1);
+	}
 }
-
-

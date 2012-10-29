@@ -74,6 +74,7 @@ int init_interface_list()
 
                 ife->data_port = htons(get_data_port());
                 ife->priority = priority;
+                ife->num_ping_failures = 0;
 
                 add_interface(ife);
             }

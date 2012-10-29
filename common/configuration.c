@@ -162,6 +162,22 @@ unsigned int get_ping_interval()
     return interval;
 }
 
+unsigned int get_max_ping_failures()
+{
+    const config_t* config = get_config();
+    
+    int max_ping_failures;
+    if(!config || config_lookup_int_compat(config, CONFIG_MAX_PING_FAILURES, &max_ping_failures) == CONFIG_FALSE) {
+        DEBUG_MSG("failed to read max-ping-failures from config file");
+        max_ping_failures = DEFAULT_MAX_PING_FAILURES;
+    } else if(max_ping_failures <= 0) {
+        DEBUG_MSG("max-ping-failures %d is not acceptable", max_ping_failures);
+        max_ping_failures = DEFAULT_MAX_PING_FAILURES;
+    }
+
+    return max_ping_failures;
+}
+
 unsigned int get_mtu()
 {
     const config_t* config = get_config();
@@ -240,18 +256,18 @@ unsigned int get_bandwidth_test_interval()
     return interval;
 }
 
-int get_link_timeout()
+int get_ping_timeout()
 {
     const config_t* config = get_config();
 
     int timeout;
-    if(!config || config_lookup_int_compat(config, CONFIG_LINK_TIMEOUT, 
+    if(!config || config_lookup_int_compat(config, CONFIG_PING_TIMEOUT, 
                 &timeout) == CONFIG_FALSE) {
-        DEBUG_MSG("failed to read %s from config file", CONFIG_LINK_TIMEOUT);
-        timeout = DEFAULT_LINK_TIMEOUT;
+        DEBUG_MSG("failed to read %s from config file", CONFIG_PING_TIMEOUT);
+        timeout = DEFAULT_PING_TIMEOUT;
     } else if(timeout <= 0) {
-        DEBUG_MSG("%s %d is not valid", CONFIG_LINK_TIMEOUT, timeout);
-        timeout = DEFAULT_LINK_TIMEOUT;
+        DEBUG_MSG("%s %d is not valid", CONFIG_PING_TIMEOUT, timeout);
+        timeout = DEFAULT_PING_TIMEOUT;
     }
 
     return timeout;

@@ -23,6 +23,7 @@ struct interface {
     char              network[NETWORK_NAME_LENGTH];
     enum if_state     state;
     int               priority;
+	int               num_ping_failures;
 
     /* These are in network byte order. */
     struct in_addr    public_ip;

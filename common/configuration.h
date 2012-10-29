@@ -25,7 +25,8 @@
 #define CONFIG_REGISTER_CONTROL_PORT    "register-control-port"
 #define CONFIG_REGISTER_BANDWIDTH_PORT  "register-bandwidth-port"
 #define CONFIG_BANDWIDTH_TEST_INTERVAL  "bandwidth-test-interval"
-#define CONFIG_LINK_TIMEOUT             "link-timeout"
+#define CONFIG_PING_TIMEOUT             "ping-timeout"
+#define CONFIG_MAX_PING_FAILURES        "max-ping-failures"
 
 #define CONFIG_MYSQL_HOST           "mysql-host"
 #define CONFIG_MYSQL_USER           "mysql-user"
@@ -45,7 +46,8 @@
 #define DEFAULT_REGISTER_BANDWIDTH_PORT 0
 
 #define DEFAULT_BANDWIDTH_TEST_INTERVAL 60
-#define DEFAULT_LINK_TIMEOUT            30
+#define DEFAULT_PING_TIMEOUT             3
+#define DEFAULT_MAX_PING_FAILURES        4
 
 #define DEFAULT_MYSQL_HOST          "localhost"
 #define DEFAULT_MYSQL_USER          "wirover"
@@ -63,11 +65,12 @@ unsigned short  get_wiroot_port();
 unsigned short  get_data_port();
 unsigned short  get_control_port();
 unsigned int    get_ping_interval();
+unsigned int    get_max_ping_failures();
 unsigned int    get_mtu();
 const char*     get_internal_interface();
 int             get_interface_priority(const char *ifname);
 unsigned int    get_bandwidth_test_interval();
-int             get_link_timeout();
+int             get_ping_timeout();
 
 const char      *get_register_address();
 unsigned short  get_register_data_port();
