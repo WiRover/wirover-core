@@ -146,7 +146,6 @@ static int send_ping(struct interface* ife,
         const struct sockaddr* dest_addr, socklen_t dest_len)
 {
     int sockfd;
-    struct timeval now;
     int bytes;
 
     sockfd = udp_bind_open(get_data_port(), ife->name);

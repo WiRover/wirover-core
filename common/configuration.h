@@ -14,6 +14,14 @@
 #define CONFIG_FILENAME "wiroot.conf"
 #endif
 
+/* Description of configuration parameters:
+ *
+ * ...
+ * ping-timeout: timeout for a single ping response
+ * max-ping-failures: number of failures before making interface INACTIVE
+ * link-timeout: idle period before marking interface INACTIVE (on controller)
+ */
+
 /* Configuration file keys */
 #define CONFIG_WIROOT_ADDRESS           "wiroot-address"
 #define CONFIG_WIROOT_PORT              "wiroot-port"
@@ -27,6 +35,7 @@
 #define CONFIG_BANDWIDTH_TEST_INTERVAL  "bandwidth-test-interval"
 #define CONFIG_PING_TIMEOUT             "ping-timeout"
 #define CONFIG_MAX_PING_FAILURES        "max-ping-failures"
+#define CONFIG_LINK_TIMEOUT             "link-timeout"
 
 #define CONFIG_MYSQL_HOST           "mysql-host"
 #define CONFIG_MYSQL_USER           "mysql-user"
@@ -48,6 +57,7 @@
 #define DEFAULT_BANDWIDTH_TEST_INTERVAL 60
 #define DEFAULT_PING_TIMEOUT             3
 #define DEFAULT_MAX_PING_FAILURES        4
+#define DEFAULT_LINK_TIMEOUT             15
 
 #define DEFAULT_MYSQL_HOST          "localhost"
 #define DEFAULT_MYSQL_USER          "wirover"
@@ -71,6 +81,7 @@ const char*     get_internal_interface();
 int             get_interface_priority(const char *ifname);
 unsigned int    get_bandwidth_test_interval();
 int             get_ping_timeout();
+int             get_link_timeout();
 
 const char      *get_register_address();
 unsigned short  get_register_data_port();
