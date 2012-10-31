@@ -17,6 +17,9 @@ static void update_interface_v2(struct gateway *gw, const struct interface_info_
 static void remove_dead_interfaces(struct gateway *gw);
 static int send_response_v2(int sockfd, const struct gateway *gw, uint16_t bw_port);
 
+static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len);
+static int remove_gateway(struct gateway *gw);
+
 static int process_notification_v1(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port);
 static struct gateway* make_gateway_v1(const struct cchan_notification_v1* notif);
 static void update_gateway_v1(struct gateway* gw, const struct cchan_notification_v1* notif);
@@ -52,6 +55,8 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len, u
         case CCHAN_INTERFACE:
             DEBUG_MSG("Received orphaned interface update message");
             break;
+        case CCHAN_SHUTDOWN:
+            return process_shutdown(sockfd, packet, pkt_len);
         default:
             DEBUG_MSG("Unrecognized control channel message type: %hhu", hdr->type);
             return -1;
@@ -280,6 +285,83 @@ static int send_response_v2(int sockfd, const struct gateway *gw, uint16_t bw_po
 
     return 0;
 }
+
+static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len)
+{
+    const struct cchan_shutdown *notif = (const struct cchan_shutdown *)packet;
+    if(pkt_len < sizeof(struct cchan_shutdown) || notif->len < sizeof(struct cchan_shutdown)) {
+        DEBUG_MSG("Notification packet is too small (size %u)", pkt_len);
+        return -1;
+    }
+
+    struct gateway *gw = lookup_gateway_by_id(ntohs(notif->unique_id));
+    if(!gw) {
+        DEBUG_MSG("Received shutdown notification for unrecognized gateway %hhu", notif->unique_id);
+        return -1;
+    }
+
+    if(memcmp(gw->private_key, notif->key, sizeof(gw->private_key)) != 0) {
+        DEBUG_MSG("Received shutdown notification with non-matching key for gateway %hhu", notif->unique_id);
+        return -1;
+    }
+
+    remove_gateway(gw);
+
+    return 0;
+}
+
+/*
+ * This updates the gateway state in the database and frees all of the
+ * structures associated with the gateway and its interfaces.
+ *
+ * As a result of this function call, the memory pointed to by gw will be
+ * freed.
+ */
+static int remove_gateway(struct gateway *gw)
+{
+    struct interface *ife;
+    struct interface *tmp_ife;
+
+    struct in_addr private_ip;
+    ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
+
+    DL_FOREACH_SAFE(gw->head_interface, ife, tmp_ife) {
+        if(ife->state != DEAD) {
+            ife->state = DEAD;
+
+#ifdef WITH_DATABASE
+            db_update_link(gw, ife);
+#endif
+
+            if(ife->state == ACTIVE) {
+                gw->active_interfaces--;
+                virt_remove_remote_link(&private_ip, &ife->public_ip);
+            }
+        }
+
+        DL_DELETE(gw->head_interface, ife);
+        free(ife);
+    }
+
+    virt_remove_remote_node(&private_ip);
+
+    // TODO: This could be made more configurable.
+    uint32_t client_network = htonl(0x0A000000 | ((uint32_t)gw->unique_id << 8));
+    uint32_t client_netmask = htonl(0xFFFFFF00);
+    virt_delete_vroute(client_network, client_netmask, private_ip.s_addr);
+                
+    gw->state = DEAD;
+
+#ifdef WITH_DATABASE
+    db_update_gateway(gw, 1);
+#endif
+
+    HASH_DELETE(hh_id, gateway_id_hash, gw);
+    free(gw);
+
+    return 0;
+}
+
 
 static int process_notification_v1(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port)
 {

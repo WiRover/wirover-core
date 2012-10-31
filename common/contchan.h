@@ -25,6 +25,10 @@
 #define CCHAN_NOTIFICATION_V1   0x10
 #define CCHAN_NOTIFICATION_V2   0x20
 #define CCHAN_INTERFACE         0x21
+#define CCHAN_SHUTDOWN          0x22
+
+#define SHUTDOWN_REASON_NORMAL  0x01
+#define SHUTDOWN_REASON_CRASH   0x02
 
 #define CCHAN_CONNECT_TIMEOUT_SEC  5
 #define CCHAN_RESPONSE_TIMEOUT_SEC 5
@@ -80,6 +84,17 @@ struct interface_info_v2 {
 } __attribute__((__packed__));
 #define MIN_INTERFACE_INFO_V2_LEN (sizeof(struct interface_info_v2))
 
+struct cchan_shutdown {
+    uint8_t     type;
+    uint8_t     len;
+
+    ipaddr_t    priv_ip;
+    uint16_t    unique_id;
+    uint8_t     key[SHA256_DIGEST_LENGTH];
+
+    uint8_t     reason;
+} __attribute__((__packed__));
+
 /* Obsolete - only used prior to 1.1.4 */
 struct interface_info_v1 {
     uint32_t    link_id;
@@ -111,6 +126,7 @@ int process_notification(int sockfd, const char* packet, unsigned int pkt_len, u
 #ifdef GATEWAY
 int send_notification(int max_tries);
 uint16_t get_remote_bw_port();
+int send_shutdown_notification();
 
 extern uint8_t private_key[SHA256_DIGEST_LENGTH];
 extern uint16_t remote_unique_id;

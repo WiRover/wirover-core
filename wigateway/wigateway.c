@@ -39,6 +39,7 @@ enum {
 
 static int write_node_id_file(int node_id);
 static int renew_lease(const struct lease_info *old_lease, struct lease_info *new_lease);
+static void shutdown_handler(int signo);
 
 static time_t lease_renewal_time = 0;
 
@@ -47,6 +48,7 @@ int main(int argc, char* argv[])
     int result;
 
     signal(SIGSEGV, segfault_handler);
+    signal(SIGINT, shutdown_handler);
 
     printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR, 
             WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);
@@ -294,6 +296,14 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
         return 0;
     } else {
         return -1;
+    }
+}
+
+static void shutdown_handler(int signo)
+{
+    if(signo == SIGINT) {
+        send_shutdown_notification();
+        exit(0);
     }
 }
 

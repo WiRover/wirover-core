@@ -180,3 +180,59 @@ uint16_t get_remote_bw_port()
     return remote_bw_port;
 }
 
+int send_shutdown_notification()
+{
+    int sockfd;
+
+    char controller_ip[INET6_ADDRSTRLEN];
+    if(get_controller_ip(controller_ip, sizeof(controller_ip)) == FAILURE) {
+        DEBUG_MSG("There are no controllers!");
+        return FAILURE;
+    }
+
+    const unsigned short controller_port = get_controller_control_port();
+
+    struct timeval timeout;
+    timeout.tv_sec  = CCHAN_CONNECT_TIMEOUT_SEC;
+    timeout.tv_usec = 0;
+
+    sockfd = tcp_active_open(controller_ip, controller_port, NULL, &timeout);
+    if(sockfd == -1) {
+        DEBUG_MSG("Failed to open control channel with controller %s:%d",
+                  controller_ip, controller_port);
+        return FAILURE;
+    }
+
+    struct cchan_shutdown notif;
+    memset(&notif, 0, sizeof(notif));
+
+    notif.type = CCHAN_SHUTDOWN;
+    notif.len = sizeof(notif);
+
+    get_private_ip(&notif.priv_ip);
+    notif.unique_id = htons(get_unique_id());
+    memcpy(notif.key, private_key, sizeof(notif.key));
+
+    notif.reason = SHUTDOWN_REASON_NORMAL;
+    
+    int bytes = send(sockfd, &notif, sizeof(notif), 0);
+
+    if(bytes < 0) {
+        ERROR_MSG("sending notification failed");
+        goto close_and_fail;
+    } else if(bytes == 0) {
+        DEBUG_MSG("Controller closed control channel");
+        goto close_and_fail;
+    } else if(bytes < sizeof(notif)) {
+        DEBUG_MSG("Full notification packet was not sent, investigate this.");
+        goto close_and_fail;
+    }
+
+    close(sockfd);
+    return 0;
+
+close_and_fail:
+    close(sockfd);
+    return FAILURE;
+}
+
