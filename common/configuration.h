@@ -64,6 +64,9 @@
 #define DEFAULT_MYSQL_PASSWORD      ""
 #define DEFAULT_MYSQL_DATABASE      "gateways"
 
+#define MIN_INTERFACE_PRIORITY   -128
+#define MAX_INTERFACE_PRIORITY   127
+
 const config_t*     get_config();
 void                close_config();
 

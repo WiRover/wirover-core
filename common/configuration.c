@@ -206,6 +206,12 @@ const char* get_internal_interface()
     return interface;
 }
 
+/* 
+ * Returns the interface priority from the configuration file.  If the priority
+ * is outside the range [-128, 127], then it is mapped to the nearest extreme
+ * (-128 or 127).  If the interface is not found, then the default priority
+ * value is returned.
+ */
 int get_interface_priority(const char *ifname)
 {
     const config_t *config = get_config();
@@ -230,8 +236,14 @@ int get_interface_priority(const char *ifname)
 
         if(fnmatch(curr_ifname, ifname, 0) == 0) {
             int curr_priority;
-            if(config_setting_lookup_int_compat(curr_item, "priority", &curr_priority))
+            if(config_setting_lookup_int_compat(curr_item, "priority", &curr_priority)) {
+                if(curr_priority < MIN_INTERFACE_PRIORITY)
+                    curr_priority = MIN_INTERFACE_PRIORITY;
+                else if(curr_priority > MAX_INTERFACE_PRIORITY)
+                    curr_priority = MAX_INTERFACE_PRIORITY;
+
                 return curr_priority;
+            }
         }
     }
 
