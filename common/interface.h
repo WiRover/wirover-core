@@ -48,6 +48,8 @@ struct interface {
     uint64_t prev_bytes_rx;
     uint32_t prev_packets_tx;
     uint32_t prev_packets_rx;
+
+    int update_num;
 #endif /* CONTROLLER */
 
     struct interface* next;

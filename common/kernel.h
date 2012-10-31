@@ -41,6 +41,17 @@ struct gwaddr_req {
 #define gwaddr_ip6 nl_u.ip6_u
 };
 
+struct virt_setlprio_req {
+    char ifname[IFNAMSIZ];
+    int prio;
+};
+
+struct virt_setrprio_req {
+    __be32 node_ip;
+    __be32 link_ip;
+    int prio;
+};
+
 struct vroute_req {
     __be32 dest;
     __be32 netmask;
@@ -84,6 +95,9 @@ int virt_set_gateway_ip(const char *device, const struct in_addr *gw_ip);
 
 int virt_add_vroute(uint32_t dest, uint32_t netmask, uint32_t node_ip);
 int virt_delete_vroute(uint32_t dest, uint32_t netmask, uint32_t node_ip);
+
+int virt_local_prio(int local_dev, int prio);
+int virt_remote_prio(const struct in_addr *remote_node, const struct in_addr *remote_addr, int prio);
 
 int virt_local_bandwidth_hint(int local_dev, long bandwidth);
 int virt_remote_bandwidth_hint(__be32 remote_addr, long bandwidth);

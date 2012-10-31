@@ -29,6 +29,8 @@ struct gateway {
     time_t   last_gps_time;
     unsigned last_gps_row_id;
 
+    int cchan_updates;
+
     UT_hash_handle      hh_id;
 };
 

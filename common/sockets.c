@@ -17,6 +17,7 @@
 #include <netdb.h>
 
 #include "debug.h"
+#include "ipaddr.h"
 #include "sockets.h"
 #include "utlist.h"
 
@@ -139,8 +140,10 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
     if(device) {
         // Bind socket to device
         if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, device, IFNAMSIZ) < 0) {
+            /* TODO: The bind will fail with EACCES if we are running as an
+             * unprivileged user.  In that case, we should try to achieve the
+             * same result by binding to the interface's address. */
             ERROR_MSG("SO_BINDTODEVICE failed");
-            goto close_and_return;
         }
     }
 
@@ -175,10 +178,10 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
     freeaddrinfo(results);
     return sockfd;
 
-free_and_return:
-    freeaddrinfo(results);
 close_and_return:
     close(sockfd);
+free_and_return:
+    freeaddrinfo(results);
     return -1;
 }
 
@@ -234,30 +237,32 @@ int udp_bind_open(unsigned short local_port, const char* device)
     const int yes = 1;
     if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
         DEBUG_MSG("SO_REUSEADDR failed");
-        goto free_and_fail;
+        goto close_and_fail;
     }
 
     if(bind(sockfd, results->ai_addr, results->ai_addrlen) == -1) {
         ERROR_MSG("Failed to bind socket");
-        goto free_and_fail;
+        goto close_and_fail;
     }
     
     if(device) {
         // Bind socket to device
         if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, device, IFNAMSIZ) < 0) {
+            /* TODO: The bind will fail with EACCES if we are running as an
+             * unprivileged user.  In that case, we should try to achieve the
+             * same result by binding to the interface's address. */
             ERROR_MSG("SO_BINDTODEVICE failed");
-            goto free_and_fail;
         }
     }
 
     freeaddrinfo(results);
     return sockfd;
 
+close_and_fail:
+    close(sockfd);
 free_and_fail:
     freeaddrinfo(results);
-    close(sockfd);
     return FAILURE;
-
 }
 
 int connect_timeout(int socket, struct sockaddr *addr, socklen_t addrlen, 
@@ -620,5 +625,4 @@ int get_recv_timestamp(int sockfd, struct timeval *timestamp) {
     }
     return 0;
 }
-
 

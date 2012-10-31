@@ -86,33 +86,48 @@ static int _send_notification(const char *ifname)
         return FAILURE;
     }
 
-    struct cchan_notification notification;
+    char *buffer = malloc(BUFSIZ);
+    memset(buffer, 0, BUFSIZ);
 
-    notification.type = CCHAN_NOTIFICATION;
-    get_private_ip(&notification.priv_ip);
-    notification.unique_id = htons(get_unique_id());
+    int space_left = BUFSIZ;
+    int offset = 0;
 
-    memcpy(notification.key, private_key, sizeof(notification.key));
+    struct cchan_notification_v2 *notif = (struct cchan_notification_v2 *)buffer;
+    space_left -= sizeof(struct cchan_notification_v2);
+    offset += sizeof(struct cchan_notification_v2);
+
+    notif->type = CCHAN_NOTIFICATION_V2;
+    notif->len = sizeof(struct cchan_notification_v2);
+
+    notif->ver_maj = WIROVER_VERSION_MAJOR;
+    notif->ver_min = WIROVER_VERSION_MINOR;
+    notif->ver_rev = htons(WIROVER_VERSION_REVISION);
+
+    get_private_ip(&notif->priv_ip);
+    notif->unique_id = htons(get_unique_id());
+
+    memcpy(notif->key, private_key, sizeof(notif->key));
 
     obtain_read_lock(&interface_list_lock);
 
-    int ife_ind = 0;
     struct interface* ife = interface_list;
-    while(ife && ife_ind < MAX_INTERFACES) {
-        struct interface_info* dest = &notification.if_info[ife_ind];
-
+    while(ife && space_left > sizeof(struct cchan_notification_v2)) {
         /* Avoid sending interfaces that have not passed the init state. */
         if(ife->state != INIT_INACTIVE) {
-            memset(dest, 0, sizeof(*dest));
+            struct interface_info_v2 *dest = (struct interface_info_v2 *)(buffer + offset);
+            space_left -= sizeof(struct interface_info_v2);
+            offset += sizeof(struct interface_info_v2);
 
+            dest->type = CCHAN_INTERFACE;
+            dest->len = sizeof(struct interface_info_v2);
+
+            dest->link_id = htonl(ife->index);
             strncpy(dest->ifname, ife->name, sizeof(dest->ifname));
             strncpy(dest->network, ife->network, sizeof(dest->network));
             dest->state = ife->state;
-            dest->link_id = htonl(ife->index);
+            dest->priority = ife->priority;
             dest->local_ip = ife->public_ip.s_addr;
             dest->data_port = htons(get_data_port());
-        
-            ife_ind++;
         }
 
         ife = ife->next;
@@ -120,12 +135,11 @@ static int _send_notification(const char *ifname)
     
     release_read_lock(&interface_list_lock);
 
-    notification.interfaces = ife_ind;
-    
-    const size_t notification_len = MIN_NOTIFICATION_LEN +
-            ife_ind * sizeof(struct interface_info);
+    const size_t notification_len = offset;
 
-    int bytes = send(sockfd, &notification, notification_len, 0);
+    int bytes = send(sockfd, buffer, notification_len, 0);
+    free(buffer);
+
     if(bytes < 0) {
         ERROR_MSG("sending notification failed");
         close(sockfd);
@@ -144,16 +158,18 @@ static int _send_notification(const char *ifname)
     timeout.tv_sec = CCHAN_RESPONSE_TIMEOUT_SEC;
     timeout.tv_usec = 0;
 
-    bytes = recv_timeout(sockfd, &notification, 
-            sizeof(notification), 0, &timeout);
+    struct cchan_notification_v2 response;
+
+    bytes = recv_timeout(sockfd, &response, 
+            sizeof(response), 0, &timeout);
     if(bytes < 0) {
         ERROR_MSG("Receiving notification response failed");
         close(sockfd);
         return -1;
     }
 
-    remote_unique_id = ntohs(notification.unique_id);
-    remote_bw_port = ntohs(notification.bw_port);
+    remote_unique_id = ntohs(response.unique_id);
+    remote_bw_port = ntohs(response.bw_port);
 
     close(sockfd);
     return 0;

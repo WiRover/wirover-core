@@ -9,6 +9,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <net/route.h>
+#include <net/if.h>
 
 #include "debug.h"
 #include "kernel.h"
@@ -337,6 +338,70 @@ int virt_delete_vroute(uint32_t dest, uint32_t netmask, uint32_t node_ip)
 
     close(sockfd);
     return 0;
+}
+
+/*
+ * Set the priority for a local interface.
+ */
+int virt_local_prio(int local_dev, int prio)
+{
+    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if(sockfd < 0) {
+        ERROR_MSG("creating socket failed");
+        return FAILURE;
+    }
+
+    struct virt_setlprio_req req;
+    memset(&req, 0, sizeof(req));
+    if_indextoname(local_dev, req.ifname);
+    req.prio = prio;
+
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
+    ifr.ifr_data = &req;
+
+    if(ioctl(sockfd, SIOCVIRTSETLPRIO, &ifr) < 0) {
+        ERROR_MSG("SIOCVIRTSETLPRIO ioctl failed");
+        close(sockfd);
+        return FAILURE;
+    }
+
+    close(sockfd);
+    return 0;
+}
+
+/*
+ * Set the priority for a remote interface.
+ */
+int virt_remote_prio(const struct in_addr *remote_node, const struct in_addr *remote_addr, int prio)
+{
+    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if(sockfd < 0) {
+        ERROR_MSG("creating socket failed");
+        return FAILURE;
+    }
+
+    struct virt_setrprio_req req;
+    memset(&req, 0, sizeof(req));
+    req.node_ip = remote_node->s_addr;
+    req.link_ip = remote_addr->s_addr;
+    req.prio = prio;
+
+    struct ifreq ifr;
+    memset(&ifr, 0, sizeof(ifr));
+    strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
+    ifr.ifr_data = &req;
+
+    if(ioctl(sockfd, SIOCVIRTSETRPRIO, &ifr) < 0) {
+        ERROR_MSG("SIOCVIRTSETRPRIO ioctl failed");
+        close(sockfd);
+        return FAILURE;
+    }
+
+    close(sockfd);
+    return 0;
+
 }
 
 static int send_perf_hint(const char *master, struct virt_perf_hint *hint)

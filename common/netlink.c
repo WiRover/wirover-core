@@ -368,6 +368,13 @@ int change_interface_state(struct interface* ife, enum if_state state)
                 return FAILURE;
             }
         }
+
+        if(ife->priority) {
+            if(virt_local_prio(ife->index, ife->priority) < 0) {
+                DEBUG_MSG("Failed to set priority for device %s", ife->name);
+                return FAILURE;
+            }
+        }
 #endif
     } else if(ife->state == ACTIVE && state != ACTIVE) {
         ife->state = state;

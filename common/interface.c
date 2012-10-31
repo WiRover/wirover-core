@@ -244,6 +244,9 @@ void dump_interfaces(const struct interface *head, const char *prepend)
     if(!prepend)
         prepend = "";
 
+    /*           xx xxxxxxxxxxxxxxxx xxxxxxxxxxxxxxxx xxxxxxxx xxxx*/
+    DEBUG_MSG("%sID Name             Network          State    Prio", prepend);
+
     while(head) {
         const char *state;
         switch(head->state) {
@@ -264,8 +267,8 @@ void dump_interfaces(const struct interface *head, const char *prepend)
                 break;
         }
 
-        DEBUG_MSG("%s%d\t%s\t%s\t%s", 
-                prepend, head->index, head->name, head->network, state);
+        DEBUG_MSG("%s%-2d %-16s %-16s %-8s %-4hhd",
+                prepend, head->index, head->name, head->network, state, head->priority);
 
         assert(head != head->next);
         head = head->next;
