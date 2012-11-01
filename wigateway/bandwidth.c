@@ -143,7 +143,10 @@ void* bandwidthThreadFunc(void* clientInfo)
 
         struct interface *ife = interface_list;
         while(ife) {
-            if(ife->state != DEAD) {
+            /* Only run the bandwidth test on ACTIVE interfaces.  Non-ACTIVE
+             * interfaces are presumably not working, so trying to test them
+             * will result in errors or long timeouts. */
+            if(ife->state == ACTIVE) {
                 struct bw_stats stats;
                 memcpy(stats.device, ife->name, IFNAMSIZ);
                 stats.link_id = ife->index;

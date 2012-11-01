@@ -114,6 +114,7 @@ int fill_gps_payload(struct gps_payload *dest)
  */
 static int connect_to_gpsd()
 {
+    static int print_error = 1;
     int res;
 
     if(connected)
@@ -125,18 +126,25 @@ static int connect_to_gpsd()
     res = gps_open(0, 0, &session);
 #endif
     if(res < 0) {
-        DEBUG_MSG("gps_open: %s", gps_errstr(res));
+        if(print_error) {
+            DEBUG_MSG("gps_open: %s", gps_errstr(res));
+            print_error = 0;
+        }
         return -1;
     }
 
     res = gps_stream(&session, WATCH_ENABLE, 0);
     if(res < 0) {
-        DEBUG_MSG("gps_stream: %s", gps_errstr(res));
+        if(print_error) {
+            DEBUG_MSG("gps_stream: %s", gps_errstr(res));
+            print_error = 0;
+        }
         gps_close(&session);
         return -1;
     }
 
     connected = 1;
+    print_error = 1;
     return 0;
 }
 

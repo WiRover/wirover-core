@@ -8,6 +8,7 @@
 #include <netinet/in.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
+#include <errno.h>
 
 #include "config.h"
 #include "configuration.h"
@@ -194,7 +195,11 @@ static int send_ping(struct interface* ife,
 
     bytes = sendto(sockfd, buffer, send_size, 0, dest_addr, dest_len);
     if(bytes < 0) {
-        ERROR_MSG("sending ping packet on %s failed", ife->name);
+        /* We get an error ENETUNREACH if we try pinging out an interface which
+         * does not have an IP address.  That case is not interesting, so we
+         * suppress the error message. */
+        if(errno != ENETUNREACH)
+            ERROR_MSG("sending ping packet on %s failed", ife->name);
         free(buffer);
         close(sockfd);
         return -1;
