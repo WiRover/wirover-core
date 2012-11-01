@@ -176,7 +176,7 @@ int open_netlink_socket()
 static int interface_down(int index, int hard)
 {
     struct interface *ife;
-    int ret = -1;
+    int ret = 0;
 
     obtain_read_lock(&interface_list_lock);
     ife = find_interface_by_index(interface_list, index);
@@ -187,10 +187,10 @@ static int interface_down(int index, int hard)
         if(hard && ife->state != DEAD) {
             change_interface_state(ife, DEAD);
             delete_interface(ife);
-            ret = 0;
+            ret = 1;
         } else if(!hard && ife->state == ACTIVE) {
             change_interface_state(ife, INACTIVE);
-            ret = 0;
+            ret = 1;
         }
 
         downgrade_write_lock(&interface_list_lock);
