@@ -173,13 +173,13 @@ int open_netlink_socket()
  *
  * Returns 1 if a change was made, 0 otherwise.
  */
-static int interface_down(int index, bool hard)
+static int interface_down(int index, int hard)
 {
     struct interface *ife;
     int ret = -1;
 
     obtain_read_lock(&interface_list_lock);
-    ife = find_interface_by_index(interface_list, ifname);
+    ife = find_interface_by_index(interface_list, index);
 
     if(ife) {
         upgrade_read_lock(&interface_list_lock);
@@ -273,14 +273,14 @@ int handle_netlink_message(const char* msg, int msg_len)
 
             DEBUG_MSG("Received RTM_DELADDR for device %d", ifa->ifa_index);
 
-            if(interface_down(ifa->ifa_index, false))
+            if(interface_down(ifa->ifa_index, 0))
                 should_notify = 1;
         } else if(nh->nlmsg_type == RTM_DELLINK) {
             struct ifinfomsg* ifi = (struct ifinfomsg *)NLMSG_DATA(nh);
 
             DEBUG_MSG("Received RTM_DELLINK for device %d", ifi->ifi_index);
 
-            if(interface_down(ifi->ifi_index, true))
+            if(interface_down(ifi->ifi_index, 1))
                 should_notify = 1;
         } else if(nh->nlmsg_type == RTM_NEWROUTE) {
             struct rtmsg *rtm = (struct rtmsg *)NLMSG_DATA(nh);
