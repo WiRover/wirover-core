@@ -49,6 +49,7 @@ int main(int argc, char* argv[])
 
     signal(SIGSEGV, segfault_handler);
     signal(SIGINT, shutdown_handler);
+    signal(SIGTERM, shutdown_handler);
 
     printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR, 
             WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);
@@ -301,9 +302,7 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
 
 static void shutdown_handler(int signo)
 {
-    if(signo == SIGINT) {
-        send_shutdown_notification();
-        exit(0);
-    }
+    send_shutdown_notification();
+    exit(0);
 }
 

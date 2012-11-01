@@ -365,9 +365,27 @@ static void process_ping_request(char *buffer, int len,
                     from_in.sin_port);
         }
 
+        /* We now know that ife->public_ip and ife->data_port are correct. */
+        ife->flags |= IFFLAG_SOURCE_VERIFIED;
+
+        virt_remote_prio(&private_ip, &ife->public_ip, ife->priority);
+
 #ifdef WITH_DATABASE
         db_update_link(gw, ife);
 #endif
+    } else if((ife->flags & IFFLAG_SOURCE_VERIFIED) == 0) {
+        /* The source was correct, but now we can say it has been verified. */
+        ife->flags |= IFFLAG_SOURCE_VERIFIED;
+        
+        if(ife->state == ACTIVE) {
+            struct in_addr private_ip;
+            ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
+
+            virt_add_remote_link(&private_ip, &from_in.sin_addr,
+                    from_in.sin_port);
+
+            virt_remote_prio(&private_ip, &ife->public_ip, ife->priority);
+        }
     }
 
     ife->last_ping_time = time(0);
@@ -433,6 +451,8 @@ static void process_ping_response(char *buffer, int len,
 
         virt_add_remote_link(&private_ip, &from_in.sin_addr,
                 from_in.sin_port);
+        
+        virt_remote_prio(&private_ip, &ife->public_ip, ife->priority);
     }
 
     db_update_pings(gw, ife, rtt);

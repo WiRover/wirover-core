@@ -215,13 +215,17 @@ static void update_interface_v2(struct gateway *gw, const struct interface_info_
     } else if(ife->state != ACTIVE && new_state == ACTIVE) {
         gw->active_interfaces++;
 
-        virt_add_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
+        /* Do not add the interface until the source has been verified by a ping. */
+        if(ife->flags & IFFLAG_SOURCE_VERIFIED)
+            virt_add_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
     }
     ife->state = new_state;
 
     if(ifinfo->priority != ife->priority) {
         ife->priority = ifinfo->priority;
-        virt_remote_prio(&priv_ip, &ife->public_ip, ife->priority);
+
+        if(ife->flags & IFFLAG_SOURCE_VERIFIED)
+            virt_remote_prio(&priv_ip, &ife->public_ip, ife->priority);
     }
 
     ife->update_num = gw->cchan_updates;
@@ -513,7 +517,9 @@ static void update_gateway_v1(struct gateway* gw, const struct cchan_notificatio
         } else if(ife->state != ACTIVE && new_state == ACTIVE) {
             gw->active_interfaces++;
 
-            virt_add_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
+            /* Do not add the interface until the source has been verified by a ping. */
+            if(ife->flags & IFFLAG_SOURCE_VERIFIED)
+                virt_add_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
         }
 
         ife->state = new_state;

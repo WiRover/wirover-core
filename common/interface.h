@@ -17,6 +17,10 @@ enum if_state {
     DEAD
 };
 
+/* Set after the source address and port are verified by a ping.  Checking this
+ * is necessary because the source may be behind a NAT. */
+#define IFFLAG_SOURCE_VERIFIED 0x00000001
+
 struct interface {
     unsigned int      index; //interface index assigned by kernel
     char              name[IFNAMSIZ];
@@ -24,6 +28,8 @@ struct interface {
     enum if_state     state;
     int               priority;
 	int               num_ping_failures;
+
+    int     flags;
 
     /* These are in network byte order. */
     struct in_addr    public_ip;
