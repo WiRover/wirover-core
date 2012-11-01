@@ -164,6 +164,44 @@ int open_netlink_socket()
 }
 
 /*
+ * This should be called when a netlink message indicates that an interface has
+ * gone down.  It sets the interface state to INACTIVE or DEAD depending on
+ * whether it is a hard or soft failure.
+ *
+ * hard: Set to 1 if the device has been physically removed, otherwise
+ * 0.  Set to 0 if the IP address has been lost or changed, etc.
+ *
+ * Returns 1 if a change was made, 0 otherwise.
+ */
+static int interface_down(int index, bool hard)
+{
+    struct interface *ife;
+    int ret = -1;
+
+    obtain_read_lock(&interface_list_lock);
+    ife = find_interface_by_index(interface_list, ifname);
+
+    if(ife) {
+        upgrade_read_lock(&interface_list_lock);
+
+        if(hard && ife->state != DEAD) {
+            change_interface_state(ife, DEAD);
+            delete_interface(ife);
+            ret = 0;
+        } else if(!hard && ife->state == ACTIVE) {
+            change_interface_state(ife, INACTIVE);
+            ret = 0;
+        }
+
+        downgrade_write_lock(&interface_list_lock);
+    }
+                
+    release_read_lock(&interface_list_lock);
+
+    return ret;
+}
+
+/*
  * HANDLE NETLINK MESSAGE
  */
 int handle_netlink_message(const char* msg, int msg_len)
@@ -231,55 +269,19 @@ int handle_netlink_message(const char* msg, int msg_len)
 
             release_read_lock(&interface_list_lock);
         } else if(nh->nlmsg_type == RTM_DELADDR) {
-            struct ifaddrmsg* ifa = (struct ifaddrmsg*)NLMSG_DATA(nh);
-            //struct rtattr*    rth = IFA_RTA(ifa);
+            struct ifaddrmsg* ifa = (struct ifaddrmsg *)NLMSG_DATA(nh);
 
             DEBUG_MSG("Received RTM_DELADDR for device %d", ifa->ifa_index);
-/*
-            obtain_read_lock(&interface_list_lock);
-            ife = find_interface_by_index(interface_list, ifa->ifi_index);
-            release_read_lock(&interface_list_lock);
 
-            if(ife) {
-                obtain_write_lock(&interface_list_lock);
-                change_interface_state(ife, INACTIVE);
-                release_write_lock(&interface_list_lock);
-            } else {
-                ife = alloc_interface(device);
-                assert(ife);
-
-                ife->index = ifa->ifi_index;
-                strncpy(ife->name, device, sizeof(ife->name));
-                ife->state = INACTIVE;
-
-                obtain_write_lock(&interface_list_lock);
-                add_interface(ife);
-                release_write_lock(&interface_list_lock);
-            }
-
-            should_notify = 1;*/
+            if(interface_down(ifa->ifa_index, false))
+                should_notify = 1;
         } else if(nh->nlmsg_type == RTM_DELLINK) {
-            struct ifinfomsg* ifa = (struct ifinfomsg*)NLMSG_DATA(nh);
+            struct ifinfomsg* ifi = (struct ifinfomsg *)NLMSG_DATA(nh);
 
-            DEBUG_MSG("Received RTM_DELLINK for device %d", ifa->ifi_index);
+            DEBUG_MSG("Received RTM_DELLINK for device %d", ifi->ifi_index);
 
-            struct interface* ife;
-            
-            obtain_read_lock(&interface_list_lock);
-            ife = find_interface_by_index(interface_list, ifa->ifi_index);
-
-            if(ife) {
-                upgrade_read_lock(&interface_list_lock);
-
-                change_interface_state(ife, DEAD);
-                delete_interface(ife);
-
-                downgrade_write_lock(&interface_list_lock);
-            }
-                
-            release_read_lock(&interface_list_lock);
-            
-            should_notify = 1;
+            if(interface_down(ifi->ifi_index, true))
+                should_notify = 1;
         } else if(nh->nlmsg_type == RTM_NEWROUTE) {
             struct rtmsg *rtm = (struct rtmsg *)NLMSG_DATA(nh);
             struct rtattr *rta = RTM_RTA(rtm);
@@ -351,7 +353,7 @@ int handle_netlink_message(const char* msg, int msg_len)
  * between ACTIVE and non-ACTIVE states, it makes the appropriate ioctl()
  * calls.
  */
-int change_interface_state(struct interface* ife, enum if_state state)
+int change_interface_state(struct interface *ife, enum if_state state)
 {
     if(ife->state != ACTIVE && state == ACTIVE) {
         ife->state = state;
