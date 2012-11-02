@@ -35,8 +35,9 @@ struct interface {
     struct in_addr    public_ip;
     uint16_t          data_port;
 
-    time_t            last_ping_time;
-    time_t            last_ping_success;
+    time_t      last_ping_time;
+    time_t      last_ping_success;
+    int         pings_outstanding;
 
     uint32_t    next_ping_seq_no;
     uint32_t    last_ping_seq_no;

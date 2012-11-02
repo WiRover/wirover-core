@@ -208,10 +208,9 @@ static int send_ping(struct interface* ife,
     // This last_ping_time timestamp will be compared to the timestamp in the ping
     // response packet to make sure the response is for the most recent
     // request.
-    upgrade_read_lock(&interface_list_lock);
     //ife->last_ping_time = now.tv_sec;
     ife->last_ping_time = time(NULL);
-    downgrade_write_lock(&interface_list_lock);
+    ife->pings_outstanding++;
 
     free(buffer);
     close(sockfd);
@@ -397,6 +396,10 @@ static int handle_incoming(int sockfd, int timeout)
         ife->last_ping_success = time(NULL);
         ife->last_ping_seq_no = ntohl(pkt->seq_no);
 
+        /* Reset on a successful ping so that we do not accumulate spurious losses. */
+        ife->pings_outstanding = 0;
+        ife->num_ping_failures = 0;
+
         DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f", 
                 ife->name, ife->network, diff, ife->avg_rtt);
     }
@@ -487,24 +490,32 @@ static void mark_inactive_interfaces(int ping_timeout)
 			(curr_ife->last_ping_success - curr_ife->last_ping_time > PING_TIMEOUT) 
 			? 1 : 0;
 	
-		if (curr_ife->state == ACTIVE &&
-			((!ping_has_returned && waited_timeout) ||
-			(ping_has_returned && ping_timeout_exceeded))) {
-	
-			// Increment failures and ping interface
-			curr_ife->num_ping_failures++;
-			ping_interface(curr_ife);
-	    
-			// If interface has failed too many times, mark inactive
-			if (curr_ife->num_ping_failures >= MAX_PING_FAILURES) {
-				change_interface_state(curr_ife, INACTIVE);
-				notif_needed = 1;
-				curr_ife->num_ping_failures = 0;
-			}
-		}
-		else if (ping_has_returned && !ping_timeout_exceeded) {
-			curr_ife->num_ping_failures = 0;
-		}
+        if(curr_ife->state == ACTIVE) {
+			if((!ping_has_returned && waited_timeout) ||
+                    (ping_has_returned && ping_timeout_exceeded)) {
+                // Increment failures and ping interface
+                curr_ife->num_ping_failures++;
+
+                /* One outstanding ping is accounted for. */
+                if(curr_ife->pings_outstanding > 0)
+                    curr_ife->pings_outstanding--;
+
+                ping_interface(curr_ife);
+            
+                // If interface has failed too many times, mark inactive
+                if (curr_ife->num_ping_failures >= MAX_PING_FAILURES) {
+                    change_interface_state(curr_ife, INACTIVE);
+                    notif_needed = 1;
+                }
+            } else if(curr_ife->pings_outstanding > MAX_PING_FAILURES) {
+                /* This is a fail-safe condition.  If timeout <= interval, then
+                 * we may never explicitly record a timeout because the next
+                 * ping may be sent before we see a timeout; however, we will
+                 * see the number of outstanding pings start to accumulate. */
+                change_interface_state(curr_ife, INACTIVE);
+                notif_needed = 1;
+            }
+        }
 
 		assert(curr_ife->num_ping_failures >= 0 && 
 			curr_ife->num_ping_failures <= MAX_PING_FAILURES);
