@@ -11,21 +11,7 @@
 #define SIOCVIRTSETLPRIO  (SIOCDEVPRIVATE + 7)
 #define SIOCVIRTSETRPRIO  (SIOCDEVPRIVATE + 8)
 #define SIOCVIRTPERFHINT  (SIOCDEVPRIVATE + 9)
-
-#define VIRT_PROC_REMOTE_ADD     0
-#define VIRT_PROC_REMOTE_DELETE  1
-
-struct virt_proc_remote_node {
-    unsigned op;
-    struct in_addr priv_ip;
-};
-
-struct virt_proc_remote_link {
-    unsigned op;
-    struct in_addr priv_ip;
-    struct in_addr pub_ip;
-    uint16_t data_port;
-};
+#define SIOCVIRTCONF      (SIOCDEVPRIVATE + 15)
 
 struct gwaddr_req {
     char     ifname[IFNAMSIZ];
@@ -77,6 +63,32 @@ struct virt_perf_hint {
     long bandwidth;
 };
 
+#define VIRT_CONF_ADD_REMOTE_NODE   0x0000
+#define VIRT_CONF_DEL_REMOTE_NODE   0x0001
+#define VIRT_CONF_ADD_REMOTE_LINK   0x0002
+#define VIRT_CONF_DEL_REMOTE_LINK   0x0003
+
+struct virt_conf_remote_node {
+    struct in_addr priv_ip;
+};
+
+struct virt_conf_remote_link {
+    // priv_ip identifies the node to which this link belongs, so the node must
+    // be added before a link is added.
+    struct in_addr priv_ip;
+    struct in_addr pub_ip;
+
+    __be16 data_port;
+};
+
+struct virt_conf_message {
+    unsigned op;
+
+    union {
+        struct virt_conf_remote_node remote_node;
+        struct virt_conf_remote_link remote_link;
+    } msg;
+};
 
 int setup_virtual_interface(__be32 ip, __be32 netmask, unsigned mtu);
 

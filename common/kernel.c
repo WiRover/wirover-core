@@ -146,110 +146,101 @@ int kernel_release_device(const char* device)
     return 0;
 }
 
+static int virt_ioctl(int type, struct ifreq *ifr)
+{
+    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if(sockfd < 0)
+        return FAILURE;
+
+    int result = ioctl(sockfd, type, ifr);
+    close(sockfd);
+
+    return result;
+}
 
 int virt_add_remote_node(const struct in_addr *priv_ip)
 {
-    struct virt_proc_remote_node node;
-    memset(&node, 0, sizeof(node));
+    struct virt_conf_message msg;
+    msg.op = VIRT_CONF_ADD_REMOTE_NODE;
 
-    node.op = VIRT_PROC_REMOTE_ADD;
-    memcpy(&node.priv_ip, priv_ip, sizeof(node.priv_ip));
+    struct virt_conf_remote_node *node = &msg.msg.remote_node;
+    memcpy(&node->priv_ip, priv_ip, sizeof(node->priv_ip));
+    
+    struct ifreq ifr;
+    strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
+    ifr.ifr_data = &msg;
 
-    int fd = open("/proc/virtmod/remote/nodes", O_WRONLY);
-    if(fd < 0) {
-        ERROR_MSG("open /proc/virtmod/remote/nodes failed");
-        return -1;
+    if(virt_ioctl(SIOCVIRTCONF, &ifr) < 0) {
+        ERROR_MSG("ioctl SIOCVIRTCONF failed");
+        return FAILURE;
     }
 
-    int written = write(fd, &node, sizeof(node));
-    if(written < sizeof(node)) {
-        ERROR_MSG("write failed");
-        close(fd);
-        return -1;
-    }
-
-    close(fd);
     return 0;
 }
 
 int virt_add_remote_link(const struct in_addr *priv_ip,
                 const struct in_addr *pub_ip, unsigned short data_port)
 {
-    struct virt_proc_remote_link link;
-    memset(&link, 0, sizeof(link));
+    struct virt_conf_message msg;
+    msg.op = VIRT_CONF_ADD_REMOTE_LINK;
 
-    link.op = VIRT_PROC_REMOTE_ADD;
-    memcpy(&link.priv_ip, priv_ip, sizeof(link.priv_ip));
-    memcpy(&link.pub_ip, pub_ip, sizeof(link.pub_ip));
-    link.data_port = data_port;
+    struct virt_conf_remote_link *link = &msg.msg.remote_link;
+    memcpy(&link->priv_ip, priv_ip, sizeof(link->priv_ip));
+    memcpy(&link->pub_ip, pub_ip, sizeof(link->pub_ip));
+    link->data_port = data_port;
+    
+    struct ifreq ifr;
+    strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
+    ifr.ifr_data = &msg;
 
-    int fd = open("/proc/virtmod/remote/links", O_WRONLY);
-    if(fd < 0) {
-        ERROR_MSG("open /proc/virtmod/remote/links failed");
-        return -1;
+    if(virt_ioctl(SIOCVIRTCONF, &ifr) < 0) {
+        ERROR_MSG("ioctl SIOCVIRTCONF failed");
+        return FAILURE;
     }
 
-    int written = write(fd, &link, sizeof(link));
-    if(written < sizeof(link)) {
-        ERROR_MSG("write failed");
-        close(fd);
-        return -1;
-    }
-
-    close(fd);
     return 0;
 }
 
-
 int virt_remove_remote_node(const struct in_addr *priv_ip)
 {
-    struct virt_proc_remote_node node;
-    memset(&node, 0, sizeof(node));
+    struct virt_conf_message msg;
+    msg.op = VIRT_CONF_DEL_REMOTE_NODE;
 
-    node.op = VIRT_PROC_REMOTE_DELETE;
-    memcpy(&node.priv_ip, priv_ip, sizeof(node.priv_ip));
+    struct virt_conf_remote_node *node = &msg.msg.remote_node;
+    memcpy(&node->priv_ip, priv_ip, sizeof(node->priv_ip));
+    
+    struct ifreq ifr;
+    strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
+    ifr.ifr_data = &msg;
 
-    int fd = open("/proc/virtmod/remote/nodes", O_WRONLY);
-    if(fd < 0) {
-        ERROR_MSG("open /proc/virtmod/remote/nodes failed");
-        return -1;
+    if(virt_ioctl(SIOCVIRTCONF, &ifr) < 0) {
+        ERROR_MSG("ioctl SIOCVIRTCONF failed");
+        return FAILURE;
     }
 
-    int written = write(fd, &node, sizeof(node));
-    if(written < sizeof(node)) {
-        ERROR_MSG("write failed");
-        close(fd);
-        return -1;
-    }
-
-    close(fd);
     return 0;
 }
 
 int virt_remove_remote_link(const struct in_addr *priv_ip,
                 const struct in_addr *pub_ip)
 {
-    struct virt_proc_remote_link link;
-    memset(&link, 0, sizeof(link));
+    struct virt_conf_message msg;
+    msg.op = VIRT_CONF_DEL_REMOTE_LINK;
 
-    link.op = VIRT_PROC_REMOTE_DELETE;
-    memcpy(&link.priv_ip, priv_ip, sizeof(link.priv_ip));
-    memcpy(&link.pub_ip, pub_ip, sizeof(link.pub_ip));
+    struct virt_conf_remote_link *link = &msg.msg.remote_link;
+    memcpy(&link->priv_ip, priv_ip, sizeof(link->priv_ip));
+    memcpy(&link->pub_ip, pub_ip, sizeof(link->pub_ip));
+    link->data_port = 0;
+    
+    struct ifreq ifr;
+    strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
+    ifr.ifr_data = &msg;
 
-    int fd = open("/proc/virtmod/remote/links", O_WRONLY);
-    if(fd < 0) {
-        ERROR_MSG("open /proc/virtmod/remote/links failed");
-        return -1;
+    if(virt_ioctl(SIOCVIRTCONF, &ifr) < 0) {
+        ERROR_MSG("ioctl SIOCVIRTCONF failed");
+        return FAILURE;
     }
 
-    int written = write(fd, &link, sizeof(link));
-    if(written < sizeof(link)) {
-        ERROR_MSG("write failed");
-        close(fd);
-        return -1;
-    }
-
-    close(fd);
     return 0;
 }
 
