@@ -7,6 +7,7 @@
 #include "database.h"
 #include "debug.h"
 #include "gateway.h"
+#include "pathperf.h"
 #include "rootchan.h"
 #include "utlist.h"
 #include "kernel.h"
@@ -61,6 +62,8 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len, u
             DEBUG_MSG("Unrecognized control channel message type: %hhu", hdr->type);
             return -1;
     }
+
+    write_path_list();
 
     return 0;
 }

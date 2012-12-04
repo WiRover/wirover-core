@@ -70,5 +70,9 @@
 #define LEASE_RETRY_DELAY   60
 #define RENEW_BEFORE_EXPIRATION   600
 
+// Determines the rate at which the value of a recent bandwidth decays, must be
+// negative.
+#define BANDWIDTH_MEASUREMENT_DECAY (-0.016666666667)
+
 #endif //_CONFIG_H_
 

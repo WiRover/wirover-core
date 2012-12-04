@@ -16,6 +16,7 @@
 #include "debug.h"
 #include "interface.h"
 #include "netlink.h"
+#include "pathperf.h"
 #include "ping.h"
 #include "rootchan.h"
 #include "rwlock.h"
@@ -98,6 +99,8 @@ next_ifap:
 
     DEBUG_MSG("Initial interface list:");
     dump_interfaces(interface_list, "  ");
+
+    write_path_list();
 
     return 0;
 }
@@ -341,6 +344,9 @@ int handle_netlink_message(const char* msg, int msg_len)
     if(should_notify && lease != 0) {
         send_notification(1);
     }
+
+    if(should_notify)
+        write_path_list();
     
     DEBUG_MSG("Interface list:");
     dump_interfaces(interface_list, "  ");

@@ -1,4 +1,4 @@
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DGATEWAY")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -I${CMAKE_SOURCE_DIR}/wigateway -DGATEWAY")
 
 add_executable(wigateway
     wigateway.c
@@ -21,6 +21,7 @@ add_executable(wigateway
     ${COMMON}/callback.c
     ${COMMON}/format.c
     ${COMMON}/version.c
+    ${COMMON}/pathperf.c
 )
 
 target_link_libraries(wigateway pthread config gps ssl crypto m)

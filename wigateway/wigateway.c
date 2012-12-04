@@ -1,3 +1,5 @@
+#include <limits.h>
+#include <math.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <time.h>
@@ -16,6 +18,7 @@
 #include "debug.h"
 #include "gps_handler.h"
 #include "netlink.h"
+#include "pathperf.h"
 #include "ping.h"
 #include "rootchan.h"
 #include "kernel.h"
@@ -40,6 +43,8 @@ enum {
 static int write_node_id_file(int node_id);
 static int renew_lease(const struct lease_info *old_lease, struct lease_info *new_lease);
 static void shutdown_handler(int signo);
+static void update_bandwidth(struct bw_client_info *client, struct interface *ife,
+        struct bw_stats *stats);
 
 static time_t lease_renewal_time = 0;
 
@@ -79,6 +84,8 @@ int main(int argc, char* argv[])
     if(init_gps_handler() == -1) {
         DEBUG_MSG("Failed to initialize gps handler");
     }
+
+    start_path_perf_thread();
 
     uint32_t private_ip = 0;
     inet_pton(AF_INET, DEFAULT_VIRT_ADDRESS, &private_ip);
@@ -211,6 +218,7 @@ int main(int argc, char* argv[])
                 bw_client.remote_addr = pub_ip;
                 bw_client.remote_port = get_remote_bw_port();
                 bw_client.interval = USEC_PER_SEC * get_bandwidth_test_interval();
+                bw_client.callback = update_bandwidth;
 
                 if(start_bandwidth_client_thread(&bw_client) < 0) {
                     DEBUG_MSG("Failed to start bandwidth client thread");
@@ -304,5 +312,24 @@ static void shutdown_handler(int signo)
 {
     send_shutdown_notification();
     exit(0);
+}
+
+static void update_bandwidth(struct bw_client_info *client, struct interface *ife,
+        struct bw_stats *stats)
+{
+    if(stats->uplink_bw > 0) {
+        long bps;
+
+        if(stats->uplink_bw < (LONG_MAX / 1000000))
+            bps = (long)round(1000000.0 * stats->uplink_bw);
+        else
+            bps = LONG_MAX;
+
+        ife->meas_bw = bps;
+        ife->meas_bw_time = time(NULL);
+
+        if(ARGS.with_kernel)
+            virt_local_bandwidth_hint(stats->link_id, bps);
+    }
 }
 

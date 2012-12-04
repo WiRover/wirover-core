@@ -10,6 +10,7 @@
 #include "contchan.h"
 #include "database.h"
 #include "debug.h"
+#include "pathperf.h"
 #include "ping.h"
 #include "rootchan.h"
 #include "sockets.h"
@@ -131,6 +132,8 @@ int main(int argc, char* argv[])
         virt_set_gateway_ip(internal_if, &gateway_ip);
     }
 #endif
+
+    start_path_perf_thread();
 
     server_loop(cchan_sock);
 

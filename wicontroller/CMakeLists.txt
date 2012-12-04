@@ -1,4 +1,4 @@
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DCONTROLLER")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -I${CMAKE_SOURCE_DIR}/wicontroller -DCONTROLLER")
 
 add_executable(wicontroller
     wicontroller.c
@@ -18,6 +18,7 @@ add_executable(wicontroller
     ${COMMON}/timing.c
     ${COMMON}/kernel.c
     ${COMMON}/format.c
+    ${COMMON}/pathperf.c
 )
 
 target_link_libraries(wicontroller pthread config mysqlclient ssl crypto m)

@@ -59,6 +59,10 @@ struct interface {
     int update_num;
 #endif /* CONTROLLER */
 
+    long meas_bw;
+    long pred_bw;
+    time_t meas_bw_time;
+
     struct interface* next;
     struct interface* prev;
 };

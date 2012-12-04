@@ -201,6 +201,9 @@ static int handle_bandwidth_client_udp(struct bw_server_info *serverInfo,
                     else
                         bps = LONG_MAX;
 
+                    ife->meas_bw = bps;
+                    ife->meas_bw_time = time(NULL);
+
                     virt_remote_bandwidth_hint(ife->public_ip.s_addr, bps);
                 }
 
