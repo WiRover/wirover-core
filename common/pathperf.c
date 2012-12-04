@@ -134,7 +134,7 @@ static int set_pred_bw(const char *local_addr,
         string_to_ipaddr(remote_node, &node_addr);
 
     HASH_ITER(hh_id, gateway_id_hash, gw, tmp_gw) {
-        if(remote_node && ipaddr_cmp(&node_addr, &gw->private_ip) == 0) {
+        if(!remote_node || ipaddr_cmp(&node_addr, &gw->private_ip) == 0) {
             struct interface *ife;
             
             DL_FOREACH(gw->head_interface, ife) {
@@ -145,7 +145,9 @@ static int set_pred_bw(const char *local_addr,
                 }
             }
 
-            break;
+            /* If remote_node was specified, then limit search to that node. */
+            if(remote_node)
+                break;
         }
     }
 
