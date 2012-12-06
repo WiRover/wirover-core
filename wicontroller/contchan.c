@@ -39,6 +39,8 @@ static int send_response_v1(int sockfd, const struct gateway *gw, uint16_t bw_po
  */
 int process_notification(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port)
 {
+    int ret = 0;
+
     assert(packet);
 
     /* Make sure the packet is at least large enough to read the type. */
@@ -50,22 +52,26 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len, u
     const struct cchan_header *hdr = (const struct cchan_header*)packet;
     switch(hdr->type) {
         case CCHAN_NOTIFICATION_V1:
-            return process_notification_v1(sockfd, packet, pkt_len, bw_port);
+            ret = process_notification_v1(sockfd, packet, pkt_len, bw_port);
+            break;
         case CCHAN_NOTIFICATION_V2:
-            return process_notification_v2(sockfd, packet, pkt_len, bw_port);
+            ret = process_notification_v2(sockfd, packet, pkt_len, bw_port);
+            break;
         case CCHAN_INTERFACE:
             DEBUG_MSG("Received orphaned interface update message");
             break;
         case CCHAN_SHUTDOWN:
-            return process_shutdown(sockfd, packet, pkt_len);
+            ret = process_shutdown(sockfd, packet, pkt_len);
+            break;
         default:
             DEBUG_MSG("Unrecognized control channel message type: %hhu", hdr->type);
-            return -1;
+            ret = -1;
+            break;
     }
 
     write_path_list();
 
-    return 0;
+    return ret;
 }
 
 static int process_notification_v2(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port)
