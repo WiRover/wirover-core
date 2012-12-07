@@ -13,6 +13,7 @@
 #include "debug.h"
 #include "interface.h"
 #include "netlink.h"
+#include "pathperf.h"
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
@@ -22,7 +23,10 @@ static int _obtain_lease(const char *wiroot_ip, unsigned short wiroot_port,
         const char *request, int request_len, const char *interface,
         struct rchan_response *response);
 
-static struct lease_info latest_lease;
+static struct lease_info latest_lease = {
+    .priv_ip = IPADDR_IPV4_ZERO,
+    .unique_id = 0,
+};
 
 #ifdef CONTROLLER
 /* 
@@ -99,6 +103,8 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
     lease->controllers = 0;
    
     memcpy(&latest_lease, lease, sizeof(latest_lease));
+
+    write_path_list();
 
     free(buffer);
     return 0;
@@ -198,6 +204,8 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
     }
     
     memcpy(&latest_lease, lease, sizeof(latest_lease));
+
+    write_path_list();
 
     free(buffer);
     return 0;

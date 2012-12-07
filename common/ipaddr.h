@@ -13,7 +13,8 @@ struct ipaddr {
 
 typedef struct ipaddr ipaddr_t;
 
-#define IPADDR_INITIALIZER { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }
+#define IPADDR_IPV6_ZERO { { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }
+#define IPADDR_IPV4_ZERO { { 0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0x00, 0x00,  0x00, 0x00, 0xFF, 0xFF,  0x00, 0x00, 0x00, 0x00 } }
 
 struct sockaddr;
 struct sockaddr_in;
@@ -24,6 +25,7 @@ int     sockaddr_to_ipaddr(const struct sockaddr*, ipaddr_t* dest);
 int     ipv4_to_ipaddr(uint32_t addr, ipaddr_t* dest);
 int     ipaddr_to_ipv4(const ipaddr_t* addr, uint32_t* dest);
 void    copy_ipaddr(const ipaddr_t* src, ipaddr_t* dest);
+int     ipaddr_is_ipv4(const ipaddr_t *addr);
 
 int ipaddr_cmp(const ipaddr_t *a, const ipaddr_t *b);
 

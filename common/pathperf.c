@@ -34,8 +34,8 @@ static void __write_path_list(FILE *file)
     ipaddr_t private_ip;
     get_private_ip(&private_ip);
 
-    char private_addr[INET6_ADDRSTRLEN];
-    ipaddr_to_string(&private_ip, private_addr, sizeof(private_addr));
+    char local_node[INET6_ADDRSTRLEN];
+    ipaddr_to_string(&private_ip, local_node, sizeof(local_node));
 
     HASH_ITER(hh_id, gateway_id_hash, gw, tmp_gw) {
         struct interface *ife;
@@ -48,7 +48,7 @@ static void __write_path_list(FILE *file)
             inet_ntop(AF_INET, &ife->public_ip, remote_addr, sizeof(remote_addr));
 
             fprintf(file, "%-16s %-16s %-16s %-16s %-16s %-16s %-16s %-16s\n",
-                    private_addr, "-", "-", "-",
+                    local_node, "-", "-", "-",
                     node_addr, remote_addr, ife->name, ife->network);
         }
     }
@@ -63,8 +63,11 @@ static void __write_path_list(FILE *file)
     ipaddr_t private_ip;
     get_private_ip(&private_ip);
 
-    char private_addr[INET6_ADDRSTRLEN];
-    ipaddr_to_string(&private_ip, private_addr, sizeof(private_addr));
+    char local_node[INET6_ADDRSTRLEN];
+    ipaddr_to_string(&private_ip, local_node, sizeof(local_node));
+
+    char remote_addr[INET6_ADDRSTRLEN] = "0.0.0.0";
+    get_controller_ip(remote_addr, sizeof(remote_addr));
 
     obtain_read_lock(&interface_list_lock);
     DL_FOREACH(interface_list, ife) {
@@ -72,8 +75,8 @@ static void __write_path_list(FILE *file)
         inet_ntop(AF_INET, &ife->public_ip, local_addr, sizeof(local_addr));
 
         fprintf(file, "%-16s %-16s %-16s %-16s %-16s %-16s %-16s %-16s\n",
-                private_addr, local_addr, ife->name, ife->network,
-                "-", "-", "-", "-");
+                local_node, local_addr, ife->name, ife->network,
+                "-", remote_addr, "-", "-");
     }
     release_read_lock(&interface_list_lock);
 }

@@ -17,6 +17,8 @@ const unsigned char IPV4_ON_IPV6_PREFIX[] = {
     // IPv4 address goes here.
 };
 
+#define IPADDR_IPV4_OFFSET (sizeof(IPV4_ON_IPV6_PREFIX))
+
 int string_to_ipaddr(const char* addr, ipaddr_t* dest)
 {
     assert(dest);
@@ -72,8 +74,12 @@ int ipaddr_to_string(const ipaddr_t* addr, char* dest, unsigned len)
         return 0;
     }
 
-    if(!inet_ntop(AF_INET6, addr->addr, dest, len)) {
-        return -1;
+    if(ipaddr_is_ipv4(addr)) {
+        if(!inet_ntop(AF_INET, addr->addr + IPADDR_IPV4_OFFSET, dest, len))
+            return -1;
+    } else {
+        if(!inet_ntop(AF_INET6, addr->addr, dest, len))
+            return -1;
     }
 
     return 0;
@@ -133,7 +139,7 @@ int ipaddr_to_ipv4(const ipaddr_t* addr, uint32_t* dest)
         return -1;
     }
 
-    if(memcmp(addr->addr, IPV4_ON_IPV6_PREFIX, sizeof(IPV4_ON_IPV6_PREFIX)) == 0) {
+    if(ipaddr_is_ipv4(addr)) {
         memcpy(dest, addr->addr + sizeof(IPV4_ON_IPV6_PREFIX), sizeof(*dest));
     } else {
         // The address is not an IPv4 address!
@@ -152,6 +158,11 @@ void copy_ipaddr(const ipaddr_t* src, ipaddr_t* dest)
     } else if(dest) {
         memset(dest, 0, sizeof(*dest));
     }
+}
+
+int ipaddr_is_ipv4(const ipaddr_t *addr)
+{
+    return memcmp(addr->addr, IPV4_ON_IPV6_PREFIX, sizeof(IPV4_ON_IPV6_PREFIX)) == 0;
 }
 
 int ipaddr_cmp(const ipaddr_t *a, const ipaddr_t *b)
