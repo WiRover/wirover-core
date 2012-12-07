@@ -189,7 +189,7 @@ static int set_pred_bw(const char *local_addr,
  * The file must be formatted with one entry per line, where each
  * entry consists of these three values separated by spaces.
  *
- * <local interface> [<node addr>:]<remote interface> <bandwidth>
+ * <local interface> [<node addr>-]<remote interface> <bandwidth>
  *
  * The interfaces may be specified by IPv4 addresses, network names, or device
  * names.  Additionally, the local and remote interfaces need not be specified
@@ -202,7 +202,7 @@ static int set_pred_bw(const char *local_addr,
  *
  * Example:
  * 10.10.10.10 1.2.3.4 500000
- * eth0 192.168.0.12:verizon 2000000
+ * eth0 192.168.0.12-verizon 2000000
  * eth0 wlan0 25000000
  */
 static void read_path_predictions()
