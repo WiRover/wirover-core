@@ -227,10 +227,11 @@ static void read_path_predictions()
 
         /* If the remote string contains a dash, separate it into the remote
          * node and remote addr components. */
-        for(i = 0; i < sizeof(remote) && remote[i]; i++) {
+        for(i = 0; i < sizeof(remote)-1 && remote[i]; i++) {
             if(remote[i] == '-') {
                 remote_node = remote;
-                remote_addr = &remote[i];
+                remote_addr = &remote[i+1];
+                remote[i] = 0;
             }
         }
 
