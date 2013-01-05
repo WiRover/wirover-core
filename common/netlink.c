@@ -424,6 +424,14 @@ void read_network_name(const char * __restrict__ ifname,
     }
 
     fclose(file);
+
+    int i;
+    for(i = 0; i < destlen; i++) {
+        if(isspace(dest[i]))
+            dest[i] = 0;
+        if(!dest[i])
+            break;
+    }
 }
 
 static void* netlink_thread_func(void* arg)
