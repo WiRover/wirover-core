@@ -23,6 +23,7 @@
 #include "utlist.h"
 #include "kernel.h"
 
+#ifdef GATEWAY
 static void* netlink_thread_func(void* arg);
 static void add_interface(struct interface* ife);
 static void delete_interface(struct interface* ife);
@@ -397,6 +398,7 @@ int change_interface_state(struct interface *ife, enum if_state state)
 
     return 0;
 }
+#endif /* GATEWAY */
 
 /*
  * The network name is a descriptive name for an interface such as "verizon" or
@@ -434,6 +436,7 @@ void read_network_name(const char * __restrict__ ifname,
     }
 }
 
+#ifdef GATEWAY
 static void* netlink_thread_func(void* arg)
 {
     int sockfd;
@@ -549,4 +552,5 @@ static int update_interface_gateways()
     fclose(file);
     return 0;
 }
+#endif /* GATEWAY */
 

@@ -401,6 +401,20 @@ unsigned short get_controller_control_port()
 }
 
 /*
+ * It is recommended that your buffer be at least INET6_ADDRSTRLEN bytes in
+ * size.
+ */
+int get_controller_privip(char *dest, int dest_len)
+{
+    if(latest_lease.controllers > 0) {
+        ipaddr_to_string(&latest_lease.cinfo[0].priv_ip, dest, dest_len);
+        return 0;
+    } else {
+        return FAILURE;
+    }
+}
+
+/*
  * GET CONTROLLER IP
  *
  * It is recommended that your buffer be at least INET6_ADDRSTRLEN bytes in

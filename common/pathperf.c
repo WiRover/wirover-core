@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 
 #include "config.h"
+#include "configuration.h"
 #include "debug.h"
 #include "interface.h"
 #include "ipaddr.h"
@@ -36,6 +37,21 @@ static void __write_path_list(FILE *file)
 
     char local_node[INET6_ADDRSTRLEN];
     ipaddr_to_string(&private_ip, local_node, sizeof(local_node));
+    
+    const char *local_dev = get_internal_interface();
+    if(!local_dev)
+        local_dev = "(null)";
+
+    char local_net[NETWORK_NAME_LENGTH];
+    read_network_name(local_dev, local_net, sizeof(local_net));
+
+    char local_addr[INET6_ADDRSTRLEN] = "0.0.0.0";
+    struct sockaddr_storage local_addr_tmp;
+    if(get_interface_address(local_dev, (struct sockaddr *)&local_addr_tmp, 
+                sizeof(local_addr_tmp)) == 0) {
+        sockaddr_ntop((struct sockaddr *)&local_addr_tmp, local_addr, 
+                sizeof(local_addr));
+    }   
 
     HASH_ITER(hh_id, gateway_id_hash, gw, tmp_gw) {
         struct interface *ife;
@@ -48,7 +64,7 @@ static void __write_path_list(FILE *file)
             inet_ntop(AF_INET, &ife->public_ip, remote_addr, sizeof(remote_addr));
 
             fprintf(file, "%-16s %-16s %-16s %-16s %-16s %-16s %-16s %-16s\n",
-                    local_node, "-", "-", "-",
+                    local_node, local_addr, local_dev, local_net,
                     node_addr, remote_addr, ife->name, ife->network);
         }
     }
@@ -66,6 +82,9 @@ static void __write_path_list(FILE *file)
     char local_node[INET6_ADDRSTRLEN];
     ipaddr_to_string(&private_ip, local_node, sizeof(local_node));
 
+    char remote_node[INET6_ADDRSTRLEN] = "0.0.0.0";
+    get_controller_privip(remote_node, sizeof(remote_node));
+
     char remote_addr[INET6_ADDRSTRLEN] = "0.0.0.0";
     get_controller_ip(remote_addr, sizeof(remote_addr));
 
@@ -76,7 +95,7 @@ static void __write_path_list(FILE *file)
 
         fprintf(file, "%-16s %-16s %-16s %-16s %-16s %-16s %-16s %-16s\n",
                 local_node, local_addr, ife->name, ife->network,
-                "-", remote_addr, "-", "-");
+                remote_node, remote_addr, "?", "?");
     }
     release_read_lock(&interface_list_lock);
 }

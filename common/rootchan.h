@@ -106,6 +106,7 @@ const struct lease_info* get_lease_info();
 
 unsigned short get_controller_data_port();
 unsigned short get_controller_control_port();
+int get_controller_privip(char *dest, int dest_len);
 int get_controller_ip(char* dest, int dest_len);
 
 #endif //_ROOTCHAN_H_
