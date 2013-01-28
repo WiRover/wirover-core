@@ -119,8 +119,10 @@ int ping_all_interfaces()
 int ping_interface(struct interface* ife)
 {
     char controller_ip[INET6_ADDRSTRLEN];
-    if(get_controller_ip(controller_ip, sizeof(controller_ip)) < 0)
+    if(get_controller_ip(controller_ip, sizeof(controller_ip)) < 0) {
+        DEBUG_MSG("get_controller_ip failed");
         return FAILURE;
+    }
 
     const unsigned short controller_port = get_controller_data_port();
 
@@ -128,10 +130,12 @@ int ping_interface(struct interface* ife)
     unsigned dest_len;
     dest_len = build_sockaddr(controller_ip, controller_port, &dest_addr);
     if(dest_len < 0) {
+        DEBUG_MSG("build_sockaddr failed");
         return FAILURE;
     }
 
     if(send_ping(ife, (struct sockaddr*)&dest_addr, dest_len) == FAILURE) {
+        DEBUG_MSG("send_ping failed");
         return FAILURE;
     }
 
@@ -151,6 +155,7 @@ static int send_ping(struct interface* ife,
 
     sockfd = udp_bind_open(get_data_port(), ife->name);
     if(sockfd == FAILURE) {
+        DEBUG_MSG("udp_bind_open failed");
         return FAILURE;
     }
 
