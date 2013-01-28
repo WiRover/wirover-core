@@ -92,8 +92,7 @@ void registerBandwidthCallback(struct bw_client_info* clientInfo, bw_callback_t 
 }
 
 /*
- * Sets the interval for bandwidth tests.  The interval should be in
- * microseconds.
+ * Sets the interval for bandwidth tests.  The interval should be in seconds.
  */
 void setBandwidthInterval(struct bw_client_info* clientInfo, unsigned int interval)
 {
@@ -174,7 +173,7 @@ void* bandwidthThreadFunc(void* clientInfo)
             ife = ife->next;
         }
 
-        safe_usleep(info->interval);
+        sleep(info->interval);
     }
 
     return 0;
