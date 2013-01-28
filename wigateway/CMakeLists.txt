@@ -7,6 +7,7 @@ add_executable(wigateway
     gps_handler.c
     ping.c
     arguments.c
+    ${COMMON}/bandwidth.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
     ${COMMON}/interface.c

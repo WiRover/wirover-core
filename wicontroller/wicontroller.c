@@ -8,6 +8,7 @@
 #include "bandwidth.h"
 #include "configuration.h"
 #include "contchan.h"
+#include "constants.h"
 #include "database.h"
 #include "debug.h"
 #include "pathperf.h"
@@ -22,7 +23,8 @@ const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_idle
 const unsigned int  CLIENT_TIMEOUT = 5;
 
 static struct bw_server_info bw_server = {
-    .timeout = DEFAULT_BANDWIDTH_TIMEOUT,
+    .start_timeout = DEFAULT_BANDWIDTH_START_TIMEOUT * USECS_PER_SEC,
+    .data_timeout = DEFAULT_BANDWIDTH_DATA_TIMEOUT * USECS_PER_SEC,
     .port = DEFAULT_BANDWIDTH_PORT,
 };
 static unsigned short bw_ext_port = DEFAULT_BANDWIDTH_PORT;
@@ -95,19 +97,41 @@ int main(int argc, char* argv[])
     }
 
     if(config) {
-        int tmp;
-        
-        config_lookup_int_compat(config, "bandwidth-server.timeout", &tmp);
-        if(tmp > 0)
-            bw_server.timeout = tmp;
-        else
-            DEBUG_MSG("Invalid: bandwidth-server.timeout = %d", tmp);
+        int tmp = 0;
+        int found = 0;
 
-        config_lookup_int_compat(config, "bandwidth-server.port", &tmp);
-        if(tmp > 0 && tmp <= USHRT_MAX)
-            bw_server.port = tmp;
-        else
-            DEBUG_MSG("Invalid: bandwidth-server.port = %d", tmp);
+        // Set a maximum because we are going to convert to microseconds.
+        int max_timeout = (UINT_MAX / USECS_PER_SEC);
+
+        found = config_lookup_int_compat(config, "bandwidth-port", &tmp);
+        if(found == CONFIG_TRUE) {
+            if(tmp > 0 && tmp <= USHRT_MAX) {
+                bw_server.port = tmp;
+            } else {
+                DEBUG_MSG("Invalid value for bandwidth-port (%d): must be positive and at most %hu", 
+                        tmp, USHRT_MAX);
+            }
+        }
+
+        found = config_lookup_int_compat(config, "bandwidth-start-timeout", &tmp);
+        if(found == CONFIG_TRUE) {
+            if(tmp > 0 && tmp <= max_timeout) {
+                bw_server.start_timeout = tmp * USECS_PER_SEC;
+            } else {
+                DEBUG_MSG("Invalid value for bandwidth-start-timeout (%d): must be positive and at most %d",
+                        tmp, max_timeout);
+            }
+        }
+
+        found = config_lookup_int_compat(config, "bandwidth-data-timeout", &tmp);
+        if(found == CONFIG_TRUE) {
+            if(tmp > 0 && tmp <= max_timeout) {
+                bw_server.data_timeout = tmp * USECS_PER_SEC;
+            } else {
+                DEBUG_MSG("Invalid value for bandwidth-data-timeout (%d): must be positive and at most %d",
+                        tmp, max_timeout);
+            }
+        }
 
         bw_ext_port = get_register_bandwidth_port();
         if(!bw_ext_port)

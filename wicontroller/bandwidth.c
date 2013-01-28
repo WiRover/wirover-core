@@ -24,6 +24,7 @@
 #include "bandwidth.h"
 #include "config.h"
 #include "configuration.h"
+#include "constants.h"
 #include "database.h"
 #include "debug.h"
 #include "gateway.h"
@@ -38,11 +39,9 @@ static int wait_for_client_udp(struct bw_server_info *server, int sockfd,
         char *buffer, int buffer_len);
 static int handle_bandwidth_client_udp(struct bw_server_info *serverInfo, 
         struct bw_client *client, int sockfd, char *buffer, int buffer_len);
-static int send_cts_udp(int sockfd, struct sockaddr *dest_addr, socklen_t dest_len);
+static int send_cts_udp(int sockfd, struct sockaddr *dest_addr, socklen_t dest_len, unsigned timeout);
 static int recv_client_burst_udp(struct bw_server_info *server, struct bw_client *client,
         int sockfd, char *buffer, int buffer_len);
-static int send_burst_udp(const struct bw_client *client, int sockfd, 
-        char *buffer, int buffer_len);
 
 int start_bandwidth_server_thread(struct bw_server_info *serverInfo)
 {
@@ -110,25 +109,28 @@ static int handle_bandwidth_client_udp(struct bw_server_info *serverInfo,
     int bytes_recvd = 0;
 
     result = send_cts_udp(sockfd, (struct sockaddr *)&client->addr, 
-            client->addr_len);
+            client->addr_len, serverInfo->data_timeout);
     if(result != SUCCESS)
         return FAILURE;
 
     bytes_recvd = recv_client_burst_udp(serverInfo, client, sockfd, buffer, buffer_len);
     if(bytes_recvd <= 0)
         return FAILURE;
+        
+    struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
+    unsigned short h_link_id = ntohs(bw_hdr->link_id);
+    unsigned client_timeout = ntohl(bw_hdr->timeout);
 
     //Send Packets for DL BW estimation by Client
-    int bytes_sent = send_burst_udp(client, sockfd, buffer, buffer_len);
+    int bytes_sent = send_udp_burst(sockfd, buffer, buffer_len,
+            (struct sockaddr *)&client->addr, client->addr_len, 
+            h_link_id, client->uplink_bw, serverInfo->data_timeout); 
     if(bytes_sent <= 0)
         return FAILURE;
 
-    // TODO: We should use whatever timeout the gateway is using.
-    usleep(serverInfo->timeout);
-
     int recvd_last_pkt = 0;
     
-    long remaining_us = serverInfo->timeout;
+    long remaining_us = client_timeout + serverInfo->start_timeout;
     while(remaining_us > 0) {
         struct timeval timeout;
         set_timeval_us(&timeout, remaining_us);
@@ -259,7 +261,7 @@ static int wait_for_client_udp(struct bw_server_info *server, int sockfd,
     return 0;
 }
 
-static int send_cts_udp(int sockfd, struct sockaddr *dest_addr, socklen_t dest_len)
+static int send_cts_udp(int sockfd, struct sockaddr *dest_addr, socklen_t dest_len, unsigned timeout)
 {
     const int packet_size = sizeof(struct bw_hdr);
     char buffer[packet_size];
@@ -268,6 +270,7 @@ static int send_cts_udp(int sockfd, struct sockaddr *dest_addr, socklen_t dest_l
     struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
     bw_hdr->type = BW_TYPE_CTS;
     bw_hdr->size = htonl(get_mtu());
+    bw_hdr->timeout = htonl(timeout);
     bw_hdr->bandwidth = 0.0;
 
     int rtn = sendto(sockfd, buffer, packet_size, 0, dest_addr, dest_len);
@@ -292,7 +295,7 @@ static int recv_client_burst_udp(struct bw_server_info *server, struct bw_client
     struct timeval first_pkt_time;
     struct timeval last_pkt_time;
 
-    long remaining_us = server->timeout;
+    long remaining_us = server->start_timeout;
     while(remaining_us > 0) {
         struct timeval timeout;
         set_timeval_us(&timeout, remaining_us);
@@ -313,12 +316,17 @@ static int recv_client_burst_udp(struct bw_server_info *server, struct bw_client
                 if(is_first_pkt) {
                     get_recv_timestamp(sockfd, &first_pkt_time);
                     is_first_pkt = 0;
+                    remaining_us = server->data_timeout;
                 } else {
                     get_recv_timestamp(sockfd, &last_pkt_time);
                     bytes_recvd += result;
                 }
 
-                remaining_us = server->timeout;
+                // If we receive the last packet that has remaining == 0, then we
+                // do not need to wait for timeout.
+                if(bw_hdr->remaining == 0) {
+                    break;
+                }
             } else if(bw_hdr->type == BW_TYPE_RTS) {
                 // Received an RTS from a new client.
                 struct bw_client *new_client = malloc(sizeof(struct bw_client));
@@ -343,8 +351,11 @@ static int recv_client_burst_udp(struct bw_server_info *server, struct bw_client
 
         remaining_us -= get_elapsed_us(&recvfrom_start);
     }
+
+    struct timeval finish_time;
+    gettimeofday(&finish_time, NULL);
     
-    long elapsed_us = timeval_diff(&last_pkt_time, &first_pkt_time);
+    long elapsed_us = timeval_diff(&finish_time, &first_pkt_time);
     double uplink_bw = (double)(bytes_recvd * 8) / (double)elapsed_us; //in Mbps
 
     client->uplink_bw = uplink_bw;
@@ -353,26 +364,5 @@ static int recv_client_burst_udp(struct bw_server_info *server, struct bw_client
             bytes_recvd, elapsed_us, uplink_bw);
 
     return bytes_recvd;
-}
-
-static int send_burst_udp(const struct bw_client *client, int sockfd, 
-        char *buffer, int buffer_len)
-{
-    int i;
-    int bytes_sent = 0;
-    int result;
-        
-    struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-    bw_hdr->type = BW_TYPE_BURST;
-    bw_hdr->bandwidth = client->uplink_bw;
-
-    for(i = 0; i < BW_UDP_PKTS; i++) {
-        result = sendto(sockfd, buffer, client->pkt_len, 0, 
-                (struct sockaddr *)&client->addr, client->addr_len);
-        if(result > 0)
-            bytes_sent += result;
-    }
-
-    return bytes_sent;
 }
 

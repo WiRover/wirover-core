@@ -15,6 +15,7 @@
 #include "config.h"
 #include "configuration.h"
 #include "contchan.h"
+#include "constants.h"
 #include "debug.h"
 #include "gps_handler.h"
 #include "netlink.h"
@@ -214,11 +215,41 @@ int main(int argc, char* argv[])
 
                 struct bw_client_info bw_client;
                 memset(&bw_client, 0, sizeof(bw_client));
-                bw_client.timeout = DEFAULT_BANDWIDTH_TIMEOUT;
+                bw_client.start_timeout = DEFAULT_BANDWIDTH_START_TIMEOUT * USECS_PER_SEC;
+                bw_client.data_timeout = DEFAULT_BANDWIDTH_DATA_TIMEOUT * USECS_PER_SEC;
                 bw_client.remote_addr = pub_ip;
                 bw_client.remote_port = get_remote_bw_port();
                 bw_client.interval = get_bandwidth_test_interval();
                 bw_client.callback = update_bandwidth;
+
+                const config_t *config = get_config();
+                if(config) {
+                    int tmp = 0;
+                    int found = 0;
+
+                    // Set a maximum because we are going to convert to microseconds.
+                    int max_timeout = (UINT_MAX / USECS_PER_SEC);
+
+                    found = config_lookup_int_compat(config, "bandwidth-start-timeout", &tmp);
+                    if(found == CONFIG_TRUE) {
+                        if(tmp > 0 && tmp <= max_timeout) {
+                            bw_client.start_timeout = tmp * USECS_PER_SEC;
+                        } else {
+                            DEBUG_MSG("Invalid value for bandwidth-start-timeout (%d): must be positive and at most %d",
+                                    tmp, max_timeout);
+                        }
+                    }
+
+                    found = config_lookup_int_compat(config, "bandwidth-data-timeout", &tmp);
+                    if(found == CONFIG_TRUE) {
+                        if(tmp > 0 && tmp <= max_timeout) {
+                            bw_client.data_timeout = tmp * USECS_PER_SEC;
+                        } else {
+                            DEBUG_MSG("Invalid value for bandwidth-data-timeout (%d): must be positive and at most %d",
+                                    tmp, max_timeout);
+                        }
+                    }
+                }
 
                 if(start_bandwidth_client_thread(&bw_client) < 0) {
                     DEBUG_MSG("Failed to start bandwidth client thread");

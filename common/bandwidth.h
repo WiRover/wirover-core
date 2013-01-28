@@ -71,7 +71,8 @@ struct bw_client {
 struct bw_server_info {
     // Settings for the bandwidth thread
     // Set these values before calling startBandwidthServerThread()
-    unsigned int       timeout; //in microseconds
+    unsigned int       start_timeout; //in microseconds
+    unsigned int       data_timeout; //in microseconds
     unsigned short     port;
 
     pthread_t          tcp_thread;
@@ -84,7 +85,8 @@ struct bw_server_info {
 struct bw_client_info {
     // Settings for the bandwidth thread
     // Set these values before calling startBandwidthClientThread()
-    unsigned int       timeout; //in microseconds
+    unsigned int       start_timeout; //in microseconds
+    unsigned int       data_timeout; //in microseconds
     unsigned int       remote_addr;
     unsigned short     remote_port;
     unsigned int       interval; //in microseconds
@@ -114,6 +116,9 @@ struct bw_hdr {
 
     uint16_t node_id;
     uint16_t link_id;
+
+    uint16_t test_id;
+    uint16_t remaining;
 } __attribute__((__packed__));
 
 int     start_bandwidth_server_thread(struct bw_server_info *serverInfo);
@@ -124,6 +129,10 @@ void    setBandwidthInterval(struct bw_client_info* clientInfo, unsigned int int
 
 void    pauseBandwidthThread(struct bw_client_info* clientInfo);
 void    resumeBandwidthThread(struct bw_client_info* clientInfo);
+
+int send_udp_burst(int sockfd, char *buffer, unsigned length, 
+        struct sockaddr *dest, socklen_t dest_len, 
+        unsigned short link_id, double bandwidth, unsigned timeout);
 
 #endif //_BANDWIDTH_H_
 

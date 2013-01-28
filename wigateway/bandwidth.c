@@ -44,10 +44,9 @@ int     runActiveBandwidthTest(struct bw_client_info* clientInfo, struct bw_stat
 int     runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stats* stats);
 
 static int openBandwidthSocket_udp(struct bw_client_info* clientInfo, const char* bindDevice);
-static int receiveCts_udp(int sockfd, int timeout, unsigned int* max_burst);
-static int sendBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats);
+static int receiveCts_udp(int sockfd, int timeout, struct bw_hdr *dest_hdr);
 static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
-        int sockfd, char *buffer, int buffer_len);
+        int sockfd, char *buffer, int buffer_len, unsigned server_timeout);
 static int sendMeasurement_udp(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats);
 
 
@@ -224,6 +223,7 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
     struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
     bw_hdr->type = BW_TYPE_RTS;
     bw_hdr->size = htonl(get_mtu());
+    bw_hdr->timeout = htonl(clientInfo->data_timeout);
     bw_hdr->bandwidth = 0.0;
     bw_hdr->node_id = htons(get_unique_id());
     bw_hdr->link_id = htons(stats->link_id);
@@ -241,11 +241,13 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
     }
 
     // Wait for CTS
-    unsigned int max_burst;
-    rtn = receiveCts_udp(sockfd_data, clientInfo->timeout, &max_burst);
+    struct bw_hdr cts_hdr;
+    rtn = receiveCts_udp(sockfd_data, clientInfo->start_timeout, &cts_hdr);
     if(rtn == FAILURE) {
         goto failure;
     }
+
+    unsigned server_timeout = ntohl(cts_hdr.timeout);
 
      // Send some packets for BW estimation
     // Never exceed the maximum size the server gave us.
@@ -258,15 +260,15 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
 
     fill_buffer_random(buffer, burst_size);
 
-    rtn = sendBurst_udp(sockfd_data, buffer, burst_size, clientInfo, stats); 
+    rtn = send_udp_burst(sockfd_data, buffer, burst_size, 
+            (struct sockaddr *)&remoteAddr, sizeof(remoteAddr), 
+            stats->link_id, NAN, clientInfo->data_timeout);
     if (rtn <=0){
         goto failure;
     }
 
-    // TODO: We should use whatever timeout the controller is using.
-    usleep(clientInfo->timeout);
-
-    rtn = recv_burst_udp(clientInfo, stats, sockfd_data, buffer, sizeof(buffer));
+    rtn = recv_burst_udp(clientInfo, stats, sockfd_data, buffer, sizeof(buffer), 
+            server_timeout);
     if (rtn <= 0) {
         DEBUG_MSG("recv_burst_udp: %d", rtn);
         goto failure;
@@ -312,7 +314,7 @@ static int openBandwidthSocket_udp(struct bw_client_info* clientInfo, const char
     }
 
     struct timeval timeout;
-    set_timeval_us(&timeout, clientInfo->timeout);
+    set_timeval_us(&timeout, clientInfo->start_timeout);
 
     // Set socket timeout so that recv() cannot block indefinitely.
     rtn = setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
@@ -331,11 +333,10 @@ failure:
 
 /*
  * Waits up to timeout microseconds for a CTS packet.  If this returns SUCCESS,
- * then you are clear to flood the server with useless data.  If max_burst is
- * not null, this will write the server's max burst size into it.  If you try
- * to send more than that the server will ignore you.
+ * then you are clear to flood the server with useless data.  If dest_hdr is
+ * not null, this will write the received header into it.
  */
-static int receiveCts_udp(int sockfd, int timeout, unsigned int* max_burst)
+static int receiveCts_udp(int sockfd, int timeout, struct bw_hdr *dest_hdr)
 {
     const int packet_size = sizeof(struct bw_hdr);
     char buffer[packet_size];
@@ -352,50 +353,23 @@ static int receiveCts_udp(int sockfd, int timeout, unsigned int* max_burst)
         }
         return FAILURE;
     }
-    
+
     struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-    uint32_t h_size = ntohl(bw_hdr->size);
 
     if(bw_hdr->type != BW_TYPE_CTS) {
         DEBUG_MSG("Received something other than CTS... look into this");
         return FAILURE;
     }
 
-    if(max_burst) {
-        *max_burst = h_size;
+    if(dest_hdr) {
+        memcpy(dest_hdr, bw_hdr, sizeof(struct bw_hdr));
     }
 
     return SUCCESS;
 }
 
-static int sendBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats)
-{
-    int i;
-    int rtn;
-    struct sockaddr_in remoteAddr;
-    memset(&remoteAddr, 0, sizeof(remoteAddr));
-    remoteAddr.sin_family       = AF_INET;
-    remoteAddr.sin_port         = htons(clientInfo->remote_port);
-    remoteAddr.sin_addr.s_addr  = clientInfo->remote_addr;
-
-    for(i = 0; i <= BW_UDP_PKTS; i++){
-        struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-
-        bw_hdr->type = BW_TYPE_BURST;
-        bw_hdr->size = htonl(get_mtu());
-        bw_hdr->bandwidth = i; //bandwidth not known yet
-        bw_hdr->node_id = htons(get_unique_id());
-        bw_hdr->link_id = htons(stats->link_id);
-
-        rtn = sendto(sockfd, buffer, get_mtu(), 0, 
-                (struct sockaddr*)&remoteAddr, sizeof(struct sockaddr));
-    }
-
-    return rtn;
-}
-
 static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
-        int sockfd, char *buffer, int buffer_len)
+        int sockfd, char *buffer, int buffer_len, unsigned server_timeout)
 {
     int result;
     int bytes_recvd = 0;
@@ -404,7 +378,7 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
     struct timeval first_pkt_time;
     struct timeval last_pkt_time;
 
-    long remaining_us = client->timeout;
+    long remaining_us = server_timeout + client->start_timeout;
     while(remaining_us > 0) {
         struct timeval timeout;
         set_timeval_us(&timeout, remaining_us);
@@ -425,22 +399,31 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
                 if(is_first_pkt) {
                     get_recv_timestamp(sockfd, &first_pkt_time);
                     is_first_pkt = 0;
+                    remaining_us = client->data_timeout;
                 } else {
                     get_recv_timestamp(sockfd, &last_pkt_time);
                     bytes_recvd += result;
                 }
 
-                remaining_us = client->timeout;
-
                 struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
                 stats->uplink_bw = bw_hdr->bandwidth;
+
+                // If we receive the last packet that has remaining == 0, then we
+                // do not need to wait for timeout.
+                if(bw_hdr->remaining == 0) {
+                    break;
+                }
+                
             }
         }
 
         remaining_us -= get_elapsed_us(&recvfrom_start);
     }
 
-    long elapsed_us = timeval_diff(&last_pkt_time, &first_pkt_time);
+    struct timeval finish_time;
+    gettimeofday(&finish_time, NULL);
+
+    long elapsed_us = timeval_diff(&finish_time, &first_pkt_time);
     stats->downlink_bw = (double)(bytes_recvd * 8) / (double)elapsed_us; //in Mbps
 
     DEBUG_MSG("bytes: %d, time: %ld, downlink_bw: %f Mbps, uplink_bw: %f Mbps",

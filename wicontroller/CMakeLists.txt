@@ -7,6 +7,7 @@ add_executable(wicontroller
     database.c
     gateway.c
     ping.c
+    ${COMMON}/bandwidth.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
     ${COMMON}/interface.c
