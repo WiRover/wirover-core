@@ -113,7 +113,11 @@ static long timeout_sessions(struct bw_server_info *server)
             } else {
                 HASH_DEL(server->session_table, session);
                 free(session);
-                server->active_sessions--;
+
+                if(server->active_sessions > 0)
+                    server->active_sessions--;
+                else
+                    DEBUG_MSG("Warning: count of active sessions is not correct");
             }
         } else if(diff < min_timeout) {
             if(diff < min_timeout)
@@ -170,7 +174,7 @@ static int handle_burst_packet(struct bw_server_info *server, struct bw_session 
     get_recv_timestamp(sockfd, &session->last_packet_time);
 
     session->packets_recvd++;
-    session->packets_recvd += buffer_len;
+    session->bytes_recvd += buffer_len;
 
     if(bw_hdr->remaining == 0) {
         return finish_recv_burst(server, session);
@@ -288,6 +292,7 @@ void *bandwidth_server_func_udp(void *serverInfo)
 
                     HASH_ADD(hh, info->session_table, key,
                             sizeof(struct bw_session_key), session);
+                    info->active_sessions++;
                     break;
 
                 case BW_TYPE_BURST:
