@@ -346,11 +346,12 @@ int handle_netlink_message(const char* msg, int msg_len)
         send_notification(1);
     }
 
-    if(should_notify)
+    if(should_notify) {
         write_path_list();
     
-    DEBUG_MSG("Interface list:");
-    dump_interfaces(interface_list, "  ");
+        DEBUG_MSG("Interface list:");
+        dump_interfaces(interface_list, "  ");
+    }
 
     return 0;
 }
