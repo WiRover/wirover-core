@@ -297,8 +297,10 @@ static int update_path_bandwidths()
         struct interface *ife;
         
         DL_FOREACH(gw->head_interface, ife) {
-            long hint = calc_bw_hint(ife);
-            virt_remote_bandwidth_hint(ife->public_ip.s_addr, hint);
+            if(ife->state == ACTIVE) {
+                long hint = calc_bw_hint(ife);
+                virt_remote_bandwidth_hint(ife->public_ip.s_addr, hint);
+            }
 
             count++;
         }
@@ -318,11 +320,14 @@ static int update_path_bandwidths()
     DL_FOREACH(interface_list, ife) {
         long hint = calc_bw_hint(ife);
 
-        if(ARGS.with_kernel)
-            virt_local_bandwidth_hint(ife->index, hint);
-        else
+        if(ARGS.with_kernel) {
+            if(ife->state == ACTIVE) {
+                virt_local_bandwidth_hint(ife->index, hint);
+            }
+        } else {
             DEBUG_MSG("bandwidth hint for %s (%s): %ld",
                     ife->name, ife->network, hint);
+        }
 
         count++;
     }
@@ -340,7 +345,7 @@ static void *path_perf_thread_fn(void *arg)
         int paths = update_path_bandwidths();
 
         /* Adjust sleep time according to number of paths to amortize the cost
-         * of the update. */
+         * of the update (one system call per path). */
         int wait = 1;
         if(paths > 0)
             wait = (int)round(sqrt(paths));
