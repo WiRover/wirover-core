@@ -21,10 +21,22 @@ void print_time(FILE *out);
 #ifdef DEBUG_PRINT
 void __debug_msg(const char* file, int line, const char* func, const char* msg, ...);
 void __error_msg(const char* file, int line, const char* func, const char* msg, ...);
+
 #define DEBUG_MSG(...) __debug_msg(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__);
+
+#define DEBUG_ONCE(...) {  \
+    static int __print_msg = 1;     \
+    if(__print_msg) {   \
+        __debug_msg(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__);     \
+        __print_msg = 0;    \
+    }   \
+}
+
 #define ERROR_MSG(...) __error_msg(__FILE__, __LINE__, __FUNCTION__, __VA_ARGS__);
+
 #else
 #define DEBUG_MSG(...)
+#define DEBUG_ONCE(...)
 #define ERROR_MSG(...)
 #endif
 

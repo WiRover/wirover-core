@@ -114,7 +114,8 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
     struct addrinfo* results = 0;
     rtn = getaddrinfo(remote_addr, port_string, &tcp_active_hints, &results);
     if(rtn != 0) {
-        DEBUG_MSG("getaddrinfo failed - %s", gai_strerror(rtn));
+        DEBUG_ONCE("getaddrinfo failed - host: %s port: %hu device: %s reason: %s", 
+                remote_addr, remote_port, device, gai_strerror(rtn));
 
         /* TODO: There seems to be a problem with the AI_ADDRCONFIG option on
          * some systems.  This fallback code is in here to make sure the system
@@ -122,7 +123,8 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
          * better. */
         rtn = getaddrinfo(remote_addr, port_string, &tcp_active_hints_fallback, &results);
         if(rtn != 0) {
-            DEBUG_MSG("getaddrinfo fallback failed - %s", gai_strerror(rtn));
+            DEBUG_MSG("getaddrinfo fallback failed - host: %s port: %hu device: %s reason: %s", 
+                    remote_addr, remote_port, device, gai_strerror(rtn));
             return -1;
         }
     }
@@ -214,7 +216,8 @@ int udp_bind_open(unsigned short local_port, const char* device)
     struct addrinfo* results = 0;
     int rtn = getaddrinfo(NULL, port_str, &udp_bind_hints, &results);
     if(rtn != 0) {
-        DEBUG_MSG("getaddrinfo failed - %s", gai_strerror(rtn));
+        DEBUG_ONCE("getaddrinfo failed - port: %hu device: %s reason: %s", 
+                local_port, device, gai_strerror(rtn));
 
         /* TODO: There seems to be a problem with the AI_ADDRCONFIG option on
          * some systems.  This fallback code is in here to make sure the system
@@ -222,7 +225,8 @@ int udp_bind_open(unsigned short local_port, const char* device)
          * better. */
         rtn = getaddrinfo(NULL, port_str, &udp_bind_hints_fallback, &results);
         if(rtn != 0) {
-            DEBUG_MSG("getaddrinfo fallback failed - %s", gai_strerror(rtn));
+            DEBUG_MSG("getaddrinfo fallback failed - port: %hu device: %s reason: %s", 
+                    local_port, device, gai_strerror(rtn));
             return FAILURE;
         }
     }
@@ -490,7 +494,8 @@ int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage*
 
     err = getaddrinfo(ip, serv, &build_sockaddr_hints, &results);
     if(err != 0) {
-        DEBUG_MSG("getaddrinfo failed - %s", gai_strerror(err));
+        DEBUG_ONCE("getaddrinfo failed - host: %s port: %hu reason: %s", 
+                ip, port, gai_strerror(err));
 
         /* TODO: There seems to be a problem with the AI_ADDRCONFIG option on
          * some systems.  This fallback code is in here to make sure the system
@@ -498,7 +503,8 @@ int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage*
          * better. */
         err = getaddrinfo(ip, serv, &build_sockaddr_hints_fallback, &results);
         if(err != 0) {
-            DEBUG_MSG("getaddrinfo fallback failed - %s", gai_strerror(err));
+            DEBUG_MSG("getaddrinfo fallback failed - host: %s port: %hu reason: %s", 
+                    ip, port, gai_strerror(err));
             return FAILURE;
         }
     }
