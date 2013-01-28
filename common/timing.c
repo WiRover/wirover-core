@@ -11,6 +11,15 @@ long timeval_diff(const struct timeval *lhs, const struct timeval *rhs)
             (long)(lhs->tv_usec - rhs->tv_usec);
 }
 
+void timeval_add_us(struct timeval *dest, long usec)
+{
+    dest->tv_sec += usec / USEC_PER_SEC;
+    dest->tv_usec += usec % USEC_PER_SEC;
+
+    dest->tv_sec += dest->tv_usec / USEC_PER_SEC;
+    dest->tv_usec = dest->tv_usec % USEC_PER_SEC;
+}
+
 void set_timeval_usec(long usec, struct timeval *dest)
 {
     dest->tv_sec = usec / USEC_PER_SEC;

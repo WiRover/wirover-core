@@ -26,6 +26,7 @@ static struct bw_server_info bw_server = {
     .start_timeout = DEFAULT_BANDWIDTH_START_TIMEOUT * USECS_PER_SEC,
     .data_timeout = DEFAULT_BANDWIDTH_DATA_TIMEOUT * USECS_PER_SEC,
     .port = DEFAULT_BANDWIDTH_PORT,
+    .max_sessions = DEFAULT_BANDWIDTH_MAX_SESSIONS,
 };
 static unsigned short bw_ext_port = DEFAULT_BANDWIDTH_PORT;
 
@@ -130,6 +131,15 @@ int main(int argc, char* argv[])
             } else {
                 DEBUG_MSG("Invalid value for bandwidth-data-timeout (%d): must be positive and at most %d",
                         tmp, max_timeout);
+            }
+        }
+
+        found = config_lookup_int_compat(config, "bandwidth-max-sessions", &tmp);
+        if(found == CONFIG_TRUE) {
+            if(tmp > 0) {
+                bw_server.max_sessions = tmp;
+            } else {
+                DEBUG_MSG("Invalid value for bandwidth-max-sessions (%d): must be positive", tmp);
             }
         }
 

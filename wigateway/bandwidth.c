@@ -47,7 +47,6 @@ static int openBandwidthSocket_udp(struct bw_client_info* clientInfo, const char
 static int receiveCts_udp(int sockfd, int timeout, struct bw_hdr *dest_hdr);
 static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
         int sockfd, char *buffer, int buffer_len, unsigned server_timeout);
-static int sendMeasurement_udp(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats);
 
 
 /*
@@ -212,31 +211,26 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
         DEBUG_MSG("sockfd_data: %d", sockfd_data); 
         return FAILURE;
     }
+
+    struct bw_session session;
+    memset(&session, 0, sizeof(session));
    
-    // Send RTS
-    struct sockaddr_in remoteAddr;
-    memset(&remoteAddr, 0, sizeof(remoteAddr));
-    remoteAddr.sin_family       = AF_INET;
-    remoteAddr.sin_port         = htons(clientInfo->remote_port);
-    remoteAddr.sin_addr.s_addr  = clientInfo->remote_addr;
+    struct sockaddr_in *remoteAddr = (struct sockaddr_in *)&session.key.addr;
+    remoteAddr->sin_family       = AF_INET;
+    remoteAddr->sin_port         = htons(clientInfo->remote_port);
+    remoteAddr->sin_addr.s_addr  = clientInfo->remote_addr;
+    session.key.addr_len = sizeof(struct sockaddr_in);
 
-    struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-    bw_hdr->type = BW_TYPE_RTS;
-    bw_hdr->size = htonl(get_mtu());
-    bw_hdr->timeout = htonl(clientInfo->data_timeout);
-    bw_hdr->bandwidth = 0.0;
-    bw_hdr->node_id = htons(get_unique_id());
-    bw_hdr->link_id = htons(stats->link_id);
+    session.key.node_id = get_unique_id();
+    session.key.link_id = stats->link_id;
+    session.key.session_id = clientInfo->next_session_id++;
 
-    const int header_size = sizeof(struct bw_hdr);
+    session.mtu = get_mtu();
+    session.local_timeout = clientInfo->data_timeout;
 
-    rtn = sendto(sockfd_data, buffer, header_size, 0, 
-            (struct sockaddr *)&remoteAddr, sizeof(remoteAddr));
+    rtn = session_send_rts(&session, sockfd_data);
     if(rtn < 0) {
         ERROR_MSG("Sending RTS failed");
-        goto failure;
-    } else if(rtn < header_size) {
-        DEBUG_MSG("Sending RTS stopped early");
         goto failure;
     }
 
@@ -247,34 +241,37 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
         goto failure;
     }
 
-    unsigned server_timeout = ntohl(cts_hdr.timeout);
+    session.remote_timeout = ntohl(cts_hdr.timeout);
 
-     // Send some packets for BW estimation
-    // Never exceed the maximum size the server gave us.
-    //unsigned int burst_size = MIN(clientInfo->numBytes, max_burst);
-    int burst_size = get_mtu();    
+    unsigned remote_mtu = ntohl(cts_hdr.mtu);
+    if(remote_mtu < session.mtu)
+        session.mtu = remote_mtu;
 
     // The burst needs to fit the header at least.  If this check fails,
     // someone made a silly mistake somewhere.
-    assert(burst_size >= header_size);
-
-    fill_buffer_random(buffer, burst_size);
-
-    rtn = send_udp_burst(sockfd_data, buffer, burst_size, 
-            (struct sockaddr *)&remoteAddr, sizeof(remoteAddr), 
-            stats->link_id, NAN, clientInfo->data_timeout);
-    if (rtn <=0){
+    if(session.mtu < sizeof(struct bw_hdr)) {
+        DEBUG_MSG("Warning: the MTU (%u) is too small (need at least %u)",
+                session.mtu, sizeof(struct bw_hdr));
         goto failure;
     }
 
+    rtn = session_send_burst(&session, sockfd_data);
+    if (rtn < 0) {
+        goto failure;
+    } else {
+        session.bytes_sent += rtn;
+    }
+
     rtn = recv_burst_udp(clientInfo, stats, sockfd_data, buffer, sizeof(buffer), 
-            server_timeout);
+            session.remote_timeout);
     if (rtn <= 0) {
         DEBUG_MSG("recv_burst_udp: %d", rtn);
         goto failure;
     }
 
-    rtn = sendMeasurement_udp(sockfd_data, buffer, header_size, clientInfo, stats);
+    session.measured_bw = stats->downlink_bw;
+
+    rtn = session_send_stats(&session, sockfd_data);
     if(rtn <= 0) {
         DEBUG_MSG("Failed at sendMeasurement");
         goto failure;
@@ -420,10 +417,7 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
         remaining_us -= get_elapsed_us(&recvfrom_start);
     }
 
-    struct timeval finish_time;
-    gettimeofday(&finish_time, NULL);
-
-    long elapsed_us = timeval_diff(&finish_time, &first_pkt_time);
+    long elapsed_us = timeval_diff(&last_pkt_time, &first_pkt_time);
     stats->downlink_bw = (double)(bytes_recvd * 8) / (double)elapsed_us; //in Mbps
 
     DEBUG_MSG("bytes: %d, time: %ld, downlink_bw: %f Mbps, uplink_bw: %f Mbps",
@@ -431,26 +425,4 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
 
     return bytes_recvd;
 }
-
-static int sendMeasurement_udp(int sockfd, char* buffer, unsigned len, struct bw_client_info* clientInfo, struct bw_stats* stats)
-{
-    struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
-    const unsigned header_len = sizeof(struct bw_hdr);
-
-    bw_hdr->type = BW_TYPE_STATS;
-    bw_hdr->size = htonl(header_len);
-    bw_hdr->bandwidth = stats->downlink_bw;
-    bw_hdr->node_id = htons(get_unique_id());
-    bw_hdr->link_id = htons(stats->link_id);
-    
-    struct sockaddr_in remoteAddr;
-    memset(&remoteAddr, 0, sizeof(remoteAddr));
-    remoteAddr.sin_family       = AF_INET;
-    remoteAddr.sin_port         = htons(clientInfo->remote_port);
-    remoteAddr.sin_addr.s_addr  = clientInfo->remote_addr;
-
-    return sendto(sockfd, buffer, header_len, 0, 
-            (struct sockaddr *)&remoteAddr, sizeof(remoteAddr));
-}
-
 

@@ -34,6 +34,8 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 
+#include "uthash.h"
+
 enum {
     BW_UDP = 1,
     BW_TCP,
@@ -55,17 +57,34 @@ typedef void (*bw_callback_t)(struct bw_client_info *, struct interface *,
 #define BW_TYPE_BURST       0x03
 #define BW_TYPE_STATS       0x04
 
-/* Storage for a queue of waiting bandwidth clients. */
-struct bw_client {
+struct bw_session_key {
     struct sockaddr_storage addr;
     socklen_t addr_len;
-    int pkt_len;
 
-    double uplink_bw;
+    unsigned short node_id;
+    unsigned short link_id;
+    unsigned short session_id;
+};
 
-    struct timeval rts_time;
+struct bw_session {
+    struct bw_session_key key;
 
-    struct bw_client *next;
+    unsigned mtu;
+    unsigned local_timeout;
+    unsigned remote_timeout;
+    double measured_bw;
+
+    struct timeval timeout_time;
+    int timeout_triggers_burst;
+
+    long packets_recvd;
+    long bytes_recvd;
+    long bytes_sent;
+
+    struct timeval first_packet_time;
+    struct timeval last_packet_time;
+
+    UT_hash_handle hh;
 };
 
 struct bw_server_info {
@@ -74,12 +93,15 @@ struct bw_server_info {
     unsigned int       start_timeout; //in microseconds
     unsigned int       data_timeout; //in microseconds
     unsigned short     port;
+    unsigned int       max_sessions;
 
     pthread_t          tcp_thread;
     pthread_t          udp_thread;
 
-    struct bw_client   *clients_head;
-    struct bw_client   *clients_tail;
+    int sockfd;
+
+    struct bw_session *session_table;
+    int active_sessions;
 };
 
 struct bw_client_info {
@@ -94,6 +116,8 @@ struct bw_client_info {
     pthread_t          thread;
     bw_callback_t      callback;
     unsigned short     local_seq_no;
+
+    unsigned short     next_session_id;
 
     int                pauseFlag;
     pthread_cond_t     pauseCond;
@@ -110,14 +134,14 @@ struct bw_stats {
 
 struct bw_hdr {
     uint8_t  type;
-    uint32_t size;
+    uint32_t mtu;
     uint32_t timeout;
     double   bandwidth;
 
     uint16_t node_id;
     uint16_t link_id;
 
-    uint16_t test_id;
+    uint16_t session_id;
     uint16_t remaining;
 } __attribute__((__packed__));
 
@@ -130,9 +154,11 @@ void    setBandwidthInterval(struct bw_client_info* clientInfo, unsigned int int
 void    pauseBandwidthThread(struct bw_client_info* clientInfo);
 void    resumeBandwidthThread(struct bw_client_info* clientInfo);
 
-int send_udp_burst(int sockfd, char *buffer, unsigned length, 
-        struct sockaddr *dest, socklen_t dest_len, 
-        unsigned short link_id, double bandwidth, unsigned timeout);
+int session_send(const struct bw_session *session, int sockfd, int type);
+int session_send_rts(const struct bw_session *session, int sockfd);
+int session_send_cts(const struct bw_session *session, int sockfd);
+int session_send_burst(const struct bw_session *session, int sockfd);
+int session_send_stats(const struct bw_session *session, int sockfd);
 
 #endif //_BANDWIDTH_H_
 
