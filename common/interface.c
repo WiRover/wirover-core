@@ -178,9 +178,10 @@ int copy_all_interfaces(const struct interface *head, struct interface_copy **ou
     
     int i = 0;
     while(head && i < n) {
+        (*out)[i].index = head->index;
         strncpy((*out)[i].name, head->name, IFNAMSIZ);
-        i++;
 
+        i++;
         head = head->next;
     }
     
@@ -216,6 +217,7 @@ int copy_active_interfaces(const struct interface *head, struct interface_copy *
     int i = 0;
     while(head && i < num_active) {
         if(head->state == ACTIVE) {
+            (*out)[i].index = head->index;
             strncpy((*out)[i].name, head->name, IFNAMSIZ);
             i++;
         }

@@ -33,6 +33,7 @@
 #include "kernel.h"
 #include "netlink.h"
 #include "rootchan.h"
+#include "rwlock.h"
 #include "sockets.h"
 #include "timing.h"
 #include "tunnel.h"
@@ -136,43 +137,54 @@ void* bandwidthThreadFunc(void* clientInfo)
             pthread_mutex_unlock(&info->pauseMutex);
         }
 
-        struct interface *ife = interface_list;
-        while(ife) {
-            /* Only run the bandwidth test on ACTIVE interfaces.  Non-ACTIVE
-             * interfaces are presumably not working, so trying to test them
-             * will result in errors or long timeouts. */
-            if(ife->state == ACTIVE) {
-                struct bw_stats stats;
-                memcpy(stats.device, ife->name, IFNAMSIZ);
-                stats.link_id = ife->index;
-                stats.downlink_bw = NAN;
-                stats.uplink_bw = NAN;
-                
-                int rtn = FAILURE;
- 
-                if(BW_TYPE == BW_TCP) {
-                    DEBUG_MSG("BW_TCP not supported");
-                    //rtn = runActiveBandwidthTest(info, &stats);
-                } else if(BW_TYPE == BW_UDP) {
-                    rtn = runActiveBandwidthTest_udp(info, &stats);
-                    if(rtn == FAILURE)
-                        DEBUG_MSG("Bandwidth test on %s failed", ife->name);
-                } else {
-                    DEBUG_MSG("BW_TYPE not defined");
-                }
- 
-                if(rtn == SUCCESS && info->callback != 0) {
-                    info->callback(clientInfo, ife, &stats);
-                }
+        /* It may seem inefficient to copy the interface list before doing the
+         * bandwidth tests, but this is done to minimize the time spent in the
+         * critical section of the lock.  The bandwidth tests make take a long
+         * time (several seconds or more).  Locking the interface list for that
+         * long will delay the gateway's response to added or removed
+         * interfaces. */
+        obtain_read_lock(&interface_list_lock);
+        struct interface_copy *active_list;
+        int num_active = copy_active_interfaces(interface_list, &active_list);
+        release_read_lock(&interface_list_lock);
 
-                // Give some time for the connection to be torn down and
-                // perhaps for other gateways to access the server.
-                safe_usleep(ACTIVE_BW_DELAY);
+        int j;
+        for(j = 0; j < num_active; j++) {
+            struct bw_stats stats;
+            memcpy(stats.device, active_list[j].name, IFNAMSIZ);
+            stats.link_id = active_list[j].index;
+            stats.downlink_bw = NAN;
+            stats.uplink_bw = NAN;
+            
+            int rtn = FAILURE;
+
+            if(BW_TYPE == BW_TCP) {
+                DEBUG_MSG("BW_TCP not supported");
+                //rtn = runActiveBandwidthTest(info, &stats);
+            } else if(BW_TYPE == BW_UDP) {
+                rtn = runActiveBandwidthTest_udp(info, &stats);
+                if(rtn == FAILURE)
+                    DEBUG_MSG("Bandwidth test on %s failed", active_list[j].name);
+            } else {
+                DEBUG_MSG("BW_TYPE not defined");
             }
 
-            ife = ife->next;
+            if(rtn == SUCCESS && info->callback != 0) {
+                obtain_read_lock(&interface_list_lock);
+                struct interface *ife;
+                ife = find_interface_by_index(interface_list, active_list[j].index);
+                if(ife) {
+                    info->callback(clientInfo, ife, &stats);
+                }
+                release_read_lock(&interface_list_lock);
+            }
+
+            // Give some time for the connection to be torn down and
+            // perhaps for other gateways to access the server.
+            safe_usleep(ACTIVE_BW_DELAY);
         }
 
+        free(active_list);
         sleep(info->interval);
     }
 

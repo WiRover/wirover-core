@@ -22,7 +22,7 @@ enum if_state {
 #define IFFLAG_SOURCE_VERIFIED 0x00000001
 
 struct interface {
-    unsigned int      index; //interface index assigned by kernel
+    int               index; //interface index assigned by kernel
     char              name[IFNAMSIZ];
     char              network[NETWORK_NAME_LENGTH];
     enum if_state     state;
@@ -68,7 +68,8 @@ struct interface {
 };
 
 struct interface_copy {
-    char    name[IFNAMSIZ];
+    int index;
+    char name[IFNAMSIZ];
 };
 
 struct interface* alloc_interface();
