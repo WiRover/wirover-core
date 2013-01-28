@@ -144,7 +144,7 @@ void* bandwidthThreadFunc(void* clientInfo)
          * long will delay the gateway's response to added or removed
          * interfaces. */
         obtain_read_lock(&interface_list_lock);
-        struct interface_copy *active_list;
+        struct interface_copy *active_list = NULL;
         int num_active = copy_active_interfaces(interface_list, &active_list);
         release_read_lock(&interface_list_lock);
 
@@ -184,7 +184,10 @@ void* bandwidthThreadFunc(void* clientInfo)
             safe_usleep(ACTIVE_BW_DELAY);
         }
 
-        free(active_list);
+        if(active_list) {
+            free(active_list);
+        }
+
         sleep(info->interval);
     }
 

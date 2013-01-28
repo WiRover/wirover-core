@@ -31,10 +31,8 @@ int send_notification(int max_tries)
     int i;
     for(i = 0; i < max_tries; i++) {
         obtain_read_lock(&interface_list_lock);
-
-        struct interface_copy *active_list;
+        struct interface_copy *active_list = NULL;
         int num_active = copy_active_interfaces(interface_list, &active_list);
-
         release_read_lock(&interface_list_lock);
 
         if(num_active <= 0) {
@@ -52,7 +50,9 @@ int send_notification(int max_tries)
             }
         }
 
-        free(active_list);
+        if(active_list) {
+            free(active_list);
+        }
     }
 
     return -1;

@@ -158,7 +158,7 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
     gwreg->longitude = NAN;
 
     obtain_read_lock(&interface_list_lock);
-    struct interface_copy *iface_list;
+    struct interface_copy *iface_list = NULL;
     int num_ifaces = copy_all_interfaces(interface_list, &iface_list);
     release_read_lock(&interface_list_lock);
 
@@ -181,7 +181,9 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
         }
     }
 
-    free(iface_list);
+    if(iface_list) {
+        free(iface_list);
+    }
 
     if(!lease_obtained) {
         DEBUG_MSG("Failed to obtain lease, %d interfaces tried", num_ifaces);
