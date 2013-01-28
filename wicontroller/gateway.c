@@ -13,6 +13,7 @@ struct gateway* alloc_gateway()
 {
     struct gateway* gw = (struct gateway*)malloc(sizeof(struct gateway));
     assert(gw);
+    memset(gw, 0, sizeof(struct gateway));
     
     gw->creation_time = time(0);
     gw->last_ping_time = gw->creation_time;

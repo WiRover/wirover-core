@@ -254,7 +254,7 @@ void *bandwidth_server_func_udp(void *serverInfo)
 
         int bytes_recvd = recvfrom_timeout(info->sockfd, buffer, sizeof(buffer), 0,
                 (struct sockaddr *)&key.addr, &key.addr_len, &timeout);
-        if(bytes_recvd >= sizeof(struct bw_hdr)) {
+        if(bytes_recvd > 0 && (unsigned)bytes_recvd >= sizeof(struct bw_hdr)) {
             struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
             key.node_id = ntohs(bw_hdr->node_id);
             key.link_id = ntohs(bw_hdr->link_id);
@@ -284,6 +284,7 @@ void *bandwidth_server_func_udp(void *serverInfo)
                         DEBUG_MSG("out of memory");
                         break;
                     }
+                    memset(session, 0, sizeof(struct bw_session));
                     memcpy(&session->key, &key, sizeof(session->key));
                     session->mtu = get_mtu();
                     session->local_timeout = info->data_timeout;

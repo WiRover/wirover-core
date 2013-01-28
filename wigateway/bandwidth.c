@@ -388,7 +388,7 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
 
         result = recvfrom_timeout(sockfd, buffer, buffer_len, 0,
                 (struct sockaddr *)&sender_addr, &sender_addr_len, &timeout);
-        if(result >= (int)sizeof(struct bw_hdr)) {
+        if(result > 0 && (unsigned)result >= sizeof(struct bw_hdr)) {
             struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
 
             // TODO: Verify sender address matches server
