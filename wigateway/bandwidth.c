@@ -265,7 +265,6 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
     rtn = recv_burst_udp(clientInfo, stats, sockfd_data, buffer, sizeof(buffer), 
             session.remote_timeout);
     if (rtn <= 0) {
-        DEBUG_MSG("recv_burst_udp: %d", rtn);
         goto failure;
     }
 
@@ -415,6 +414,11 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
         }
 
         remaining_us -= get_elapsed_us(&recvfrom_start);
+    }
+
+    if(bytes_recvd <= 0) {
+        DEBUG_MSG("No data received during bandwidth test");
+        return -1;
     }
 
     long elapsed_us = timeval_diff(&last_pkt_time, &first_pkt_time);
