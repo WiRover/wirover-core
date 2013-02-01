@@ -217,8 +217,22 @@ static int send_ping(struct interface* ife,
     ife->last_ping_time = time(NULL);
     ife->pings_outstanding++;
 
+    ife->next_ping_time = ife->last_ping_time + ife->ping_interval;
+    ife->next_ping_timeout = ife->last_ping_time + ife->ping_timeout;
+
     free(buffer);
     close(sockfd);
+    return 0;
+}
+
+static int should_send_ping(const struct interface *ife)
+{
+    if(ife->state == DEAD)
+        return 0;
+
+    if(time(NULL) >= ife->next_ping_time)
+        return 1;
+
     return 0;
 }
 
@@ -264,9 +278,9 @@ void* ping_thread_func(void* arg)
 			obtain_read_lock(&interface_list_lock);
 			struct interface *ife = find_interface_at_pos(
 				interface_list, curr_iface_pos);
-			if(ife && ife->num_ping_failures == 0) {
-				ping_interface(ife);
-			}
+            if(ife && should_send_ping(ife)) {
+                ping_interface(ife);
+            }
 			release_read_lock(&interface_list_lock);
 
 			memcpy(&last_ping_time, &now, sizeof(last_ping_time));
@@ -382,7 +396,7 @@ static int handle_incoming(int sockfd, int timeout)
     long diff = (long)recv_ts - (long)send_ts;
 
     // If the ping response is older than timeout seconds, we just ignore it.
-    if((diff / USEC_PER_SEC) < timeout) {
+    if(diff < (timeout * USEC_PER_SEC)) {
         ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
         if(ife->state == INIT_INACTIVE || ife->state == INACTIVE) {
             change_interface_state(ife, ACTIVE);
@@ -400,6 +414,8 @@ static int handle_incoming(int sockfd, int timeout)
 
         ife->last_ping_success = time(NULL);
         ife->last_ping_seq_no = ntohl(pkt->seq_no);
+
+        ife->next_ping_timeout = ife->next_ping_time + ife->ping_timeout;
 
         /* Reset on a successful ping so that we do not accumulate spurious losses. */
         ife->pings_outstanding = 0;
@@ -477,36 +493,23 @@ static void mark_inactive_interfaces(int ping_timeout)
 	int notif_needed = 0;
 	time_t now = time(NULL);
 
-	const int PING_TIMEOUT      = ping_timeout;
 	const int MAX_PING_FAILURES = get_max_ping_failures();
 
 	obtain_read_lock(&interface_list_lock);
 
 	struct interface* curr_ife = interface_list;
 	while (curr_ife) {
-		// Ping has returned if last success > last ping time
-		int ping_has_returned = 
-			(curr_ife->last_ping_time <= curr_ife->last_ping_success) ? 1 : 0;
-		// If ping doesn't return within timeout
-		int waited_timeout = 
-			(now - curr_ife->last_ping_time > PING_TIMEOUT) ? 1 : 0;
-		// If ping returned but took longer than a timeout
-		int ping_timeout_exceeded =
-			(curr_ife->last_ping_success - curr_ife->last_ping_time > PING_TIMEOUT) 
-			? 1 : 0;
-	
         if(curr_ife->state == ACTIVE) {
-			if((!ping_has_returned && waited_timeout) ||
-                    (ping_has_returned && ping_timeout_exceeded)) {
+            if(now >= curr_ife->next_ping_timeout) {
                 // Increment failures and ping interface
                 curr_ife->num_ping_failures++;
 
                 /* One outstanding ping is accounted for. */
                 if(curr_ife->pings_outstanding > 0)
                     curr_ife->pings_outstanding--;
-
+                
                 ping_interface(curr_ife);
-            
+
                 // If interface has failed too many times, mark inactive
                 if (curr_ife->num_ping_failures >= MAX_PING_FAILURES) {
                     change_interface_state(curr_ife, INACTIVE);
@@ -521,7 +524,7 @@ static void mark_inactive_interfaces(int ping_timeout)
                 notif_needed = 1;
             }
         }
-
+	
 		assert(curr_ife->num_ping_failures >= 0 && 
 			curr_ife->num_ping_failures <= MAX_PING_FAILURES);
 		assert(curr_ife != curr_ife->next);

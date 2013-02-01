@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include "configuration.h"
 #include "debug.h"
 #include "interface.h"
 
@@ -25,9 +26,16 @@ struct interface* alloc_interface()
     ife->avg_downlink_bw = NAN;
     ife->avg_uplink_bw = NAN;
 
+    ife->ping_interval = get_ping_interval();
+    ife->ping_timeout = get_ping_timeout();
+
     // Prevent early timeouts
-    ife->last_ping_time = time(NULL);
-    ife->last_ping_success = time(NULL);
+    time_t now = time(NULL);
+    ife->last_ping_time = now;
+    ife->last_ping_success = now;
+
+    ife->next_ping_time = now;
+    ife->next_ping_timeout = now;
 
     return ife;
 }
