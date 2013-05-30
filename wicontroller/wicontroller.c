@@ -18,6 +18,7 @@
 #include "utlist.h"
 #include "kernel.h"
 #include "config.h"
+#include "timing.h"
 
 const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_idle_clients()
 const unsigned int  CLIENT_TIMEOUT = 5;
@@ -57,10 +58,11 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
+    int retry_delay = MIN_LEASE_RETRY_DELAY;
     while(request_lease(NULL, &lease) < 0) {
-        DEBUG_MSG("Failed to obtain a lease from root server, retry in %u seconds",
-                LEASE_RETRY_DELAY);
-        sleep(LEASE_RETRY_DELAY);
+        DEBUG_MSG("Failed to obtain a lease from root server, will retry in %u seconds",
+                retry_delay);
+        retry_delay = exp_delay(retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
     }
     lease_renewal_time = time(NULL) + lease.time_limit - RENEW_BEFORE_EXPIRATION;
 
@@ -179,6 +181,7 @@ static void server_loop(int cchan_sock)
 {
     int result;
     struct client* cchan_clients = 0;
+    int lease_retry_delay = MIN_LEASE_RETRY_DELAY;
 
     while(1) {
         fd_set read_set;
@@ -232,9 +235,13 @@ static void server_loop(int cchan_sock)
                 memcpy(&lease, &new_lease, sizeof(lease));
                 lease_renewal_time = time(NULL) + new_lease.time_limit - 
                     RENEW_BEFORE_EXPIRATION;
+                lease_retry_delay = MIN_LEASE_RETRY_DELAY;
             } else {
-                DEBUG_MSG("Lease renewal failed, will retry in %u seconds");
-                lease_renewal_time = time(NULL) + LEASE_RETRY_DELAY;
+                DEBUG_MSG("Lease renewal failed, will retry in %u seconds",
+                        lease_retry_delay);
+                lease_renewal_time = time(NULL) + lease_retry_delay;
+                lease_retry_delay = exp_inc(lease_retry_delay, 
+                        MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
             }
         }
     }

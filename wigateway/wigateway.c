@@ -25,6 +25,7 @@
 #include "kernel.h"
 #include "callback.h"
 #include "sockets.h"
+#include "timing.h"
 
 // The virtual interface will use this IP address if we are unable to obtain a
 // private IP from the root server.
@@ -107,21 +108,22 @@ int main(int argc, char* argv[])
         }
     }
 
+    int lease_retry_delay = MIN_LEASE_RETRY_DELAY;
     while(1) {
         if(state == GATEWAY_START) {
             result = register_gateway(&lease, wiroot_address, wiroot_port);
             if(result == 0) {
                 if(lease.unique_id == 0) {
                     DEBUG_MSG("Lease request rejected, will retry in %u seconds",
-                            LEASE_RETRY_DELAY);
-                    sleep(LEASE_RETRY_DELAY);
+                            lease_retry_delay);
+                    lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
                     continue;
                 }
 
                 if(lease.controllers <= 0) {
                     DEBUG_MSG("Could not find any controllers, will retry in %u seconds",
-                            LEASE_RETRY_DELAY);
-                    sleep(LEASE_RETRY_DELAY);
+                            lease_retry_delay);
+                    lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
                     continue;
                 }
 
@@ -173,6 +175,7 @@ int main(int argc, char* argv[])
                 }
                 
                 state = GATEWAY_LEASE_OBTAINED;
+                lease_retry_delay = MIN_LEASE_RETRY_DELAY;
             }
         } else if(time(NULL) >= lease_renewal_time) {
             struct lease_info new_lease;
@@ -180,10 +183,11 @@ int main(int argc, char* argv[])
                 memcpy(&lease, &new_lease, sizeof(lease));
                 lease_renewal_time = time(NULL) + lease.time_limit -
                     RENEW_BEFORE_EXPIRATION;
+                lease_retry_delay = MIN_LEASE_RETRY_DELAY;
             } else {
                 DEBUG_MSG("Lease renewal failed, will retry in %u seconds",
-                        LEASE_RETRY_DELAY);
-                sleep(LEASE_RETRY_DELAY);
+                        lease_retry_delay);
+                lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
                 continue;
             }
         }

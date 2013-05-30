@@ -22,8 +22,11 @@
 #include "sockets.h"
 #include "utlist.h"
 #include "format.h"
+#include "timing.h"
 
-const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_stale_leases()
+const int CLEANUP_INTERVAL = 5; // seconds between calling remove_stale_leases()
+const int DB_MIN_RETRY_DELAY = 1;
+const int DB_MAX_RETRY_DELAY = 64;
 
 // This default value will be writted during configuration.
 static unsigned short WIROOT_PORT = 8088;
@@ -59,10 +62,10 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    result = db_connect();
-    if(result == -1) {
-        DEBUG_MSG("failed to connect to mysql database");
-        return 1;
+    int retry_delay = DB_MIN_RETRY_DELAY;
+    while(db_connect() < 0) {
+        DEBUG_MSG("failed to connect to mysql database, will retry in %d seconds", retry_delay);
+        retry_delay = exp_delay(retry_delay, DB_MIN_RETRY_DELAY, DB_MAX_RETRY_DELAY);
     }
 
     server_sock = tcp_passive_open(WIROOT_PORT, SOMAXCONN);

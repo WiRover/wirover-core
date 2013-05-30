@@ -10,6 +10,7 @@ add_executable(wiroot
     ${COMMON}/ipaddr.c
     ${COMMON}/sockets.c
     ${COMMON}/format.c
+    ${COMMON}/timing.c
 )
 
 target_link_libraries(wiroot config mysqlclient)

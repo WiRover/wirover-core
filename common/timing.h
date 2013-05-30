@@ -15,5 +15,8 @@ int safe_usleep(long usec);
 
 long get_elapsed_us(struct timeval *start);
 
+int exp_inc(int curr, int min, int max);
+int exp_delay(int delay, int min, int max);
+
 #endif /* TIMING_H */
 

@@ -70,7 +70,8 @@
 #define NODE_ID_MAX_HEX_LEN 128
 #define NODE_ID_MAX_BIN_LEN 64
 
-#define LEASE_RETRY_DELAY   60
+#define MIN_LEASE_RETRY_DELAY 4
+#define MAX_LEASE_RETRY_DELAY 64
 #define RENEW_BEFORE_EXPIRATION   600
 
 // Determines the rate at which the value of a recent bandwidth decays, must be
