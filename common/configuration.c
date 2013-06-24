@@ -194,13 +194,13 @@ unsigned int get_mtu()
     return mtu;
 }
 
-const char* get_internal_interface()
+const char* get_external_interface()
 {
     const config_t* config = get_config();
 
     const char* interface = 0;
-    if(!config || config_lookup_string(config, "internal-interface", &interface) == CONFIG_FALSE) {
-        DEBUG_MSG("failed to read internal-interface from config file");
+    if(!config || config_lookup_string(config, "external-interface", &interface) == CONFIG_FALSE) {
+        DEBUG_MSG("failed to read external-interface from config file");
     }
 
     return interface;

@@ -38,7 +38,7 @@ static void __write_path_list(FILE *file)
     char local_node[INET6_ADDRSTRLEN];
     ipaddr_to_string(&private_ip, local_node, sizeof(local_node));
     
-    const char *local_dev = get_internal_interface();
+    const char *local_dev = get_external_interface();
     if(!local_dev)
         local_dev = "(null)";
 

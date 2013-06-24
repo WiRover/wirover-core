@@ -80,7 +80,7 @@ unsigned short  get_control_port();
 unsigned int    get_ping_interval();
 unsigned int    get_max_ping_failures();
 unsigned int    get_mtu();
-const char*     get_internal_interface();
+const char*     get_external_interface();
 int             get_interface_priority(const char *ifname);
 unsigned int    get_bandwidth_test_interval();
 int             get_ping_timeout();

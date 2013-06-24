@@ -156,16 +156,16 @@ int main(int argc, char* argv[])
     }
 
 #ifdef WITH_KERNEL
-    const char* internal_if = get_internal_interface();
-    if(kernel_enslave_device(internal_if) == FAILURE) {
-        DEBUG_MSG("Failed to enslave device %s", internal_if);
+    const char* external_if = get_external_interface();
+    if(kernel_enslave_device(external_if) == FAILURE) {
+        DEBUG_MSG("Failed to enslave device %s", external_if);
     }
     
     struct in_addr gateway_ip;
-    if(find_gateway_ip(internal_if, &gateway_ip) == 0) {
+    if(find_gateway_ip(external_if, &gateway_ip) == 0) {
         DEBUG_MSG("Found gateway 0x%x for %s", ntohl(gateway_ip.s_addr),
-                internal_if);
-        virt_set_gateway_ip(internal_if, &gateway_ip);
+                external_if);
+        virt_set_gateway_ip(external_if, &gateway_ip);
     }
 #endif
 
