@@ -20,12 +20,17 @@
 uint8_t private_key[SHA256_DIGEST_LENGTH] = { 0 };
 uint16_t remote_unique_id = 0;
 
+char node_hash[41];
+
 static uint16_t remote_bw_port = 0;
 
 static int _send_notification(const char *ifname);
 
 int send_notification(int max_tries)
 {
+    FILE *fp = fopen("/etc/wirover.d/node_id","r");
+    fscanf(fp,"%s",node_hash);
+    fclose(fp);
     assert(max_tries > 0);
 
     int i;
@@ -107,6 +112,7 @@ static int _send_notification(const char *ifname)
     notif->unique_id = htons(get_unique_id());
 
     memcpy(notif->key, private_key, sizeof(notif->key));
+    memcpy(notif->hash, node_hash, sizeof(notif->hash));
 
     obtain_read_lock(&interface_list_lock);
 
