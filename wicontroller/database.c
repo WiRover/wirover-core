@@ -122,48 +122,54 @@ void db_write_loop()
   dbqreq* req;
   while(1){
     req = dbq_dequeue();
-    int gps_req = req->gps_req;
-    
+    int len = 0;
     char query[1024];
+    MYSQL_RES *result;
+    MYSQL_ROW row;
+
+    /*Add the gateway if it isn't already in the table*/
     snprintf(query,1024,"INSERT ignore into gateways (hash,conid) values ('%s','%d') on duplicate key update conid = '%d'",req->hash,cont_id,cont_id);
     int res = mysql_query(database,query);
     if(res != 0){ 
       DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-      free(req);
-      continue;
+      goto continue_free;
     }
-    MYSQL_RES *result;
-    MYSQL_ROW row;
 
+    /*Convert the hash into the gateways node id*/
     snprintf(query,1024,"SELECT id from gateways where hash = '%s'",req->hash);
     res = mysql_query(database, query);
-    if(res != 0) 
+    if(res != 0){
       DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-
+      goto continue_free;
+    }
     result = mysql_store_result(database);
     row = mysql_fetch_row(result);
     mysql_free_result(result);
     if(!row){
       DEBUG_MSG("Error finding gateway");
-      free(req);
-      continue;
+      goto continue_free;
     }
     int gwid = atoi(row[0]);
-    req->len = snprintf(query,1024,req->query,gwid);
-    res = mysql_real_query(database, query, req->len);
-    if(res != 0) 
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-    if(gps_req != req->gps_req)
-        DEBUG_MSG("Error: GPS Req overwritten: %d to %d",gps_req,req->gps_req);
-    if(req->gps_req){
-        int gps_row_id = mysql_insert_id(database);
 
-        /* Update the last_gps_id for the gateway. */
-        req->len = snprintf(req->query, 1024,
-            "update gateways set last_gps_id=%u where id=%hu",
-            gps_row_id, req->gwid);
-        res = mysql_real_query(database, req->query, req->len);
+    /*Insert the node id into the query*/
+    len = snprintf(query,1024,req->query,gwid);
+    res = mysql_real_query(database, query, len);
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto continue_free;
     }
+
+    /* Update the last_gps_id for the gateway. */
+    if(req->gps_req){
+        DEBUG_MSG("Last query before gps: %s",query);
+        int gps_row_id = mysql_insert_id(database);
+        DEBUG_MSG("Last gps id = %d",gps_row_id);
+        len = snprintf(req->query, 1024,
+            "update gateways set last_gps_id=%u where id=%hu",
+            gps_row_id, gwid);
+        res = mysql_real_query(database, req->query, len);
+    }
+continue_free:
     free(req);
   }
 }
@@ -174,27 +180,26 @@ int db_update_gateway(const struct gateway *gw, int state_change)
 
 
     dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
-    int len;
     if(gw->state == ACTIVE) {
         char priv_ip[INET6_ADDRSTRLEN];
         ipaddr_to_string(&gw->private_ip, priv_ip, sizeof(priv_ip));
 
         if(state_change) {
-            len = snprintf(req->query, 1024,
+            snprintf(req->query, 1024,
                     "update gateways set state=%d, eventtime=NOW(), private_ip='%s' where id='%s'",
                     gw->state, priv_ip,"%hu");
         } else {
-            len = snprintf(req->query, 1024,
+            snprintf(req->query, 1024,
                     "update gateways set state=%d, private_ip='%s' where id='%s'",
                     gw->state, priv_ip,"%hu");
         }
     } else {
         if(state_change) {
-            len = snprintf(req->query, 1024,
+            snprintf(req->query, 1024,
                     "update gateways set state=%d, eventtime=NOW(), private_ip=NULL where id='%s'",
                     gw->state,"%hu");
         } else {
-            len = snprintf(req->query, 1024,
+            snprintf(req->query, 1024,
                     "update gateways set state=%d, private_ip=NULL where id='%s'",
                     gw->state,"%hu");
         }
@@ -202,7 +207,6 @@ int db_update_gateway(const struct gateway *gw, int state_change)
     req->gps_req = 0;
     req->gwid = gw->unique_id;
     memcpy(req->hash,gw->hash,sizeof(gw->hash));
-    req->len = len;
     dbq_enqueue(req);
 
     return 0;
@@ -221,7 +225,7 @@ int db_update_link(const struct gateway *gw, const struct interface *ife)
     inet_ntop(AF_INET, &ife->public_ip, pub_ip, sizeof(pub_ip));
 
     dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
-    int len = snprintf(req->query, 1024,
+    snprintf(req->query, 1024,
             "insert into links (gatewayid, network, ip, avg_bw_down, avg_bw_up, "
             "avg_rtt, state, updated) values "
             "(%s, '%s', '%s', '%f', '%f', '%f', %d, NOW()) "
@@ -234,7 +238,6 @@ int db_update_link(const struct gateway *gw, const struct interface *ife)
     req->gps_req = 0;
     req->gwid = gw->unique_id;
     memcpy(req->hash,gw->hash,sizeof(gw->hash));
-    req->len = len;
     dbq_enqueue(req);
 
     return 0;
@@ -253,13 +256,12 @@ int db_update_gps(struct gateway *gw, const struct gps_payload *gps)
     }*/
 
     dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
-    int len = snprintf(req->query, 1024,
+    snprintf(req->query, 1024,
             "insert into gps (node_id, status, latitude, longitude,"
             "altitude, track, speed, climb) values ('%s', '%d', '%f',"
             "'%f', '%f', '%f', '%f', '%f')",
             "%hu", gps->status, gps->latitude, gps->longitude,
             gps->altitude, gps->track, gps->speed, gps->climb);
-    req->len = len;
     req->gps_req = 1;
     req->gwid = gw->unique_id;
     memcpy(req->hash,gw->hash,sizeof(gw->hash));
@@ -275,18 +277,17 @@ int db_update_pings(const struct gateway *gw, const struct interface *ife, int r
 
     dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
 
-    int len;
-    len = snprintf(req->query, 1024,
+    snprintf(req->query, 1024,
             "insert into pings (node_id, network, gps_id, rtt)"
             "select gateways.id,"
             "       '%s',"
-            "       IF(last_gps_id = NULL or TIMESTAMPDIFF(SECOND,gps.time,NOW())>5,NULL,last_gps_id),"
+            "       IF(not EXISTS(select 1 from gps where id = last_gps_id) or last_gps_id = NULL or TIMESTAMPDIFF(SECOND,gps.time,NOW())>5,NULL,last_gps_id),"
             "       %d "
             "from gateways left join gps on last_gps_id = gps.id where gateways.id = '%s'",
             ife->network, rtt,"%hu");
  
-    req->len = len;
     req->gwid = gw->unique_id;
+    req->gps_req = 0;
     memcpy(req->hash,gw->hash,sizeof(gw->hash));
 
     dbq_enqueue(req);
@@ -336,7 +337,7 @@ int db_update_passive(const struct gateway *gw, struct interface *ife,
 
 
     dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
-    int len = snprintf(req->query, 1024,
+    snprintf(req->query, 1024,
             "insert into passive (node_id, network, time, interval_len, "
             "bytes_tx, bytes_rx, rate_down, rate_up, packets_tx, packets_rx) values "
             "('%s', '%s', NOW(), %ld, %llu, %llu, '%f', '%f', %u, %u)",
@@ -344,21 +345,21 @@ int db_update_passive(const struct gateway *gw, struct interface *ife,
             bytes_tx_diff, bytes_rx_diff,
             rate_down, rate_up,
             packets_tx_diff, packets_rx_diff);
-    req->len = len;
     req->gwid = gw->unique_id;
+    req->gps_req = 0;
     memcpy(req->hash,gw->hash,sizeof(gw->hash));
 
     dbq_enqueue(req);
     
     req = (dbqreq*)malloc(sizeof(dbqreq));
-    len = snprintf(req->query, 1024,
+    snprintf(req->query, 1024,
             "update links set bytes_tx=bytes_tx+%llu, bytes_rx=bytes_rx+%llu, "
             "month_tx=month_tx+%llu, month_rx=month_rx+%llu, updated=NOW() "
             "where gatewayid='%s' and network='%s'",
             bytes_tx_diff, bytes_rx_diff, bytes_tx_diff, bytes_rx_diff,
             "%hu", ife->network);
-    req->len = len;
     req->gwid = gw->unique_id;
+    req->gps_req = 0;
     memcpy(req->hash,gw->hash,sizeof(gw->hash));
 
     dbq_enqueue(req);
@@ -386,8 +387,7 @@ int db_update_bandwidth(const struct gateway *gw, const struct interface *ife,
     }
 
     dbqreq *req = (dbqreq*)malloc(sizeof(dbqreq));
-    int len;
-    len = snprintf(req->query, 1024,
+    snprintf(req->query, 1024,
             "insert into bandwidth (node_id, network, gps_id, bw_down, bw_up, type) "
             "select gateways.id,'%s',"
             "       IF(last_gps_id = NULL or TIMESTAMPDIFF(SECOND,gps.time,NOW())>5,NULL,last_gps_id),"
@@ -395,7 +395,6 @@ int db_update_bandwidth(const struct gateway *gw, const struct interface *ife,
             "from gateways left join gps on last_gps_id = gps.id where gateways.id = '%s'",
                 ife->network, bw_down, bw_up, type_str,"%hu");
     req->gps_req = 0;
-    req->len = len;
     req->gwid = gw->unique_id;
     memcpy(req->hash,gw->hash,sizeof(gw->hash));
 

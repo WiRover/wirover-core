@@ -4,7 +4,6 @@ typedef struct{
 	int gps_req;
         int gwid;
         char hash[41];
-        int len;
 }dbqreq;
 
 void init_dbq();
