@@ -154,8 +154,10 @@ static struct gateway *update_gateway_v2(const struct cchan_notification_v2 *not
 
         add_gateway(gw);
     }
-    
     memcpy(gw->private_key, notif->key, sizeof(gw->private_key));
+    /*gw->hash is size NODE_HASH_SIZE + 1 and is initialized to 0
+      this null terminates the string*/
+    memcpy(gw->hash, notif->hash, NODE_HASH_SIZE);
     
     int state_change = 0;
 
