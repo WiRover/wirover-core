@@ -20,7 +20,7 @@
 uint8_t private_key[SHA256_DIGEST_LENGTH] = { 0 };
 uint16_t remote_unique_id = 0;
 
-char node_hash[NODE_HASH_SIZE];
+char node_hash[NODE_HASH_SIZE+1];
 
 static uint16_t remote_bw_port = 0;
 
@@ -29,7 +29,7 @@ static int _send_notification(const char *ifname);
 int send_notification(int max_tries)
 {
     FILE *fp = fopen("/etc/wirover.d/node_id","r");
-    fscanf(fp,"%s",node_hash);
+    fgets(node_hash,sizeof(node_hash),fp);
     fclose(fp);
     assert(max_tries > 0);
 
