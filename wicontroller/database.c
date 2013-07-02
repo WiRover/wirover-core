@@ -1,6 +1,7 @@
 #define _BSD_SOURCE /* Required for be64toh */
 
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <errno.h>
 #include <gps.h>
 #include <linux/udp.h>
@@ -34,9 +35,17 @@
 #include "timing.h"
 
 static MYSQL* database = 0;
-char cont_hash[41];
+char cont_hash[NODE_HASH_SIZE + 1];
 char hostname[1024];
 int cont_id;
+int verify_hash(char* hash)
+{
+    for(int i = 0; i < NODE_HASH_SIZE; i++){
+        if(!isalnum(hash[i])) { return 0; }
+    }
+    if(hash[NODE_HASH_SIZE]!=0) { return 0; }
+    return 1;
+}
 
 int init_database()
 {
@@ -47,7 +56,11 @@ int init_database()
     fp = fopen("/etc/hostname","r");
     fscanf(fp,"%s",hostname);
     fclose(fp);
-     
+    
+    if(!verify_hash(cont_hash)) {
+         DEBUG_MSG("Controller's hash is invalid");
+         return -1;
+    }
     pthread_t db_write_thr;
 
     const config_t *config = get_config();
@@ -122,6 +135,10 @@ void db_write_loop()
   dbqreq* req;
   while(1){
     req = dbq_dequeue();
+    if(!verify_hash(req->hash)) {
+        DEBUG_MSG("Database request enqueued with invalid node hash");
+        goto continue_free;
+    }
     int len = 0;
     char query[1024];
     MYSQL_RES *result;

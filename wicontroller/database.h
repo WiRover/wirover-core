@@ -11,6 +11,7 @@ struct gps_payload;
 struct passive_payload;
 struct interface;
 
+int verify_hash(char* hash);
 void db_write_loop();
 int db_update_gateway(const struct gateway *gw, int state_change);
 int db_update_link(const struct gateway *gw, const struct interface *ife);

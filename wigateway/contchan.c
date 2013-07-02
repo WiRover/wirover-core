@@ -20,7 +20,7 @@
 uint8_t private_key[SHA256_DIGEST_LENGTH] = { 0 };
 uint16_t remote_unique_id = 0;
 
-char node_hash[41];
+char node_hash[NODE_HASH_SIZE];
 
 static uint16_t remote_bw_port = 0;
 

@@ -19,6 +19,7 @@
 
 #include "interface.h"
 #include "ipaddr.h"
+#include "config.h"
 
 #define MAX_INTERFACES    6
 
@@ -64,7 +65,7 @@ struct cchan_notification_v2 {
     uint16_t    unique_id;
     uint8_t     key[SHA256_DIGEST_LENGTH];
     uint16_t    bw_port;
-    char        hash[41];
+    char        hash[NODE_HASH_SIZE];
 
     /* Interface list follows */
 } __attribute__((__packed__));
