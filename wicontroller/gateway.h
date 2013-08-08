@@ -32,6 +32,7 @@ struct gateway {
     int cchan_updates;
 
     UT_hash_handle      hh_id;
+    char hash[NODE_HASH_SIZE+1];
 };
 
 struct gateway* alloc_gateway();

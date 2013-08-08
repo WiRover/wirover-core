@@ -5,6 +5,7 @@ add_executable(wicontroller
     bandwidth.c
     contchan.c
     database.c
+    dbq.c
     gateway.c
     ping.c
     ${COMMON}/bandwidth.c

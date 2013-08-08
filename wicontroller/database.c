@@ -1,6 +1,7 @@
 #define _BSD_SOURCE /* Required for be64toh */
 
 #include <arpa/inet.h>
+#include <ctype.h>
 #include <errno.h>
 #include <gps.h>
 #include <linux/udp.h>
@@ -26,146 +27,41 @@
 #include "config.h"
 #include "configuration.h"
 #include "database.h"
+#include "dbq.h"
 #include "debug.h"
 #include "gateway.h"
 #include "interface.h"
 #include "ping.h"
 #include "timing.h"
 
-static const char CREATE_TABLE_GATEWAYS[] = "                       \
-    create table if not exists gateways (                           \
-        id          int unsigned not null,                          \
-        last_gps_id int unsigned default null,                      \
-        name        varchar(16) default null,                       \
-        state       tinyint(1) unsigned default 0,                  \
-        private_ip  varchar(46) default null,                       \
-        event_time  datetime default null,                          \
-        comment     text default null,                              \
-        primary key (id)                                            \
-    ) engine=InnoDB default charset=utf8                            \
-";
-
-static const char CREATE_TABLE_LINKS[] = "                          \
-    create table if not exists links (                              \
-        id          int unsigned not null auto_increment,           \
-        node_id     int unsigned not null,                          \
-        network     varchar(16) not null,                           \
-        ip          varchar(46) default null,                       \
-        state       tinyint(1) unsigned default 0,                  \
-        bytes_tx    bigint unsigned default 0,                      \
-        bytes_rx    bigint unsigned default 0,                      \
-        month_tx    bigint unsigned default 0,                      \
-        month_rx    bigint unsigned default 0,                      \
-        quota       bigint unsigned default null,                   \
-        avg_rtt     double default null,                            \
-        avg_bw_down double default null,                            \
-        avg_bw_up   double default null,                            \
-        updated     timestamp not null default                      \
-            current_timestamp on update current_timestamp,          \
-        comment     text default null,                              \
-        primary key (id),                                           \
-        unique key (node_id, network),                              \
-        foreign key (node_id) references gateways (id)              \
-            on delete cascade on update cascade                     \
-    ) engine=InnoDB default charset=utf8                            \
-";
-
-static const char CREATE_TABLE_GPS[] = "                            \
-    create table if not exists gps (                                \
-        id          int unsigned not null auto_increment,           \
-        node_id     int unsigned not null,                          \
-        time        timestamp not null default current_timestamp,   \
-        status      tinyint(1) default 0,                           \
-        latitude    double default null,                            \
-        longitude   double default null,                            \
-        altitude    double default null,                            \
-        track       double default null,                            \
-        speed       double default null,                            \
-        climb       double default null,                            \
-        primary key (id),                                           \
-        unique key (node_id, time),                                 \
-        foreign key (node_id) references gateways (id)              \
-            on delete cascade on update cascade                     \
-    ) engine=InnoDB default charset=utf8                            \
-";
-
-static const char CREATE_TABLE_PINGS[] = "                          \
-    create table if not exists pings (                              \
-        id          int unsigned not null auto_increment,           \
-        node_id     int unsigned not null,                          \
-        network     varchar(16) not null,                           \
-        time        timestamp not null default current_timestamp,   \
-        gps_id      int unsigned default null,                      \
-        rtt         int unsigned default null,                      \
-        primary key (id),                                           \
-        unique key (node_id, network, time),                        \
-        foreign key (node_id) references gateways (id)              \
-            on delete cascade on update cascade,                    \
-        foreign key (gps_id) references gps (id)                    \
-            on delete set null on update cascade                    \
-    ) engine=InnoDB default charset=utf8                            \
-";
-
-static const char CREATE_TABLE_BANDWIDTH[] = "                      \
-    create table if not exists bandwidth (                          \
-        id          int unsigned not null auto_increment,           \
-        node_id     int unsigned not null,                          \
-        network     varchar(16) not null,                           \
-        time        timestamp not null default current_timestamp,   \
-        gps_id      int unsigned default null,                      \
-        bw_down     double default null,                            \
-        bw_up       double default null,                            \
-        type        enum ('TCP', 'UDP') default null,               \
-        primary key (id),                                           \
-        unique key (node_id, network, time),                        \
-        foreign key (node_id) references gateways (id)              \
-            on delete cascade on update cascade,                    \
-        foreign key (gps_id) references gps (id)                    \
-            on delete set null on update cascade                    \
-    ) engine=InnoDB default charset=utf8                            \
-";
-
-static const char CREATE_TABLE_PASSIVE[] = "                        \
-    create table if not exists passive (                            \
-        id          int unsigned not null auto_increment,           \
-        node_id     int unsigned not null,                          \
-        network     varchar(16) not null,                           \
-        time        timestamp not null default current_timestamp,   \
-        interval_len    int unsigned default 0,                     \
-        bytes_tx    bigint unsigned default 0,                      \
-        bytes_rx    bigint unsigned default 0,                      \
-        rate_down   double default 0,                               \
-        rate_up     double default 0,                               \
-        packets_tx  int unsigned default 0,                         \
-        packets_rx  int unsigned default 0,                         \
-        losses      int unsigned default 0,                         \
-        outoforder  int unsigned default 0,                         \
-        primary key (id),                                           \
-        unique key (node_id, network, time),                        \
-        foreign key (node_id) references gateways (id)              \
-            on delete cascade on update cascade                     \
-    ) engine=InnoDB default charset=utf8                            \
-";
-
-static const char *REQUIRED_TABLES[] = {
-    CREATE_TABLE_GATEWAYS,
-    CREATE_TABLE_LINKS,
-    CREATE_TABLE_GPS,
-    CREATE_TABLE_PINGS,
-    CREATE_TABLE_BANDWIDTH,
-    CREATE_TABLE_PASSIVE,
-    NULL,
-};
-
-static int create_tables();
-
 static MYSQL* database = 0;
-static char query_buffer[1024];
-static pthread_mutex_t database_lock = PTHREAD_MUTEX_INITIALIZER;
+char cont_hash[NODE_HASH_SIZE + 1];
+char hostname[1024];
+int cont_id;
+int verify_hash(char* hash)
+{
+    for(int i = 0; i < NODE_HASH_SIZE; i++){
+        if(!isalnum(hash[i])) { return 0; }
+    }
+    if(hash[NODE_HASH_SIZE]!=0) { return 0; }
+    return 1;
+}
 
 int init_database()
 {
-    int ret = -1;
+    FILE *fp = fopen("/etc/wirover.d/node_id","r");
+    fscanf(fp,"%s",cont_hash);
+    fclose(fp);
+
+    fp = fopen("/etc/hostname","r");
+    fscanf(fp,"%s",hostname);
+    fclose(fp);
+    
+    if(!verify_hash(cont_hash)) {
+         DEBUG_MSG("Controller's hash is invalid");
+         return -1;
+    }
+    pthread_t db_write_thr;
 
     const config_t *config = get_config();
     const char *db_host = DEFAULT_MYSQL_HOST;
@@ -173,14 +69,8 @@ int init_database()
     const char *db_pass = DEFAULT_MYSQL_PASSWORD;
     const char *db_name = DEFAULT_MYSQL_DATABASE;
 
-    if(pthread_mutex_lock(&database_lock)) {
-        DEBUG_MSG("pthread_mutex_lock failed");
-        return -1;
-    }
-
     if(database) {
-        ret = 0;
-        goto unlock_and_return;
+        return 0;
     }
 
     if(config) {
@@ -188,102 +78,155 @@ int init_database()
         config_lookup_string(config, CONFIG_MYSQL_USER, &db_user);
         config_lookup_string(config, CONFIG_MYSQL_PASSWORD, &db_pass);
         config_lookup_string(config, CONFIG_MYSQL_DATABASE, &db_name);
+        DEBUG_MSG(db_host);
     }
-
+    init_dbq();
     database = mysql_init(0);
     if(!database) {
         DEBUG_MSG("mysql_init() failed");
-        goto unlock_and_return;
+        return -1;
     }
     
     const my_bool yes = 1;
     if(mysql_options(database, MYSQL_OPT_RECONNECT, &yes) != 0) {
         DEBUG_MSG("Warning: mysql_option failed");
     }
-
     if(!mysql_real_connect(database, db_host, db_user, db_pass, db_name, 0, 0, 0)) {
         DEBUG_MSG("mysql_real_connect() failed");
         mysql_close(database);
         database = 0;
-        goto unlock_and_return;
+        return -1;
     }
 
-    if(create_tables() < 0)
-        DEBUG_MSG("Warning: create_tables() failed");
+    char query[1024];
+    snprintf(query,1024,"insert ignore into controllers (hash,name) values ('%s','%s') on duplicate key update name = '%s'",cont_hash,hostname,hostname);
+    int res = mysql_query(database, query);
+    if(res != 0){
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        return -1;
+    }
+    snprintf(query,1024,"SELECT id from controllers where hash = '%s'",cont_hash);
+    res = mysql_query(database, query);
+    if(res != 0){
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        return -1;
+    }
+    MYSQL_RES *result = mysql_store_result(database);
+    MYSQL_ROW row = mysql_fetch_row(result);
+    mysql_free_result(result);
+    if(!row){
+        DEBUG_MSG("Controller not present in database");
+        return -1;
+    }
+    cont_id = atoi(row[0]);
 
-    ret = 0;
-
-unlock_and_return:
-    pthread_mutex_unlock(&database_lock);
-    return ret;
+    if(pthread_create(&db_write_thr,NULL,&db_write_loop,NULL))
+        DEBUG_MSG("Error: could not create database write thread");
+    return 0;
 }
 
 void close_database()
 {
-    if(pthread_mutex_lock(&database_lock)) {
-        DEBUG_MSG("pthread_mutex_lock failed");
-        return;
-    }
-
     mysql_close(database);
     database = 0;
 }
+void db_write_loop()
+{
+  dbqreq* req;
+  while(1){
+    req = dbq_dequeue();
+    if(!verify_hash(req->hash)) {
+        DEBUG_MSG("Database request enqueued with invalid node hash");
+        goto continue_free;
+    }
+    int len = 0;
+    char query[1024];
+    MYSQL_RES *result;
+    MYSQL_ROW row;
 
+    /*Add the gateway if it isn't already in the table*/
+    snprintf(query,1024,"INSERT ignore into gateways (hash,conid) values ('%s','%d') on duplicate key update conid = '%d'",req->hash,cont_id,cont_id);
+    int res = mysql_query(database,query);
+    if(res != 0){ 
+      DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+      goto continue_free;
+    }
+
+    /*Convert the hash into the gateways node id*/
+    snprintf(query,1024,"SELECT id from gateways where hash = '%s'",req->hash);
+    res = mysql_query(database, query);
+    if(res != 0){
+      DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+      goto continue_free;
+    }
+    result = mysql_store_result(database);
+    row = mysql_fetch_row(result);
+    mysql_free_result(result);
+    if(!row){
+      DEBUG_MSG("Error finding gateway");
+      goto continue_free;
+    }
+    int gwid = atoi(row[0]);
+
+    /*Insert the node id into the query*/
+    len = snprintf(query,1024,req->query,gwid);
+    res = mysql_real_query(database, query, len);
+    if(res != 0) {
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto continue_free;
+    }
+
+    /* Update the last_gps_id for the gateway. */
+    if(req->gps_req){
+        DEBUG_MSG("Last query before gps: %s",query);
+        int gps_row_id = mysql_insert_id(database);
+        DEBUG_MSG("Last gps id = %d",gps_row_id);
+        len = snprintf(req->query, 1024,
+            "update gateways set last_gps_id=%u where id=%hu",
+            gps_row_id, gwid);
+        res = mysql_real_query(database, req->query, len);
+    }
+continue_free:
+    free(req);
+  }
+}
 int db_update_gateway(const struct gateway *gw, int state_change)
 {
     if(!database)
         return -1;
 
-    if(pthread_mutex_lock(&database_lock) != 0) {
-        DEBUG_MSG("pthread_mutex_lock failed");
-        return -1;
-    }
 
-    int len;
+    dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
     if(gw->state == ACTIVE) {
         char priv_ip[INET6_ADDRSTRLEN];
         ipaddr_to_string(&gw->private_ip, priv_ip, sizeof(priv_ip));
 
         if(state_change) {
-            len = snprintf(query_buffer, sizeof(query_buffer),
-                    "insert into gateways (id, state, event_time, private_ip)"
-                    "values (%hu, %d, NOW(), '%s')"
-                    "on duplicate key update state=%d, event_time=NOW(), private_ip='%s'",
-                    gw->unique_id, gw->state, priv_ip,
-                    gw->state, priv_ip);
+            snprintf(req->query, 1024,
+                    "update gateways set state=%d, eventtime=NOW(), private_ip='%s' where id='%s'",
+                    gw->state, priv_ip,"%hu");
         } else {
-            len = snprintf(query_buffer, sizeof(query_buffer),
-                    "insert into gateways (id, state, private_ip)"
-                    "values (%hu, %d, '%s')"
-                    "on duplicate key update state=%d, private_ip='%s'",
-                    gw->unique_id, gw->state, priv_ip,
-                    gw->state, priv_ip);
+            snprintf(req->query, 1024,
+                    "update gateways set state=%d, private_ip='%s' where id='%s'",
+                    gw->state, priv_ip,"%hu");
         }
     } else {
         if(state_change) {
-            len = snprintf(query_buffer, sizeof(query_buffer),
-                    "insert into gateways (id, state, event_time, private_ip)"
-                    "values (%hu, %d, NOW(), NULL)"
-                    "on duplicate key update state=%d, event_time=NOW(), private_ip=NULL",
-                    gw->unique_id, gw->state, gw->state);
+            snprintf(req->query, 1024,
+                    "update gateways set state=%d, eventtime=NOW(), private_ip=NULL where id='%s'",
+                    gw->state,"%hu");
         } else {
-            len = snprintf(query_buffer, sizeof(query_buffer),
-                    "insert into gateways (id, state, private_ip)"
-                    "values (%hu, %d, NULL)"
-                    "on duplicate key update state=%d, private_ip=NULL",
-                    gw->unique_id, gw->state, gw->state);
+            snprintf(req->query, 1024,
+                    "update gateways set state=%d, private_ip=NULL where id='%s'",
+                    gw->state,"%hu");
         }
     }
+    req->gps_req = 0;
+    req->gwid = gw->unique_id;
+    memcpy(req->hash,gw->hash,sizeof(gw->hash));
+    dbq_enqueue(req);
 
-    int res = mysql_real_query(database, query_buffer, len);
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        goto unlock_and_return;
-    }
-
-unlock_and_return:
-    pthread_mutex_unlock(&database_lock);
-    return res;
+    return 0;
 }
 
 int db_update_link(const struct gateway *gw, const struct interface *ife)
@@ -295,34 +238,26 @@ int db_update_link(const struct gateway *gw, const struct interface *ife)
     if(!ife->network[0])
         return 0;
 
-    if(pthread_mutex_lock(&database_lock) != 0) {
-        DEBUG_MSG("pthread_mutex_lock failed");
-        return -1;
-    }
-
     char pub_ip[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &ife->public_ip, pub_ip, sizeof(pub_ip));
 
-    int len = snprintf(query_buffer, sizeof(query_buffer),
-            "insert into links (node_id, network, ip, avg_bw_down, avg_bw_up, "
+    dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
+    snprintf(req->query, 1024,
+            "insert into links (gatewayid, network, ip, avg_bw_down, avg_bw_up, "
             "avg_rtt, state, updated) values "
-            "(%hu, '%s', '%s', '%f', '%f', '%f', %d, NOW()) "
+            "(%s, '%s', '%s', '%f', '%f', '%f', %d, NOW()) "
             "on duplicate key update ip='%s', avg_bw_down='%f', avg_bw_up='%f', "
             "avg_rtt='%f', state=%d, updated=NOW()",
-            gw->unique_id, ife->network, pub_ip, 
+            "%hu", ife->network, pub_ip, 
             ife->avg_downlink_bw, ife->avg_uplink_bw, ife->avg_rtt, ife->state,
             pub_ip, ife->avg_downlink_bw, ife->avg_uplink_bw,
             ife->avg_rtt, ife->state);
-    
-    int res = mysql_real_query(database, query_buffer, len);
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        goto unlock_and_return;
-    }
+    req->gps_req = 0;
+    req->gwid = gw->unique_id;
+    memcpy(req->hash,gw->hash,sizeof(gw->hash));
+    dbq_enqueue(req);
 
-unlock_and_return:
-    pthread_mutex_unlock(&database_lock);
-    return res;
+    return 0;
 }
 
 int db_update_gps(struct gateway *gw, const struct gps_payload *gps)
@@ -330,47 +265,26 @@ int db_update_gps(struct gateway *gw, const struct gps_payload *gps)
     if(!database)
         return -1;
 
+    /*This won't work now
     const time_t now = time(0);
     if(now == gw->last_gps_time) {
         // Avoid adding a duplicate.
         return -1;
-    }
+    }*/
 
-    if(pthread_mutex_lock(&database_lock) != 0) {
-        DEBUG_MSG("pthread_mutex_lock failed");
-        return -1;
-    }
-
-    int len = snprintf(query_buffer, sizeof(query_buffer),
+    dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
+    snprintf(req->query, 1024,
             "insert into gps (node_id, status, latitude, longitude,"
-            "altitude, track, speed, climb) values ('%hu', '%d', '%f',"
+            "altitude, track, speed, climb) values ('%s', '%d', '%f',"
             "'%f', '%f', '%f', '%f', '%f')",
-            gw->unique_id, gps->status, gps->latitude, gps->longitude,
+            "%hu", gps->status, gps->latitude, gps->longitude,
             gps->altitude, gps->track, gps->speed, gps->climb);
+    req->gps_req = 1;
+    req->gwid = gw->unique_id;
+    memcpy(req->hash,gw->hash,sizeof(gw->hash));
+    dbq_enqueue(req);
+    return 0;
 
-    int res = mysql_real_query(database, query_buffer, len);
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        goto unlock_and_return;
-    }
-
-    gw->last_gps_time = now;
-    gw->last_gps_row_id = mysql_insert_id(database);
-
-    /* Update the last_gps_id for the gateway. */
-    len = snprintf(query_buffer, sizeof(query_buffer),
-            "update gateways set last_gps_id=%u where id=%hu",
-            gw->last_gps_row_id, gw->unique_id);
-
-    res = mysql_real_query(database, query_buffer, len);
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        goto unlock_and_return;
-    }
-
-unlock_and_return:
-    pthread_mutex_unlock(&database_lock);
-    return res;
 }
 
 int db_update_pings(const struct gateway *gw, const struct interface *ife, int rtt)
@@ -378,34 +292,23 @@ int db_update_pings(const struct gateway *gw, const struct interface *ife, int r
     if(!database)
         return -1;
 
-    const time_t now = time(0);
+    dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
 
-    if(pthread_mutex_lock(&database_lock) != 0) {
-        DEBUG_MSG("pthread_mutex_lock failed");
-        return -1;
-    }
+    snprintf(req->query, 1024,
+            "insert into pings (node_id, network, gps_id, rtt)"
+            "select gateways.id,"
+            "       '%s',"
+            "       IF(not EXISTS(select 1 from gps where id = last_gps_id) or last_gps_id = NULL or TIMESTAMPDIFF(SECOND,gps.time,NOW())>5,NULL,last_gps_id),"
+            "       %d "
+            "from gateways left join gps on last_gps_id = gps.id where gateways.id = '%s'",
+            ife->network, rtt,"%hu");
+ 
+    req->gwid = gw->unique_id;
+    req->gps_req = 0;
+    memcpy(req->hash,gw->hash,sizeof(gw->hash));
 
-    int len;
-
-    if(gw->last_gps_row_id > 0 && (now - gw->last_gps_time) < GPS_DATA_TIMEOUT) {
-        len = snprintf(query_buffer, sizeof(query_buffer),
-                "insert into pings (node_id, network, gps_id, rtt) values"
-                "(%hu, '%s', %u, %d)",
-                gw->unique_id, ife->network, gw->last_gps_row_id, rtt);
-    } else {
-        len = snprintf(query_buffer, sizeof(query_buffer),
-                "insert into pings (node_id, network, rtt) values"
-                "(%hu, '%s', %d)",
-                gw->unique_id, ife->network, rtt);
-    }
-
-    int res = mysql_real_query(database, query_buffer, len);
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-    }
-
-    pthread_mutex_unlock(&database_lock);
-    return res;
+    dbq_enqueue(req);
+    return 0;
 }
 
 int db_update_passive(const struct gateway *gw, struct interface *ife, 
@@ -449,41 +352,36 @@ int db_update_passive(const struct gateway *gw, struct interface *ife,
     if(!database)
         return -1;
 
-    if(pthread_mutex_lock(&database_lock) != 0) {
-        DEBUG_MSG("pthread_mutex_lock failed");
-        return -1;
-    }
 
-    int len = snprintf(query_buffer, sizeof(query_buffer),
+    dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
+    snprintf(req->query, 1024,
             "insert into passive (node_id, network, time, interval_len, "
             "bytes_tx, bytes_rx, rate_down, rate_up, packets_tx, packets_rx) values "
-            "(%hu, '%s', NOW(), %ld, %llu, %llu, '%f', '%f', %u, %u)",
-            gw->unique_id, ife->network, time_diff,
+            "('%s', '%s', NOW(), %ld, %llu, %llu, '%f', '%f', %u, %u)",
+            "%hu", ife->network, time_diff,
             bytes_tx_diff, bytes_rx_diff,
             rate_down, rate_up,
             packets_tx_diff, packets_rx_diff);
+    req->gwid = gw->unique_id;
+    req->gps_req = 0;
+    memcpy(req->hash,gw->hash,sizeof(gw->hash));
 
-    int res = mysql_real_query(database, query_buffer, len);
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        goto unlock_and_return;
-    }
+    dbq_enqueue(req);
     
-    len = snprintf(query_buffer, sizeof(query_buffer),
+    req = (dbqreq*)malloc(sizeof(dbqreq));
+    snprintf(req->query, 1024,
             "update links set bytes_tx=bytes_tx+%llu, bytes_rx=bytes_rx+%llu, "
             "month_tx=month_tx+%llu, month_rx=month_rx+%llu, updated=NOW() "
-            "where node_id=%hu and network='%s'",
+            "where gatewayid='%s' and network='%s'",
             bytes_tx_diff, bytes_rx_diff, bytes_tx_diff, bytes_rx_diff,
-            gw->unique_id, ife->network);
-    
-    res = mysql_real_query(database, query_buffer, len);
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-    }
+            "%hu", ife->network);
+    req->gwid = gw->unique_id;
+    req->gps_req = 0;
+    memcpy(req->hash,gw->hash,sizeof(gw->hash));
 
-unlock_and_return:
-    pthread_mutex_unlock(&database_lock);
-    return res;
+    dbq_enqueue(req);
+
+    return 0;
 }
 
 int db_update_bandwidth(const struct gateway *gw, const struct interface *ife, 
@@ -491,13 +389,6 @@ int db_update_bandwidth(const struct gateway *gw, const struct interface *ife,
 {
     if(!database)
         return -1;
-
-    const time_t now = time(0);
-
-    if(pthread_mutex_lock(&database_lock) != 0) {
-        DEBUG_MSG("pthread_mutex_lock failed");
-        return -1;
-    }
 
     const char *type_str;
     switch(type) {
@@ -512,51 +403,18 @@ int db_update_bandwidth(const struct gateway *gw, const struct interface *ife,
             break;
     }
 
-    int len;
+    dbqreq *req = (dbqreq*)malloc(sizeof(dbqreq));
+    snprintf(req->query, 1024,
+            "insert into bandwidth (node_id, network, gps_id, bw_down, bw_up, type) "
+            "select gateways.id,'%s',"
+            "       IF(last_gps_id = NULL or TIMESTAMPDIFF(SECOND,gps.time,NOW())>5,NULL,last_gps_id),"
+            "       '%f', '%f', %s "
+            "from gateways left join gps on last_gps_id = gps.id where gateways.id = '%s'",
+                ife->network, bw_down, bw_up, type_str,"%hu");
+    req->gps_req = 0;
+    req->gwid = gw->unique_id;
+    memcpy(req->hash,gw->hash,sizeof(gw->hash));
 
-    if(gw->last_gps_row_id > 0 && (now - gw->last_gps_time) < GPS_DATA_TIMEOUT) {
-        len = snprintf(query_buffer, sizeof(query_buffer),
-                "insert into bandwidth (node_id, network, gps_id, bw_down, bw_up, type) values"
-                "(%hu, '%s', %u, '%f', '%f', %s)",
-                gw->unique_id, ife->network, gw->last_gps_row_id,
-                bw_down, bw_up, type_str);
-    } else {
-        len = snprintf(query_buffer, sizeof(query_buffer),
-                "insert into bandwidth (node_id, network, bw_down, bw_up, type) values"
-                "(%hu, '%s', '%f', '%f', %s)",
-                gw->unique_id, ife->network, bw_down, bw_up, type_str);
-    }
-
-    int res = mysql_real_query(database, query_buffer, len);
-    if(res != 0) {
-        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-    }
-
-    pthread_mutex_unlock(&database_lock);
-    return res;
-}
-
-/*
- * Create all of the required tables if they do not already exist.
- *
- * Must be called with database_lock held.
- */
-static int create_tables()
-{
-    int res;
-
-    if(!database)
-        return -1;
-
-    const char **table = REQUIRED_TABLES;
-    while(*table) {
-        res = mysql_real_query(database, *table, strlen(*table));
-        if(res != 0) 
-            DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-
-        table++;
-    }
-
+    dbq_enqueue(req);
     return 0;
 }
-

@@ -1,5 +1,6 @@
 #include <stdlib.h>
 
+#include "config.h"
 #include "debug.h"
 #include "gateway.h"
 #include "netlink.h"
