@@ -173,4 +173,14 @@ CREATE TABLE `pings` (
   CONSTRAINT `pings_ibfk_2` FOREIGN KEY (`gps_id`) REFERENCES `gps` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=0 DEFAULT CHARSET=utf8;
 
+CREATE TABLE `state_log` (
+  `id` int(10) NOT NULL AUTO_INCREMENT,
+  `node_id` int(10) unsigned DEFAULT NULL,
+  `new_state` tinyint(1) unsigned DEFAULT NULL,
+  `eventtime` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `node_id` (`node_id`),
+  CONSTRAINT `state_log_ibfk_1` FOREIGN KEY (`node_id`) REFERENCES `gateways` (`ID`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
 CREATE VIEW `gwstatus` AS select `gwdata`.`ID` AS `ID`,`gwdata`.`GatewayID` AS `GatewayID`,if((timestampdiff(MINUTE,`gwdata`.`time`,now()) > 7),0,1) AS `online`,if((`gwdata`.`DiskUsed` > 0.8),0,1) AS `diskok`,if((`gwdata`.`RamUsed` > 0.8),0,1) AS `ramok`,if((`gwdata`.`Min15Load` > 0.8),0,1) AS `cpuok`,if(((`gwdata`.`DiskUsed` > 0.8) or (`gwdata`.`RamUsed` > 0.8) or (`gwdata`.`Min15Load` > 0.8)),0,1) AS `healthy`,if((`gwdata`.`status` <> 1),0,1) AS `reachable` from `gwdata`;

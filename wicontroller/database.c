@@ -197,6 +197,7 @@ int db_update_gateway(const struct gateway *gw, int state_change)
 
 
     dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
+    dbqreq* state_req;
     if(gw->state == ACTIVE) {
         char priv_ip[INET6_ADDRSTRLEN];
         ipaddr_to_string(&gw->private_ip, priv_ip, sizeof(priv_ip));
@@ -212,6 +213,7 @@ int db_update_gateway(const struct gateway *gw, int state_change)
         }
     } else {
         if(state_change) {
+            
             snprintf(req->query, 1024,
                     "update gateways set state=%d, eventtime=NOW(), private_ip=NULL where id='%s'",
                     gw->state,"%hu");
@@ -220,6 +222,16 @@ int db_update_gateway(const struct gateway *gw, int state_change)
                     "update gateways set state=%d, private_ip=NULL where id='%s'",
                     gw->state,"%hu");
         }
+    }
+    if(state_change) {
+        state_req = (dbqreq*)malloc(sizeof(dbqreq));
+        snprintf(state_req->query, 1024,
+                    "insert into state_log (node_id, new_state) values ('%s', '%d')",
+                    "%hu",gw->state);
+        state_req->gps_req = 0;
+        state_req->gwid = gw->unique_id;
+        memcpy(state_req->hash,gw->hash,sizeof(gw->hash));
+        dbq_enqueue(state_req);   
     }
     req->gps_req = 0;
     req->gwid = gw->unique_id;
