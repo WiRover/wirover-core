@@ -12,7 +12,7 @@ struct passive_payload;
 struct interface;
 
 int verify_hash(char* hash);
-void db_write_loop();
+void *db_write_loop(void *arg);
 int db_update_gateway(const struct gateway *gw, int state_change);
 int db_update_link(const struct gateway *gw, const struct interface *ife);
 int db_update_gps(struct gateway *gw, const struct gps_payload *gps);

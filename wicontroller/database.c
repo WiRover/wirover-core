@@ -120,7 +120,7 @@ int init_database()
     }
     cont_id = atoi(row[0]);
 
-    if(pthread_create(&db_write_thr,NULL,&db_write_loop,NULL))
+    if(pthread_create(&db_write_thr, NULL, &db_write_loop, NULL))
         DEBUG_MSG("Error: could not create database write thread");
     return 0;
 }
@@ -130,7 +130,8 @@ void close_database()
     mysql_close(database);
     database = 0;
 }
-void db_write_loop()
+
+void *db_write_loop(void *arg)
 {
   dbqreq* req;
   while(1){
@@ -189,12 +190,14 @@ void db_write_loop()
 continue_free:
     free(req);
   }
+
+  return NULL;
 }
+
 int db_update_gateway(const struct gateway *gw, int state_change)
 {
     if(!database)
         return -1;
-
 
     dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
     dbqreq* state_req;
