@@ -91,11 +91,10 @@ int init_database()
     if(mysql_options(database, MYSQL_OPT_RECONNECT, &yes) != 0) {
         DEBUG_MSG("Warning: mysql_option failed");
     }
+
     if(!mysql_real_connect(database, db_host, db_user, db_pass, db_name, 0, 0, 0)) {
         DEBUG_MSG("mysql_real_connect() failed");
-        mysql_close(database);
-        database = 0;
-        return -1;
+        goto error_out;
     }
 
     char query[1024];
@@ -103,26 +102,36 @@ int init_database()
     int res = mysql_query(database, query);
     if(res != 0){
         DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        return -1;
+        goto error_out;
     }
+
     snprintf(query,1024,"SELECT id from controllers where hash = '%s'",cont_hash);
     res = mysql_query(database, query);
     if(res != 0){
         DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-        return -1;
+        goto error_out;
     }
+
     MYSQL_RES *result = mysql_store_result(database);
     MYSQL_ROW row = mysql_fetch_row(result);
     mysql_free_result(result);
     if(!row){
         DEBUG_MSG("Controller not present in database");
-        return -1;
+        goto error_out;
     }
     cont_id = atoi(row[0]);
 
-    if(pthread_create(&db_write_thr, NULL, &db_write_loop, NULL))
+    if(pthread_create(&db_write_thr, NULL, &db_write_loop, NULL)) {
         DEBUG_MSG("Error: could not create database write thread");
+        goto error_out;
+    }
+
     return 0;
+
+error_out:
+    mysql_close(database);
+    database = NULL;
+    return -1;
 }
 
 void close_database()
