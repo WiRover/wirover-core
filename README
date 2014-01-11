@@ -1,0 +1,85 @@
+===================
+1   Introduction
+===================
+
+This is the user-level implementation of WiRover.  The WiRover
+architecture comprises two main components -- the gateway and the
+controller.
+
+The mobile platform with one or more managed interfaces is the gateway.
+Typically, the gateway is a mobile WiFi access point with multiple
+cellular interfaces, hence the name gateway.
+
+The other component, the controller, is a tunnel endpoint for the
+traffic sent through the gateway.  Tunneling is used to implement
+reliable handover and performance enhancements.  It also serves as a
+central configuration and management server.  Typically, a controller
+will reside in a fixed location with a well-provisioned network and will
+provide service to many gateways.
+
+===================
+2   Source Code
+===================
+    
+    src/wigateway
+    src/wicontroller
+    src/common
+
+The source code is divided into three directories.  The wigateway and
+wicontroller subdirectories are specific to their respective components.
+The common subdirectory contains some shared code and header files.
+
+===================
+3   Installation
+===================
+
+To compile the code, change to the desired component's source directory,
+either src/wigateway or src/wicontroller and run make.
+
+It is sufficient to manually install a few necessary files.
+
+For the gateway, install following files:
+
+    src/wigateway/wigateway -> /usr/bin/
+    scripts/wigateway/wigateway_config -> /usr/bin/
+    config/wigateway/wirover -> /etc/
+
+For the controller, install the following files:
+
+    src/wicontroller/wicontroller -> /usr/bin/
+    scripts/wicontroller/wicontroller_config -> /usr/bin/
+    config/wicontroller/wirover -> /etc/
+
+===================
+4   Usage
+===================
+
+First edit the /etc/wirover configuration file.
+
+For the gateway, it is most important to specify the IP address of the
+controller to which you will be connecting and the interfaces you want
+to allow or disallow.
+
+For the controller, set the public IP address of the controller and
+optionally, change the private IP addresses to be used for the tunnel.
+
+Both the gateway and controller have an option called INTERNAL_IF.
+The internal interface is mainly used for identification.  The MAC address
+of the internal interface is used to uniquely identify the systems.
+Therefore, changing the value of this option changes the identity of
+the system.
+
+IMPORTANT
+
+    Pay attention to the spacing in the configuration file.  Each
+    non-empty, non-comment line is a key-value pair separated by spaces.
+    The key must start at the beginning of the line and be in all capital
+    letters.  The value must start on column 16.  The parser can and
+    often will do insane things if this formatting is not observed.
+
+Once the configuration is done, it is sufficient to run wigateway or
+wicontroller from the command line as root.  You can also configure the
+system to start either on startup.  The exact method to do this varies
+from distribution to distribution, but an almost universal way is to
+add "wigateway &" or "wicontroller &" to /etc/rc.local.
+

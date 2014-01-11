@@ -1,0 +1,23 @@
+# The DMZ ports to forard
+FWD_PORTS      9000-9999
+
+# The name of the internal interface (will talk to gateways directly)
+INTERNAL_IF    eth0
+
+# The name of the external interface (will talk to outside world)
+EXTERNAL_IF    tun0
+
+# My IP Address
+CONTROLLER_IP  1.2.3.4
+
+# Ip Address of Tun Device
+TUNNEL_IP      192.168.1.1
+
+# The range of addresses to assign to WiGateways
+DHCP_RANGE     192.168.1.2/254
+
+# If here, then use SSL for control channel and encrypt UDP traffic 
+#SSL
+
+# Google Maps API Key to use for this controller
+GMAP_API_KEY   XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX-XXXXXXX_XXXXXXXXXXXXX

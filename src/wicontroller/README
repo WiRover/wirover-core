@@ -1,0 +1,8 @@
+The current state of this code should:
+1) Scan all interfaces on the local machine and builds a list (monitorInterface.c)
+2) Pings (www.google.com) with each interface to check if there is an outgoing connection and if so set some valid flags
+3) Brings up a tunnel interface (tun0) with an IP hard coded to 10.10.1.1 in tunnelInterface.c func: tunnelInit
+4) in main.c there is a function called handlePackets that read a packet from the tunnel and sends it out an interface
+
+When the list of interfaces is built a UDP socket is opened on port 8080 and the socket file descriptor is saved in the interface structure.
+The selectInterface function is a wrapper that takes in the algorithm you want to use and returns a file descriptor for the interface that should be used.
