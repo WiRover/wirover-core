@@ -9,8 +9,7 @@ BINARY=wigateway
 
 #
 # Allow command arguments to override default setting.
-override CFLAGS += -Wall -D GATEWAY -dH -g -rdynamic -std=gnu99
-override CFLAGS_STRICT += $(CFLAGS) -pedantic -fstrict-aliasing
+override CFLAGS += -g -D GATEWAY -dH -rdynamic -std=gnu99 -Wall -pedantic -fstrict-aliasing
 override LINK_FLAGS +=-lssl -lpthread -lm -lrt -lpcap -lcrypto
 
 #
@@ -29,6 +28,7 @@ GATEWAY_HEADERS := \
 
 GATEWAY_OBJS := \
 	main.o \
+	active_bw.o \
 	algoPerConnWrr.o \
 	contChan.o \
 	gpsHandler.o \
@@ -36,10 +36,8 @@ GATEWAY_OBJS := \
 	netlink.o \
 	pcapSniff.o \
 	scan.o \
-	selectInterface.o
-	#transfer.o
-
-GATEWAY_STRICT_OBJS := active_bw.o udp_ping.o
+	selectInterface.o \
+	udp_ping.o
 
 #
 # Common library files for WiRover gateway code.
@@ -65,29 +63,26 @@ COMMON_HEADER := \
 	utils.h
 
 COMMON_OBJS := \
-	handleTransfer.o \
-	myssl.o \
-	packet_debug.o \
-	reOrderPackets.o \
-	special.o \
-	tunnelInterface.o \
-	utils.o
-	# evdo_buffer.o \
-
-COMMON_STRICT_OBJS := \
 	debug.o \
+	handleTransfer.o \
 	link.o \
 	link_priority.o \
+	myssl.o \
+	packet_debug.o \
 	passive_bw.o \
+	reOrderPackets.o \
 	sockets.o \
-	time_utils.o
+	special.o \
+	time_utils.o \
+	tunnelInterface.o \
+	utils.o
+
 
 #
 # Setup directory path and all object names.
 COMMON_DIR := ../common/
 COMMON_HEADERS := $(addprefix $(COMMON_DIR), $(COMMON_HEADER))
-ALL_OBJS := $(COMMON_OBJS) $(COMMON_STRICT_OBJS) \
-			$(GATEWAY_OBJS) $(GATEWAY_STRICT_OBJS)
+ALL_OBJS := $(COMMON_OBJS) $(GATEWAY_OBJS)
 
 #
 # Rules for final executable
@@ -101,14 +96,8 @@ all: $(ALL_OBJS)
 $(GATEWAY_OBJS): %.o: %.c $(GATEWAY_HEADERS) $(COMMON_HEADERS)
 	$(CC) $(CFLAGS) -c $(subst .o,.c,$@)
 
-$(GATEWAY_STRICT_OBJS): %.o: %.c $(GATEWAY_HEADERS) $(COMMON_HEADERS)
-	$(CC) $(CFLAGS_STRICT) -c $(subst .o,.c,$@)
-
 $(COMMON_OBJS): %.o: $(COMMON_DIR)%.c $(COMMON_HEADERS)
 	$(CC) $(CFLAGS) -I$(COMMON_DIR) -c $<
-
-$(COMMON_STRICT_OBJS): %.o: $(COMMON_DIR)%.c $(COMMON_HEADERS)
-	$(CC) $(CFLAGS_STRICT) -I$(COMMON_DIR) -c $<
 
 %.h: ;
 

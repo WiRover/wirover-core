@@ -37,7 +37,6 @@
 #include "../common/special.h"
 #include "transfer.h"
 
-static char         local_buf[MAX_LINE];
 static uint16_t      link_id = 0;
 
 

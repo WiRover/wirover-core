@@ -297,7 +297,7 @@ int runActiveBandwidthTest(struct bw_client_info* clientInfo, struct bw_stats* s
     
     unsigned int max_burst;
     int rtn = receiveCts(sockfd, clientInfo->timeout, &max_burst);
-        DEBUG_MSG("receiveCts:%d",receiveCts);
+        DEBUG_MSG("receiveCts:%d", rtn);
     if(rtn == FAILURE) {
         close(sockfd);
         return FAILURE;

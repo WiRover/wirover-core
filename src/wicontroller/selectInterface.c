@@ -8,7 +8,6 @@
  * Author: Joshua Hare hare@cs.wisc.edu
  *
  */
-#include <net/if.h>
 #include <netinet/ether.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>

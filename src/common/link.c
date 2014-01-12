@@ -6,6 +6,7 @@
 #include <netdb.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <arpa/inet.h>
 #include <linux/if_ether.h> // defines ETH_ALEN
 
 #include "contChan.h"

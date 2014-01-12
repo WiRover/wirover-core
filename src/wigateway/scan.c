@@ -11,6 +11,9 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <signal.h>
+#include <unistd.h>
+
+#include <arpa/inet.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/types.h>
@@ -497,7 +500,7 @@ int checkConnectivity()
  *
  * Callback function for pings.
  */
-void pingHandler(struct ping_client_info* clientInfo, struct link* ife, struct ping_stats* stats)
+int pingHandler(struct ping_client_info* clientInfo, struct link* ife, struct ping_stats* stats)
 {
 	if(ife->stats.rtt <= 0) {
         // make sure rtt gets initialized
@@ -606,6 +609,7 @@ void pingHandler(struct ping_client_info* clientInfo, struct link* ife, struct p
         }
     }
 
+    return 0;
 } // end function pingHandler
 
 /*

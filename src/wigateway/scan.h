@@ -25,7 +25,7 @@ void    setScanValid(char *name, int value);
 void    *scanThreadFunc(void *arg);
 void    *scanThreadFuncNew(void *arg);
 
-void    pingHandler(struct ping_client_info* clientInfo, struct link* ife, struct ping_stats* stats);
+int     pingHandler(struct ping_client_info* clientInfo, struct link* ife, struct ping_stats* stats);
 void    bandwidthHandler(struct bw_client_info* clientInfo, struct link* ife, struct bw_stats* stats);
 
 #endif

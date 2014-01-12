@@ -39,7 +39,7 @@ static struct timeval tailTime;
 //static int     bootstrap = 1;
 static int     packet_counter = 0;
 static int     head = 0, tail = 0;
-static int coded_index = -1;
+
 struct array_element {
     char *packet;
     int size;
@@ -51,6 +51,10 @@ struct array_element {
 };
 
 static struct array_element buffer[ARRAY_SIZE];
+
+#ifdef NETWORK_CODING
+static int coded_index = -1;
+#endif /* NETWORK_CODING */
 
 //static struct  timeval time_array[ARRAY_SIZE];
 //static char    *packet_array[ARRAY_SIZE];
@@ -251,12 +255,12 @@ int sendPackets(int tunfd)
     int index = tail;
     int to_check = packet_counter;
     struct timeval curTime, diffTime, timeout, leave, result;
-   
-        sprintf(local_buf, "Checking for %d packets tail: %d head %d.", packet_counter, tail, head); 
-        DEBUG_MSG(local_buf);
+
+    sprintf(local_buf, "Checking for %d packets tail: %d head %d.", packet_counter, tail, head); 
+    DEBUG_MSG(local_buf);
 
     // catch the tail pointer up if needed
-   while( buffer[tail].packet == NULL && ! getQuitFlag() )
+    while( buffer[tail].packet == NULL && ! getQuitFlag() )
     {
         gettimeofday(&curTime, NULL);
         timersub(&curTime, &buffer[tail].time, &timeout);
@@ -272,22 +276,22 @@ int sendPackets(int tunfd)
             break;
         }
     }
-   
-   
+
+
     // loop through the packets to see if any are ready to send out
     while( (to_check > 0) && ! getQuitFlag() )
     {
         // this slot is currently empty so we can skip it
-      /*  if(buffer[index].packet == NULL)
-        {
-            // Nothing in this slot, move on
-            index++;
-            index = index % ARRAY_SIZE;
-            if(index >= ARRAY_SIZE) 
+        /*  if(buffer[index].packet == NULL)
             {
-                DEBUG_MSG("array index out of bounds\n"); 
-            }
-            continue;
+        // Nothing in this slot, move on
+        index++;
+        index = index % ARRAY_SIZE;
+        if(index >= ARRAY_SIZE) 
+        {
+        DEBUG_MSG("array index out of bounds\n"); 
+        }
+        continue;
         }*/
 
         gettimeofday(&curTime, NULL);
@@ -312,9 +316,9 @@ int sendPackets(int tunfd)
 
                 total_bytes_sent += rtn;
                 /*
-                sprintf(local_buf, "Total bytes sent out to internet: %ld", total_bytes_sent);
-                STATS_MSG(local_buf);
-                */
+                   sprintf(local_buf, "Total bytes sent out to internet: %ld", total_bytes_sent);
+                   STATS_MSG(local_buf);
+                   */
             }
 
             // Clean up 
@@ -328,64 +332,64 @@ int sendPackets(int tunfd)
             // Update tail pointer
             tail = updateTail(tail);
             pthread_mutex_unlock(&thread_mutex);
-           to_check--;
-        index++;
-        index = index % ARRAY_SIZE;
+            to_check--;
+            index++;
+            index = index % ARRAY_SIZE;
 
         }
         else if ( (diffTime.tv_usec/1000 < MAX_DELAY) && (buffer[index].code_len <= 0)){
-       //Try to recover the packet
-        #ifdef NETWORK_CODING
-        coded_index =  getCodedPacket(index);
+            //Try to recover the packet
+#ifdef NETWORK_CODING
+            coded_index =  getCodedPacket(index);
 
 
-        if (coded_index == FAILURE) break;
-        
-        int dist = (coded_index - index + ARRAY_SIZE)%ARRAY_SIZE ;
-        
-        if (recoverPacket(index, coded_index) == SUCCESS){
-      DEBUG_MSG("Recovering Pkt:%d",index);
-    char *temp_packet = (char *)malloc(MTU);
+            if (coded_index == FAILURE) break;
 
-      unxorPackets(index, coded_index, temp_packet, MTU);
-    // Critical updates - need to be in mutex lock
-    pthread_mutex_lock(&thread_mutex);
-    //gettimeofday(&buffer[index].time, NULL);
-    buffer[index].seqNo = buffer[coded_index].seqNo - dist; //ntohl
-    buffer[index].packet = temp_packet;
-    buffer[index].sendfd = buffer[coded_index].sendfd;
-    buffer[index].size = MTU;
-    buffer[index].code_len = 0;
-    packet_counter++;
-    pthread_mutex_unlock(&thread_mutex);
-    // END Critical updates - need to be in mutex lock
-     to_check++; 
+            int dist = (coded_index - index + ARRAY_SIZE)%ARRAY_SIZE ;
+
+            if (recoverPacket(index, coded_index) == SUCCESS){
+                DEBUG_MSG("Recovering Pkt:%d",index);
+                char *temp_packet = (char *)malloc(MTU);
+
+                unxorPackets(index, coded_index, temp_packet, MTU);
+                // Critical updates - need to be in mutex lock
+                pthread_mutex_lock(&thread_mutex);
+                //gettimeofday(&buffer[index].time, NULL);
+                buffer[index].seqNo = buffer[coded_index].seqNo - dist; //ntohl
+                buffer[index].packet = temp_packet;
+                buffer[index].sendfd = buffer[coded_index].sendfd;
+                buffer[index].size = MTU;
+                buffer[index].code_len = 0;
+                packet_counter++;
+                pthread_mutex_unlock(&thread_mutex);
+                // END Critical updates - need to be in mutex lock
+                to_check++; 
 
 
-        } 
-      else{
-       break;
-      }
-    #else
-    break;
-    #endif
-        
-      }
-   /*     else if (buffer[index].code_len <= 0){
-        index++;
-        index = index % ARRAY_SIZE;
-       
-        pthread_mutex_lock(&thread_mutex);
-        packet_counter--;
-        pthread_mutex_unlock(&thread_mutex);
-      
+            } 
+            else{
+                break;
+            }
+#else
+            break;
+#endif
+
         }
-     */
-   else
+        /*     else if (buffer[index].code_len <= 0){
+               index++;
+               index = index % ARRAY_SIZE;
+
+               pthread_mutex_lock(&thread_mutex);
+               packet_counter--;
+               pthread_mutex_unlock(&thread_mutex);
+
+               }
+               */
+        else
         {
             // Packet either too late or lost
-        index++;
-        index = index % ARRAY_SIZE;
+            index++;
+            index = index % ARRAY_SIZE;
         }
 
 
@@ -393,16 +397,16 @@ int sendPackets(int tunfd)
         {
             DEBUG_MSG("Array index out of bounds 2\n");
         }
-/*
-        else{
-      
-            pthread_mutex_lock(&thread_mutex);
-            tail = update(tail);
-            pthread_mutex_unlock(&thread_mutex);
-          DEBUG_MSG("Tail is:%d",tail);
-        } 
-  */
-  }
+        /*
+           else{
+
+           pthread_mutex_lock(&thread_mutex);
+           tail = update(tail);
+           pthread_mutex_unlock(&thread_mutex);
+           DEBUG_MSG("Tail is:%d",tail);
+           } 
+           */
+    }
     return SUCCESS;
 } // End function int sendPackets()
 

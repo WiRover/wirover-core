@@ -200,7 +200,7 @@ int handleBandwidthClient(const struct bw_server_info* serverInfo, int serverSoc
     }
 
     rtn = sendCts(client_sock);
-    DEBUG_MSG("sendCts:%d",sendCts);
+    DEBUG_MSG("sendCts:%d", rtn);
     if(rtn == FAILURE) {
         goto handle_client_fail;
     }
@@ -343,7 +343,7 @@ int handleBandwidthClient_udp(const struct bw_server_info* serverInfo, int sockf
     DEBUG_MSG("Rcvd RTS:%d",rtn); 
 
     rtn = sendCts_udp(sockfd, hisAddr);
-    DEBUG_MSG("sendCts:%d",sendCts);
+    DEBUG_MSG("sendCts:%d", rtn);
     if(rtn == FAILURE) {
         return FAILURE;
     }

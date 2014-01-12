@@ -274,10 +274,10 @@ void* gpsDataCollector(void* arg)
 #else
 
 int initGpsHandler() {return FAILURE; }
-void closeGpsHandler() {};
+void closeGpsHandler() {}
 
-void getLatestGpsFix(struct gps_fix_t* dest) {};
-void fillGpsPayload(struct gps_payload* dest) {};
+void getLatestGpsFix(struct gps_fix_t* dest) {}
+void fillGpsPayload(struct gps_payload* dest) {}
 
 #endif
 

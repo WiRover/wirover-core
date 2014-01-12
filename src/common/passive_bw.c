@@ -2,6 +2,7 @@
  * passive_bw.c
  */
 
+#include <math.h>
 #include <signal.h>
 
 #include "../common/utils.h"

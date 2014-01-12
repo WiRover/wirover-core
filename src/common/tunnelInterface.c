@@ -251,7 +251,7 @@ static int tunnelAlloc(struct tunnel *tun)
     */ 
     ifr.ifr_flags = IFF_TUN; 
 
-    strncpy(ifr.ifr_name, "tun\%d", IFNAMSIZ);
+    strncpy(ifr.ifr_name, "tun%d", IFNAMSIZ);
 
     int err = ioctl(fd, TUNSETIFF, (void *) &ifr);
     if(err < 0) {

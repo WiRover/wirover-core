@@ -203,18 +203,19 @@ void print_pkthdr(unsigned char *pkthdr, FILE *file)
 void print_encappkt(unsigned char *pkthdr, FILE *file)
 {
     int offset = sizeof(struct ethhdr);
-    struct iphdr *ip_temp = (struct iphdr *)(pkthdr + offset);
 
-    struct iphdr *ip_header = (struct iphdr *)(pkthdr + sizeof(struct ethhdr));
+    struct iphdr *ip_header = (struct iphdr *)(pkthdr + offset);
+    offset += ip_header->ihl*4;
+
     print_iphdr(ip_header, file);
     if(ip_header->protocol == IPPROTO_TCP)
     {
-        struct tcphdr *tcp_header = (struct tcphdr *)(pkthdr + sizeof(struct ethhdr) + ip_header->ihl*4);
+        struct tcphdr *tcp_header = (struct tcphdr *)(pkthdr + offset);
         print_tcphdr((unsigned char *)tcp_header, file);
     }
     else if(ip_header->protocol == IPPROTO_UDP)
     {
-        struct udphdr *udp_header = (struct udphdr *)(pkthdr + sizeof(struct ethhdr) + ip_header->ihl*4);
+        struct udphdr *udp_header = (struct udphdr *)(pkthdr + offset);
         print_udphdr(udp_header, file);
     }
 

@@ -6,8 +6,14 @@
 #include <signal.h>
 #include <unistd.h>
 
-#include <netlink/netlink.h>
+#include <arpa/inet.h>
 #include <linux/netlink.h>
+#include <netlink/netlink.h>
+
+#ifdef __USE_MISC
+#undef __USE_MISC
+#endif
+#include <net/if.h>
 
 #include "../common/utils.h"
 #include "../common/parameters.h"

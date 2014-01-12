@@ -6,8 +6,8 @@
 #define TUNNEL_INTERFACE_H
 
 #include <netinet/in.h>
-#include <sys/socket.h>
 #include <linux/if.h>
+#include <sys/socket.h>
 
 #define SEC_TO_USEC 1000000
 
