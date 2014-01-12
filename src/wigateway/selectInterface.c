@@ -670,6 +670,7 @@ int stripePacket(char *packet, int size, int algo)
 
         case WRR_PKT_v1:
             ife = per_packet_wrr_v1(head);
+            break;
         
         case WDRR_PKT:
             ife = per_packet_wdrr(head, size);
@@ -693,103 +694,75 @@ int stripePacket(char *packet, int size, int algo)
     {
         // Getting a sequence number should be done as close to sending as possible
         struct tunhdr tun_hdr;
-        uint16_t codeLen=CODELEN;
         memset(&tun_hdr, 0, sizeof(tun_hdr));
 
         tun_hdr.seq_no = htonl(getSeqNo());
         tun_hdr.client_id = 0; // TODO: Add a client ID.
         tun_hdr.node_id = htons(getNodeID());
         tun_hdr.link_id = htons(ife->id);
-	tun_hdr.local_seq_no = htons(ife->local_seq_no_out++);
+        tun_hdr.local_seq_no = htons(ife->local_seq_no_out++);
         
         fillTunnelTimestamps(&tun_hdr, ife);
 
-        DEBUG_MSG("SeqNo is %d link_id is %d", tun_hdr.seq_no, tun_hdr.link_id);
         //memcpy(packet, &pktSeqNo, sizeof(pktSeqNo));
         char *new_packet = (char *)malloc(size + sizeof(struct tunhdr) - TUNTAP_OFFSET);
         memcpy(new_packet, &tun_hdr, sizeof(struct tunhdr));
         memcpy(&new_packet[sizeof(struct tunhdr)], &packet[TUNTAP_OFFSET], (size-TUNTAP_OFFSET));
         int new_size = (size-TUNTAP_OFFSET) + sizeof(struct tunhdr);
 
-#if 0
-        if( EVDO_BUFFERING )
+        if( (rtn = sendto(ife->sockfd, new_packet, new_size, 0, (struct sockaddr *)&myDest, sizeof(struct sockaddr))) < 0)
         {
-            if( (rtn = mySendto(ife->sockfd, new_packet, new_size, 0, (struct sockaddr *)&myDest, sizeof(struct sockaddr), ife)) < 0)
-            {
-                ERROR_MSG("mySendto failed");
-            }
-            else
-            {
-                ife->stats.bytes_sent += rtn;
-            }
-
-            pthread_mutex_lock(&ife->condition_mutex);
-            pthread_cond_signal(&ife->condition_cond);
-            pthread_mutex_unlock(&ife->condition_mutex);
+            sprintf(local_buf, "sendto failed (%d), socket: %d, new_size: %d", rtn, ife->sockfd, new_size);
+            ERROR_MSG(local_buf);
         }
         else
-#endif
+        {
+            ife->stats.bytes_sent += rtn;
+
+            struct timeval now;
+            gettimeofday(&now, 0); 
 
 
-            //sprintf(local_buf, "Sending out ife->name: %s, %d", ife->name, ife->sockfd);
-            //DEBUG_MSG(local_buf);
-            //printf("tun_hdr.seq_no: %d, tun_hdr.ifname: %s\n", tun_hdr.seq_no, tun_hdr.ifname);
-            //printIp(myDest.sin_addr.s_addr);
-            //printf("myDest.sin_port: %hd\n", ntohs(myDest.sin_port));
-            
-            if( (rtn = sendto(ife->sockfd, new_packet, new_size, 0, (struct sockaddr *)&myDest, sizeof(struct sockaddr))) < 0)
-            {
-                sprintf(local_buf, "sendto failed (%d), socket: %d, new_size: %d", rtn, ife->sockfd, new_size);
-                ERROR_MSG(local_buf);
-            }
-            else
-            {
-               ife->stats.bytes_sent += rtn;
-               
-               struct timeval now;
-               gettimeofday(&now, 0); 
-               
-               
-               double que_delay = ife->que_delay - ((now.tv_sec - ife->last_sent.tv_sec)*1000 +  (now.tv_usec - ife->last_sent.tv_usec)/1000) ;
+            double que_delay = ife->que_delay - ((now.tv_sec - ife->last_sent.tv_sec)*1000 +  (now.tv_usec - ife->last_sent.tv_usec)/1000) ;
 
-               if (que_delay < 0 ) que_delay = 0;
-       
-               que_delay = que_delay + (rtn*8/(ife->avg_active_bw_up))/1000 ;
+            if (que_delay < 0 ) que_delay = 0;
 
-               ife->que_delay = que_delay;
+            que_delay = que_delay + (rtn*8/(ife->avg_active_bw_up))/1000 ;
 
-               gettimeofday(&ife->last_sent,0);
-            }
+            ife->que_delay = que_delay;
+
+            gettimeofday(&ife->last_sent,0);
+        }
         
  #ifdef NETWORK_CODING
         xorPackets(new_packet, new_size);
         coded_packets++;
      
-     if (coded_packets == codeLen){
-        coded_packets = 0;
-        //ife = best_ife;
-        tun_hdr.seq_no = htonl(getSeqNo());
-        tun_hdr.client_id = codeLen; // TODO: Add a client ID.
-        tun_hdr.node_id = htons(getNodeID());
-        tun_hdr.link_id = htons(ife->id);
-        tun_hdr.local_seq_no = htons(ife->local_seq_no_out++);
+        if (coded_packets == CODELEN) {
+            coded_packets = 0;
+            //ife = best_ife;
+            tun_hdr.seq_no = htonl(getSeqNo());
+            tun_hdr.client_id = CODELEN; // TODO: Add a client ID.
+            tun_hdr.node_id = htons(getNodeID());
+            tun_hdr.link_id = htons(ife->id);
+            tun_hdr.local_seq_no = htons(ife->local_seq_no_out++);
 
-        fillTunnelTimestamps(&tun_hdr, ife);
+            fillTunnelTimestamps(&tun_hdr, ife);
 
-        //memcpy(packet, &pktSeqNo, sizeof(pktSeqNo));
-        char *coded_packet = (char *)malloc(MTU + sizeof(struct tunhdr));
-        memcpy(coded_packet, &tun_hdr, sizeof(struct tunhdr));
-        memcpy(&coded_packet[sizeof(struct tunhdr)], code_buffer, MTU);
-        int new_size = (MTU+ sizeof(struct tunhdr));
+            //memcpy(packet, &pktSeqNo, sizeof(pktSeqNo));
+            char *coded_packet = (char *)malloc(MTU + sizeof(struct tunhdr));
+            memcpy(coded_packet, &tun_hdr, sizeof(struct tunhdr));
+            memcpy(&coded_packet[sizeof(struct tunhdr)], code_buffer, MTU);
+            int new_size = (MTU+ sizeof(struct tunhdr));
 
-                
-        rtn = sendto(ife->sockfd, coded_packet, new_size, 0, (struct sockaddr *)&myDest, sizeof(struct sockaddr));
-        DEBUG_MSG("Sent coded packet:%d bytes",rtn);
-        free(coded_packet);
-        
-    memset(code_buffer, 0, MTU);
-       }
- #endif
+
+            rtn = sendto(ife->sockfd, coded_packet, new_size, 0, (struct sockaddr *)&myDest, sizeof(struct sockaddr));
+            DEBUG_MSG("Sent coded packet:%d bytes",rtn);
+            free(coded_packet);
+
+            memset(code_buffer, 0, MTU);
+        }
+#endif
         free(new_packet);
     }
     else

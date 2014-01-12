@@ -7,7 +7,6 @@
 
 #include <netinet/in.h>
 #include <sys/socket.h>
-
 #include <linux/if.h>
 
 #define SEC_TO_USEC 1000000

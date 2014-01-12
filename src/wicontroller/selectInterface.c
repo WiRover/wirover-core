@@ -671,7 +671,7 @@ int stripePacket(int fd, char *packet, int size, int offset)
         // Bytes received from the gateway's point of view
         incLinkBytesRecvd(sel_link, rtn);
 
-        snprintf(local_buf, sizeof(local_buf), "Bytes sent to node %d: %llu, to link %d (%s): %llu",
+        snprintf(local_buf, sizeof(local_buf), "Bytes sent to node %u: %llu, to link %d (%s): %llu",
                 gw_ptr->node_id, gw_ptr->num_bytes_sent_to, sel_link->id, sel_link->ifname, sel_link->bytes_recvd);
         STATS_MSG(local_buf); 
     }

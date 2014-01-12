@@ -84,8 +84,6 @@ int measureBandwidth(struct interface *curr)
                 return FAILURE;
             }
 
-            int rtn;
-
             struct sockaddr_in trans_dest;
             trans_dest.sin_family = PF_INET;
             trans_dest.sin_port   = htons(TRANSFER_PORT);
@@ -96,8 +94,8 @@ int measureBandwidth(struct interface *curr)
             // Add a special route to the controller just to set up communication
             addRoute(getControllerIP(), "255.255.255.255", curr->name);
 
-            if ( ( rtn = connect(trans_sockfd, (struct sockaddr *)&trans_dest, sizeof(trans_dest))) < 0 )
-            {   
+            int rtn = connect(trans_sockfd, (struct sockaddr *)&trans_dest, sizeof(trans_dest));
+            if(rtn < 0) {
                 close(trans_sockfd);
                 ERROR_MSG("connect() failed");
                 return FAILURE;

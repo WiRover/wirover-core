@@ -12,7 +12,6 @@
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
 #include <linux/ip.h>
-#include <linux/if.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
@@ -82,7 +81,6 @@ void dumpReOrderBuffer()
 {
     // Dump ReOrder Buffer
     int j;
-    int packets_found = 0;
 
     printf("< ");
     sprintf(local_buf, "< ");
@@ -92,7 +90,6 @@ void dumpReOrderBuffer()
     {
         if ( buffer[j].packet != NULL )
         {
-            packets_found = 1;
             printf("|%d %ld.%06ld| ", j, buffer[j].time.tv_sec, buffer[j].time.tv_usec);
             sprintf(local_buf, "|%d %ld.%06ld| ", j, buffer[j].time.tv_sec, buffer[j].time.tv_usec);
             STATS_MSG(local_buf);
@@ -302,7 +299,7 @@ int sendPackets(int tunfd)
         if(  (buffer[index].sendfd >= 0 ) )
         {
             // Send the packet
-            DEBUG_MSG("Sent SeqNo:%d",buffer[index].seqNo);
+            DEBUG_MSG("Sent SeqNo:%u",buffer[index].seqNo);
             if( (rtn = write(buffer[index].sendfd, buffer[index].packet, buffer[index].size)) < 0)
             {
                 ERROR_MSG("write to tunnel failed");

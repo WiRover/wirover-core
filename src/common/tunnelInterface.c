@@ -234,10 +234,11 @@ static int tunnelAlloc(struct tunnel *tun)
 {
     struct sockaddr_in *addr = NULL;
     struct ifreq ifr;
-    int fd, err, sock;
 
-    if( (fd = open("/dev/net/tun", O_RDWR)) < 0 ) 
-    {
+    int sock = -1;
+
+    int fd = open("/dev/net/tun", O_RDWR);
+    if(fd < 0) {
         ERROR_MSG("open failed");
         goto failure;
     }
@@ -252,16 +253,16 @@ static int tunnelAlloc(struct tunnel *tun)
 
     strncpy(ifr.ifr_name, "tun\%d", IFNAMSIZ);
 
-    if( (err = ioctl(fd, TUNSETIFF, (void *) &ifr)) < 0 )
-    {
+    int err = ioctl(fd, TUNSETIFF, (void *) &ifr);
+    if(err < 0) {
         ERROR_MSG("ioctl(TUNSETIFF) failed");
         goto failure;
     }
 
     strncpy(tun->name, ifr.ifr_name, sizeof(ifr.ifr_name));
 
-    if((sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP)) < 0) 
-    {
+    sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if(sock < 0) {
         ERROR_MSG("socket failed");
         goto failure;
     }

@@ -21,7 +21,6 @@
 #include "../common/udp_ping.h"
 #include "scan.h"
 #include "netlink.h"
-#include "ppp.h"
 
 // NetLink Socket
 static int net_sockfd;
@@ -399,10 +398,8 @@ int handleNetLinkPacket()
             struct rtmsg *ifa = (struct rtmsg *)NLMSG_DATA(nh);
             struct rtattr *rth    = RTM_RTA(ifa);
 
-            char device[IFNAMSIZ];
             char dsts[24], ifs[16], ms[24];
             char gws[INET_ADDRSTRLEN];
-            int has_gw = 0;
 
             memset(dsts, 0, sizeof(dsts));
             memset(ifs, 0, sizeof(ifs));
@@ -412,6 +409,9 @@ int handleNetLinkPacket()
             //DEBUG_MSG("NETLINK: Received RTM_NEWROUTE");
             if( (ifa->rtm_family == AF_INET) && (ifa->rtm_table == RT_TABLE_MAIN) && ifa->rtm_protocol == RTPROT_BOOT) 
             {
+                char device[IFNAMSIZ];
+                int has_gw = 0;
+
                 int rth_len;
                 for(rth_len = RTM_PAYLOAD(nh); rth_len && RTA_OK(rth, rth_len); rth = RTA_NEXT(rth, rth_len))
                 {

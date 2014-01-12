@@ -78,9 +78,7 @@ int startPingServerThread(struct ping_server_info* serverInfo)
  */
 int createPingSocket(unsigned short localPort)
 {
-    int sockfd = -1;
-
-    sockfd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    int sockfd = socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if(sockfd < 0) {
         ERROR_MSG("creating socket failed");
         return -1;

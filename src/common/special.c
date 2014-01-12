@@ -16,7 +16,6 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <linux/ip.h>
-#include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
@@ -62,13 +61,8 @@ int handleNatPunch(char *buf, const struct sockaddr *from, socklen_t fromlen)
     //printf("received a nat punch packet from: %s\n", inet_ntoa(from->sin_addr));
 
 
-    short            h_type;
     int              h_private_ip;
-    short            h_algo;
-    int              h_ip;
     short            h_state;
-    short            h_sPort;
-    short            h_weight;
     unsigned short   h_link_id;
     struct wigateway *gateway;
 
@@ -76,13 +70,8 @@ int handleNatPunch(char *buf, const struct sockaddr *from, socklen_t fromlen)
     memcpy(&punch_pkt, buf, sizeof(struct nat_punch_pkt));
 
     // Extract the information in host byte order
-    h_type = ntohs(punch_pkt.type);
     h_private_ip = ntohl(punch_pkt.priv_ip);
-    h_algo = ntohs(punch_pkt.algo);
-    h_ip = ntohl(punch_pkt.pub_ip);
     h_state = ntohs(punch_pkt.state);
-    h_sPort = ntohs(punch_pkt.src_port);
-    h_weight = ntohs(punch_pkt.weight);
     h_link_id = ntohs(punch_pkt.link_id);
             
     char p_ip[INET6_ADDRSTRLEN];
@@ -103,7 +92,7 @@ int handleNatPunch(char *buf, const struct sockaddr *from, socklen_t fromlen)
             // The network name may have changed.
             strncpy(link->network, punch_pkt.network, sizeof(link->network));
             
-            STATS_MSG("Received nat punch from node %d link %d (%s / %s) from %s:%s",
+            STATS_MSG("Received nat punch from node %u link %d (%s / %s) from %s:%s",
                     gateway->node_id, link->id, link->ifname, 
                     link->network, p_ip, port_str);
 
@@ -119,7 +108,7 @@ int handleNatPunch(char *buf, const struct sockaddr *from, socklen_t fromlen)
         } else {
             // We received a nat punch, but we do not recognize the link.  We
             // should add it and begin using it.
-            DEBUG_MSG("Adding missing link %d (%s / %s) to node %d",
+            DEBUG_MSG("Adding missing link %d (%s / %s) to node %u",
                     h_link_id, punch_pkt.device, punch_pkt.network, gateway->node_id);
             
             addGwLink(gateway, (char*)punch_pkt.device, p_ip, n_data_port, 

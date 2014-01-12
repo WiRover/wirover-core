@@ -13,7 +13,6 @@
 #include <linux/udp.h>
 #include <linux/tcp.h>
 #include <linux/ip.h>
-#include <linux/if.h>
 #include <netinet/in.h>
 #include <signal.h>
 #include <sys/ioctl.h>
@@ -181,61 +180,43 @@ void print_udphdr(struct udphdr *udp_header, FILE *file)
 
 void print_pkthdr(unsigned char *pkthdr, FILE *file)
 {
-	struct ethhdr *ethernet_header;
-	struct iphdr *ip_header;
-	struct tcphdr *tcp_header;
-	struct udphdr *udp_header;
-
-	ethernet_header = (struct ethhdr *)pkthdr;
+	struct ethhdr *ethernet_header = (struct ethhdr *)pkthdr;
 	print_ethhdr(ethernet_header, file);
 	if(ntohs(ethernet_header->h_proto) == ETH_P_IP)
 	{
-		ip_header = (struct iphdr *)(pkthdr + sizeof(struct ethhdr));
+		struct iphdr *ip_header = (struct iphdr *)(pkthdr + sizeof(struct ethhdr));
         	print_iphdr(ip_header, file);
 		if(ip_header->protocol == IPPROTO_TCP)
 		{
-			tcp_header = (struct tcphdr *)(pkthdr + sizeof(struct ethhdr) + ip_header->ihl*4);
+			struct tcphdr *tcp_header = (struct tcphdr *)(pkthdr + sizeof(struct ethhdr) + ip_header->ihl*4);
             		print_tcphdr((unsigned char *)tcp_header, file);
 		}
 		else if(ip_header->protocol == IPPROTO_UDP)
 		{
-			udp_header = (struct udphdr *)(pkthdr + sizeof(struct ethhdr) + ip_header->ihl*4);
+			struct udphdr *udp_header = (struct udphdr *)(pkthdr + sizeof(struct ethhdr) + ip_header->ihl*4);
             		print_udphdr(udp_header, file);
 		}
 	}
-
-	
-
 }
 
 
 void print_encappkt(unsigned char *pkthdr, FILE *file)
 {
-        struct ethhdr *ethernet_header;
-        struct iphdr *ip_header, *ip_temp;
-        struct tcphdr *tcp_header;
-        struct udphdr *udp_header, *udp_temp;
-	int offset = 0;
+    int offset = sizeof(struct ethhdr);
+    struct iphdr *ip_temp = (struct iphdr *)(pkthdr + offset);
 
-        ethernet_header = (struct ethhdr *)pkthdr;
-	offset += sizeof(struct ethhdr);
-	ip_temp = (struct iphdr *)(pkthdr + offset);
-	offset += ip_temp->ihl*4;
-	udp_temp = (struct udphdr *)(pkthdr + offset);
-	offset += sizeof(struct udphdr);
-                
-	ip_header = (struct iphdr *)(pkthdr + sizeof(struct ethhdr));
-        print_iphdr(ip_header, file);
-        if(ip_header->protocol == IPPROTO_TCP)
-        {
-                tcp_header = (struct tcphdr *)(pkthdr + sizeof(struct ethhdr) + ip_header->ihl*4);
-                print_tcphdr((unsigned char *)tcp_header, file);
-        }
-        else if(ip_header->protocol == IPPROTO_UDP)
-        {
-                udp_header = (struct udphdr *)(pkthdr + sizeof(struct ethhdr) + ip_header->ihl*4);
-                print_udphdr(udp_header, file);
-        }
+    struct iphdr *ip_header = (struct iphdr *)(pkthdr + sizeof(struct ethhdr));
+    print_iphdr(ip_header, file);
+    if(ip_header->protocol == IPPROTO_TCP)
+    {
+        struct tcphdr *tcp_header = (struct tcphdr *)(pkthdr + sizeof(struct ethhdr) + ip_header->ihl*4);
+        print_tcphdr((unsigned char *)tcp_header, file);
+    }
+    else if(ip_header->protocol == IPPROTO_UDP)
+    {
+        struct udphdr *udp_header = (struct udphdr *)(pkthdr + sizeof(struct ethhdr) + ip_header->ihl*4);
+        print_udphdr(udp_header, file);
+    }
 
 }
 

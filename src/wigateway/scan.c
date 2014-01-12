@@ -161,24 +161,20 @@ void *scanThreadFunc(void *arg)
  */
 int routingTableInit()
 {
-    int line_count;
-    FILE *route_fd;
-    char cmd[1024];
-    //char rt[1024];
-    char buf[1024];
+    const char *cmd = "route -n";
 
-    char dest[24], gw[24], mask[24], dev[IFNAMSIZ];
-
-    sprintf(cmd, "route -n");
-    if( (route_fd = popen(cmd, "r")) != NULL )
-    {
-        line_count = 0;
+    FILE *route_fd = popen(cmd, "r");
+    if(route_fd != NULL) {
+        int line_count = 0;
+        char buf[1024];
         while( fgets(buf, sizeof(buf), route_fd) )
         {
             line_count++;
             if(line_count > 2)
             {
-                sscanf(buf, "%s %s %s %*s %*d %*d %*d %s",
+                char dest[24], gw[24], mask[24], dev[IFNAMSIZ];
+
+                sscanf(buf, "%23s %23s %23s %*s %*d %*d %*d %15s",
                     dest, gw, mask, dev);
 
                 // check if route has a non-zero gw address
@@ -199,7 +195,7 @@ int routingTableInit()
                 }
             }
         }
-        fclose(route_fd);
+        pclose(route_fd);
     }
     
     return SUCCESS;
@@ -350,13 +346,11 @@ int scanInterfacesInit()
         rtn = 0;
         if( (ife->stats.flags & IFF_UP) && ife->p_ip[0] != 0 )
         {
-            struct hostent *he;
             struct in_addr a;
-            char address[15];
 
             if ( ! USE_CONTROLLER ) 
             {
-                he = gethostbyname(PING_HOST);
+                struct hostent *he = gethostbyname(PING_HOST);
 
                 if ( he )
                 {
@@ -365,9 +359,8 @@ int scanInterfacesInit()
                         bcopy(*he->h_addr_list++, (char *)&a, sizeof(a));
                     }
 
-                    char pbuf[IFNAMSIZ];
+                    char pbuf[INET_ADDRSTRLEN];
                     inet_ntop(AF_INET, &a.s_addr, pbuf, sizeof(pbuf));
-                    strncpy(address, pbuf, sizeof(address));
                 }
             }
 
@@ -395,12 +388,12 @@ int scanInterfacesInit()
     return err;
 
 failure:
-    if(!skfd)
+    if(skfd > 0)
     {
         close(skfd);
     }
 
-    if(!dev_fd)
+    if(dev_fd)
     {
         fclose(dev_fd);
     }

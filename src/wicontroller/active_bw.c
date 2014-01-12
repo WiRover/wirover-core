@@ -97,10 +97,10 @@ void* bandwidthServerFunc_udp(void* serverInfo)
     if(sockfd < 0) {
         return 0;
     }
-       int rtn; 
+
     while(!getQuitFlag()) {
-          rtn = handleBandwidthClient_udp(info, sockfd);
-          DEBUG_MSG("handleBWclient_udp :%d",rtn);
+        int rtn = handleBandwidthClient_udp(info, sockfd);
+        DEBUG_MSG("handleBWclient_udp :%d",rtn);
     }
 
     close(sockfd);
@@ -110,9 +110,7 @@ void* bandwidthServerFunc_udp(void* serverInfo)
 
 int openBandwidthServerSocket(const struct bw_server_info* serverInfo)
 {
-    int sockfd = -1;
-
-    sockfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
+    int sockfd = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
     if(sockfd < 0) {
         ERROR_MSG("creating socket failed");
         return -1;
@@ -143,10 +141,7 @@ int openBandwidthServerSocket(const struct bw_server_info* serverInfo)
 
 int openBandwidthServerSocket_udp(const struct bw_server_info* serverInfo)
 {
-    int sockfd = -1;
-
-    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-    DEBUG_MSG("sockfd:%d",sockfd);
+    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if(sockfd < 0) {
         ERROR_MSG("creating socket failed");
         return -1;
@@ -216,7 +211,7 @@ int handleBandwidthClient(const struct bw_server_info* serverInfo, int serverSoc
     struct timeval elapsed_a;
     bytesRecvd = recv_timeout(client_sock, header_buffer, header_size, MSG_WAITALL,
                                  &tspec, &elapsed_a);
-    DEBUG_MSG("bytesRecvd:%d",bytesRecvd);
+    DEBUG_MSG("bytesRecvd:%d", bytesRecvd);
     if(bytesRecvd < header_size) {
         goto handle_client_fail;
     }
@@ -293,7 +288,7 @@ int handleBandwidthClient(const struct bw_server_info* serverInfo, int serverSoc
     // This is the bandwidth from the controller to the gateway
     double gw_downlink_bw = bw_hdr->bandwidth;
     
-    STATS_MSG("Bandwidth for node %d link %d down: %f mbps, up: %f mbps, bytes: %d, bits: %d",
+    STATS_MSG("Bandwidth for node %d link %d down: %f mbps, up: %f mbps, bytes: %u, bits: %u",
             h_node_id, h_link_id, gw_downlink_bw, gw_uplink_bw, h_numBytes, numBits);
 
     // Update the bandwidth field (currently, we only care about the gateway's
@@ -335,42 +330,17 @@ int handleBandwidthClient_udp(const struct bw_server_info* serverInfo, int sockf
 {
     struct sockaddr_in  hisAddr;
     socklen_t addrLen = sizeof(struct sockaddr);
-    int rtn = 0, bytesSent=0, bytesRecvd=0;
+    int rtn = 0, bytesSent=0;
     struct timespec     tspec;
 
     const int header_size = sizeof(struct tunhdr) + sizeof(struct bw_hdr);
     const int packet_size = sizeof(struct bw_hdr);
     char header_buffer[MTU];
 
-/*    int client_sock = accept(serverSocket, (struct sockaddr*)&hisAddr, &addrLen);
-    if(client_sock < 0) {
-        ERROR_MSG("accept failed");
-        goto handle_client_fail;
-    }
 
-    struct timeval timeout;
-    set_timeval_us(&timeout, serverInfo->timeout);
-
-    rtn = setsockopt(client_sock, SOL_SOCKET, SO_RCVTIMEO, (char*)&timeout, sizeof(timeout));
-    if(rtn < 0) {
-        ERROR_MSG("setsockopt SO_RCVTIMEO failed");
-        goto handle_client_fail;
-    }
-    
-
-    unsigned int max_burst;
-    rtn = receiveRts_udp(sockfd, clientInfo->timeout, &max_burst);
-    if(rtn == FAILURE) {
-        close(sockfd);
-        return FAILURE;
-    }
-*/
-
-
-
-   DEBUG_MSG("At recvfrom");
+    DEBUG_MSG("At recvfrom");
     rtn = recvfrom(sockfd, header_buffer, packet_size, MSG_WAITALL, (struct sockaddr*)&hisAddr, &addrLen);
-   DEBUG_MSG("Rcvd RTS:%d",rtn); 
+    DEBUG_MSG("Rcvd RTS:%d",rtn); 
 
     rtn = sendCts_udp(sockfd, hisAddr);
     DEBUG_MSG("sendCts:%d",sendCts);
@@ -378,43 +348,13 @@ int handleBandwidthClient_udp(const struct bw_server_info* serverInfo, int sockf
         return FAILURE;
     }
 
-   
-
     tspec.tv_sec  = serverInfo->timeout / 1000000;
     tspec.tv_nsec = (serverInfo->timeout % 1000000) * 1000;
 
-/*
-    struct timeval elapsed_a;
-    bytesRecvd = recvfrom_timeout(sockfd, header_buffer, DEFAULT_MTU, MSG_WAITALL, &tspec, &elapsed_a);
-    
-
-   DEBUG_MSG("bytesRecvd:%d",bytesRecvd);
-    if(bytesRecvd < header_size) {
-        return FAILURE;    
-    }
-*/
-
     struct bw_hdr* bw_hdr;
-/*
-    bw_hdr = (struct bw_hdr*)(header_buffer + sizeof(struct tunhdr));
-    const unsigned int h_numBytes = ntohl(bw_hdr->size);
-
-    if(h_numBytes > MAX_BW_BYTES) {
-        DEBUG_MSG("Bandwidth client requested an unusually large stream");
-        goto handle_client_fail;
-    } else if(h_numBytes < header_size) {
-        DEBUG_MSG("Bandwidth client requested an unusually small stream");
-        goto handle_client_fail;
-    }
-*/
     int h_numBytes = DEFAULT_MTU;
+
     char buffer[h_numBytes];
-    /*if(!buffer) {
-        DEBUG_MSG("malloc failed");
-        goto handle_client_fail;
-    }*/
-   // memcpy(buffer, header_buffer, header_size);
-    
 
     struct timeval elapsed_b;
 
@@ -424,12 +364,6 @@ int handleBandwidthClient_udp(const struct bw_server_info* serverInfo, int sockf
     rtn = recvfromClientBurst_timeout(sockfd, buffer, h_numBytes, MSG_WAITALL,
                           &tspec, &elapsed_b);
   
-/*  if(rtn < (h_numBytes - header_size)) {
-        goto handle_client_fail;
-    }
-  */  
-
-
     const unsigned int numBits = getTransferSizeBits(rtn);
 
     // This is the bandwidth from the gateway to the controller
@@ -458,14 +392,6 @@ int handleBandwidthClient_udp(const struct bw_server_info* serverInfo, int sockf
     DEBUG_MSG("bytesSent:%d",bytesSent);
 
     sleep(ACTIVE_BW_TIMEOUT/1000000);
-    /*
-    if(bytesSent < 0) {
-        ERROR_MSG("bandwidth send failed");
-        goto handle_client_fail;
-    } else if(bytesSent < h_numBytes) {
-        goto handle_client_fail;
-    }
-    */
 
     tspec.tv_sec  = serverInfo->timeout / 1000000;
     tspec.tv_nsec = (serverInfo->timeout % 1000000) * 1000;
@@ -485,7 +411,7 @@ int handleBandwidthClient_udp(const struct bw_server_info* serverInfo, int sockf
     // This is the bandwidth from the controller to the gateway
     double gw_downlink_bw = bw_hdr->bandwidth;
     
-    STATS_MSG("Bandwidth for node %d link %d down: %f mbps, up: %f mbps, bytes: %d, bits: %d",
+    STATS_MSG("Bandwidth for node %d link %d down: %f mbps, up: %f mbps, bytes: %d, bits: %u",
             h_node_id, h_link_id, gw_downlink_bw, gw_uplink_bw, h_numBytes, numBits);
 
     // Update the bandwidth field (currently, we only care about the gateway's

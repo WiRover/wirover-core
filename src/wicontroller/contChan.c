@@ -90,8 +90,6 @@ struct wigateway *getHeadGW()
 int configureControlChannel()
 {
     char* data;
-    char* baseAddr;
-    char* addrRange;
 
     if( (data = getDhcpRange()) == NULL ) 
     {  
@@ -100,13 +98,13 @@ int configureControlChannel()
     }
     else
     {
-        if ( (baseAddr = strtok(data, CONFIG_FILE_PARAM_DHCP_RANGE_DELIM)) != NULL)
-        {
+        char *baseAddr = strtok(data, CONFIG_FILE_PARAM_DHCP_RANGE_DELIM);
+        if(baseAddr) {
             dhcp_start_addr.sin_addr.s_addr = inet_addr(baseAddr);
         }
 
-        if ( (addrRange = strtok(NULL, CONFIG_FILE_PARAM_DHCP_RANGE_DELIM)) != NULL)
-        { 
+        char *addrRange = strtok(NULL, CONFIG_FILE_PARAM_DHCP_RANGE_DELIM);
+        if(addrRange) {
             dhcp_range = atoi(addrRange);
         }
     }
@@ -305,13 +303,13 @@ void dumpWigateways()
     struct wigateway *curr_gw = head_gw;
     while (curr_gw != NULL) 
     {
-        GENERAL_MSG("ID: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t Node ID: %d\n", 
+        GENERAL_MSG("ID: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t Node ID: %u\n", 
             curr_gw->id[0], curr_gw->id[1], curr_gw->id[2], curr_gw->id[3], curr_gw->id[4], curr_gw->id[5],
             curr_gw->node_id);
-        GENERAL_MSG("Lease Begin (unix time): %d\n", curr_gw->lease_begin);
-        GENERAL_MSG("Lease End (unix time): %d\n", curr_gw->lease_end);
+        GENERAL_MSG("Lease Begin (unix time): %u\n", curr_gw->lease_begin);
+        GENERAL_MSG("Lease End (unix time): %u\n", curr_gw->lease_end);
 
-        GENERAL_MSG("Private IP: %d:%s\n", curr_gw->n_private_ip, curr_gw->p_private_ip);
+        GENERAL_MSG("Private IP: %x:%s\n", curr_gw->n_private_ip, curr_gw->p_private_ip);
 
         GENERAL_MSG("Algorithm: ");
 
@@ -369,7 +367,7 @@ void smallDumpWigateways()
     struct wigateway *curr_gw = head_gw;
     while (curr_gw != NULL) 
     {
-        GENERAL_MSG("ID: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t Node ID: %d\n", 
+        GENERAL_MSG("ID: %.2X:%.2X:%.2X:%.2X:%.2X:%.2X\t Node ID: %u\n", 
             curr_gw->id[0], curr_gw->id[1], curr_gw->id[2], curr_gw->id[3], curr_gw->id[4], curr_gw->id[5],
             curr_gw->node_id);
         GENERAL_MSG("Private IP: %s\n", curr_gw->p_private_ip);
@@ -454,12 +452,11 @@ int findFreeFwdPort()
  */
 int computeNodeId(unsigned char* hw_addr, unsigned int len)
 {
-    int temp = 0;
     int total = 0;
     int i = 0;
     for (i = 0; i < len; ++i)
     {
-        temp = 0;
+        int temp = 0;
         temp |= hw_addr[i];
         total += temp;
     } 
@@ -963,7 +960,7 @@ void removeStaleWigateways()
         }
 
         if ((curr_time - curr->last_seen_pkt_time) >= GATEWAY_ACTIVE_TIMEOUT) {
-            DEBUG_MSG("Setting node %d to INACTIVE", curr->node_id);
+            DEBUG_MSG("Setting node %u to INACTIVE", curr->node_id);
             changeGwState(curr, GW_STATE_INACTIVE);
             removeWigateway(curr->id);
         }

@@ -23,7 +23,7 @@
 static pthread_t handle_transfer_thread;
 static pthread_mutex_t handle_transfer_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-static FILE *trans_file;
+static FILE *trans_file = NULL;
 
 // New model
 void *handleTransferThreadFunc(void *arg);
@@ -62,39 +62,27 @@ float calculateBandwidth(int filesize, float time)
  */
 FILE *createTransFile()
 {
-    FILE *source;
-    if ( (source = fopen("/dev/zero", "r")) == NULL )
-    {   
+    trans_file = fopen(TRANS_FILE_NAME, "w+");
+    if(!trans_file) {
         ERROR_MSG("fopen() failed");
         return NULL;
     }
 
-    if ( (trans_file = fopen(TRANS_FILE_NAME, "w+")) == NULL )
-    {   
-        ERROR_MSG("fopen() failed");
-        return NULL;
-    }
-    fflush(trans_file);
-
-    int bytes_read = 0, bytes_written = 0;
     char buffer[1000];
+    memset(buffer, 0, sizeof(buffer));
 
-    if ( (bytes_read = fread(buffer, 1, 1000, source)) < 0 ) 
-    {
-        ERROR_MSG("fread() failed");
-        return NULL;
-    }
-
-    while ( bytes_written < TRANS_FILE_SIZE ) 
-    {
-        if ( (bytes_written += fwrite(buffer, 1, 1000, trans_file)) < 0)
-        {   
+    int bytes_written = 0;
+    while ( bytes_written < TRANS_FILE_SIZE ) {
+        int result = fwrite(buffer, 1, sizeof(buffer), trans_file);
+        if(result < 0) {
             ERROR_MSG("fwrite() failed");
             return NULL;
         }
 
-        fflush(trans_file);
+        bytes_written += result;
     }
+    
+    fflush(trans_file);
 
     return trans_file;
 } // End function FILE *createTransFile()
@@ -290,7 +278,7 @@ void *handleTransferThreadFunc(void *arg)
             else
             {
                 //printf("Accepted connection\n");
-                char ip_buf[IFNAMSIZ];
+                char ip_buf[INET_ADDRSTRLEN];
                 inet_ntop(AF_INET, &from->sin_addr.s_addr, ip_buf, sizeof(ip_buf));
 
                 if ( recvFile(transfer_fd) < 0 )

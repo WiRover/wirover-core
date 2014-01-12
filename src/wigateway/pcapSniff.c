@@ -110,8 +110,6 @@ void *pcapSniffThreadFunc(void *arg)
 
     if ( dev == NULL ) 
     {
-        sprintf(local_buf, "%s\n", errbuf);
-        DEBUG_MSG(local_buf);
         return NULL;
     }
 

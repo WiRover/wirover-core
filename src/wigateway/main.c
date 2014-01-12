@@ -62,7 +62,6 @@
 #include "pcapSniff.h"
 #include "selectInterface.h"
 #include "scan.h"
-#include "ppp.h"
 #include "netlink.h"
 #include "transfer.h"
 #include "gpsHandler.h"
@@ -150,7 +149,6 @@ int handlePackets(int tunfd, struct tunnel *tun)
 {
     // The File Descriptor set to add sockets to
     fd_set readSet;
-    int rtn;
 
     int incoming_sockfd = -1;
     
@@ -224,7 +222,7 @@ int handlePackets(int tunfd, struct tunnel *tun)
 
         // We must use pselect, since we want SIGINT/SIGTERM to interrupt
         // and be handled
-        rtn = pselect(FD_SETSIZE, &readSet, NULL, NULL, NULL, &orig_set);
+        int rtn = pselect(FD_SETSIZE, &readSet, NULL, NULL, NULL, &orig_set);
         //DEBUG_MSG("pselect() main.c returned\n");
 
         // Race condition
@@ -293,7 +291,7 @@ int handlePackets(int tunfd, struct tunnel *tun)
 // TODO: this function needs to be updated to use the struct tunhdr and TUNTAP_OFFSE
 int handleNoControllerPacket(int tunfd, fd_set readSet) 
 {
-    int		        bufSize, rtn;
+    int		        bufSize;
     char            buffer[MTU];
     unsigned short 	old_sum, new_sum;
     uint32_t        old_ip, new_ip;
@@ -381,15 +379,15 @@ int handleNoControllerPacket(int tunfd, fd_set readSet)
 
                 if( ife->stats.flags & IFF_POINTOPOINT )
                 {
-                    if( (rtn = write(tunfd, buffer, (bufSize+4))) < 0) 
-                    {
+                    int rtn = write(tunfd, buffer, (bufSize+4));
+                    if(rtn < 0) {
                         ERROR_MSG("writting to tunnel failed");
                     }
                 }
                 else
                 {
-                    if( (rtn = write(tunfd, &buffer[10], (bufSize-10))) < 0) 
-                    {
+                    int rtn = write(tunfd, &buffer[10], (bufSize-10));
+                    if(rtn < 0) {
                         ERROR_MSG("writting to tunnel");
                     }
                 }
@@ -563,7 +561,7 @@ int handleInboundPacket(int tunfd, int incoming_sockfd)
  */
 int handleOutboundPacket(int tunfd, struct tunnel * tun) 
 {
-    int bufSize, rtn;
+    int bufSize;
     char buffer[MTU];
 
     if( (bufSize = read(tunfd, buffer, MTU)) < 0) 
@@ -610,8 +608,8 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         }
 
         // Select interface and send
-        if( (rtn = stripePacket(buffer, bufSize, getRoutingAlgorithm())) < 0)
-        {
+        int rtn = stripePacket(buffer, bufSize, getRoutingAlgorithm());
+        if(rtn < 0) {
             ERROR_MSG("stripePacket() failed");
         }
     }
@@ -668,8 +666,6 @@ static int configurePingThread()
  */
 int main(int argc, char *argv[])
 {
-    int rtn;
-
     // Set the appropriate signal handler functions
     setSigHandlers();
     signal(SIGSEGV, segfaultHandler);
@@ -807,8 +803,6 @@ int main(int argc, char *argv[])
         DEBUG_MSG("Created Scanning Thread.");
     }
 
-    int numTotalIf = countLinks(head_link__);
-
     // Sleep until we have some type of connection
     // struct timeval start, curr, result;
     // gettimeofday(&start, NULL);
@@ -825,8 +819,6 @@ int main(int argc, char *argv[])
             shutdownGateway();
             return SUCCESS;
         }
-
-        numTotalIf = countLinks(head_link__);
 
         // Don't use sleep() to sleep since it has problems with signals
         struct timeval sleep;
@@ -960,8 +952,8 @@ int main(int argc, char *argv[])
 
 
     // Initialize the BW estimation start time
-    if ( (rtn = handlePackets(getTunnelDescriptor(), tun) < 0) )
-    {
+    int rtn = handlePackets(getTunnelDescriptor(), tun);
+    if(rtn < 0) {
         DEBUG_MSG("handlePackets() failed");
     }
 

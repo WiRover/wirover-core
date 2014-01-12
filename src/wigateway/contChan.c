@@ -55,14 +55,11 @@ BIO *ssl_conn;
  */ 
 BIO *openSSLControlChannel(char *device)
 {
-    char port[10];
-    sprintf(port, "%o", (unsigned int)CONTROL_PORT);
     init_OpenSSL();     
 
     char ssl_conn_str[50];
-    strcat(ssl_conn_str, getControllerIP());
-    strcat(ssl_conn_str, ":");
-    strcat(ssl_conn_str, port);
+    snprintf(ssl_conn_str, sizeof(ssl_conn_str), "%s:%o", getControllerIP(), 
+            (unsigned int)CONTROL_PORT);
 
     ssl_conn = BIO_new_connect(ssl_conn_str);
 
@@ -107,11 +104,9 @@ void closeSSLControlChannel(BIO *bio)
  */
 int openControlChannel(char *device) 
 {
-    int socket, rval;
-
     // Create the socket to connect to the server   
-    if ( (socket = createSocket()) < 0 ) 
-    { 
+    int socket = createSocket();
+    if(socket < 0) {
         DEBUG_MSG("createSocket() failed");
         return FAILURE;
     }
@@ -161,8 +156,8 @@ int openControlChannel(char *device)
 */
     }
 
-    if ( (rval = connectControlChannel(socket)) < 0 )
-    {
+    int rval = connectControlChannel(socket);
+    if(rval < 0) {
         DEBUG_MSG("connectControlChannel() failed");
         close(socket);
         return FAILURE;
@@ -227,8 +222,6 @@ int createSocket()
  */
 int connectControlChannel(int socket)
 {
-    int rval;
-
     // Put the address of proxy into pproxy
     pproxy = &proxy; 
 
@@ -244,8 +237,8 @@ int connectControlChannel(int socket)
     inet_pton(AF_INET, cont_ip, &pproxy->addr.sin_addr);
 	
     // Connect the client to the server
-    if( (rval = connect(socket, (struct sockaddr *) &pproxy->addr, sizeof(pproxy->addr))) < 0)
-    {
+    int rval = connect(socket, (struct sockaddr *) &pproxy->addr, sizeof(pproxy->addr));
+    if(rval < 0) {
         ERROR_MSG("connect() failed");
         return FAILURE;
     }
@@ -444,21 +437,8 @@ int notifyController()
     addRoute(getControllerIP(), 0, (send_ife->has_gw ? send_ife->gw_ip : 0),
             send_ife->ifname);
 
-    if( (send_ife == NULL) ) 
-    {
-        DEBUG_MSG("selectInterface() failed");
-        /*
-        if( data != NULL ) 
-        {
-            free(data);
-        }
-        */
-        return FAILURE;
-    }
-
-    int socket;
-    
-    if ( (socket = openControlChannel(send_ife->ifname)) < 0 ) {
+    int socket = openControlChannel(send_ife->ifname);
+    if(socket < 0) {
         DEBUG_MSG("openControlChannel() failed.");
         return FAILURE;
     }

@@ -33,6 +33,7 @@
 #include "../common/tunnelInterface.h"
 #include "../common/packet_debug.h"
 #include "../common/special.h"
+#include "../common/udp_ping.h"
 
 #include "gatewayUpdater.h"
 
@@ -175,14 +176,14 @@ void gw_update_status(struct wigateway *gw)
         if(gw->state == GW_STATE_ACTIVE) {
             len = snprintf(query, sizeof(query),
                     "insert into gateways (id, state, event_time, private_ip)"
-                    " values (%u, %u, FROM_UNIXTIME(%lu), '%s')",
+                    " values (%u, %d, FROM_UNIXTIME(%lu), '%s')",
                     gw->node_id, gw->state,
                     (unsigned long)gw->last_state_change,
                     gw->p_private_ip);
         } else {
             len = snprintf(query, sizeof(query),
                     "insert into gateways (id, state, event_time, private_ip)"
-                    " values (%u, %u, FROM_UNIXTIME(%lu), NULL)",
+                    " values (%u, %d, FROM_UNIXTIME(%lu), NULL)",
                     gw->node_id, gw->state,
                     (unsigned long)gw->last_state_change);
         }
@@ -198,14 +199,14 @@ void gw_update_status(struct wigateway *gw)
     } else {
         if(gw->state == GW_STATE_ACTIVE) {
             len = snprintf(query, sizeof(query),
-                    "update gateways set state=%u, event_time=FROM_UNIXTIME(%lu),"
-                    " private_ip='%s' where id=%u and state!=%u",
+                    "update gateways set state=%d, event_time=FROM_UNIXTIME(%lu),"
+                    " private_ip='%s' where id=%u and state!=%d",
                     gw->state, (unsigned long)gw->last_state_change,
                     gw->p_private_ip, gw->node_id, gw->state);
         } else {
             len = snprintf(query, sizeof(query),
-                    "update gateways set state=%u, event_time=FROM_UNIXTIME(%lu),"
-                    " private_ip=NULL where id=%u and state!=%u",
+                    "update gateways set state=%d, event_time=FROM_UNIXTIME(%lu),"
+                    " private_ip=NULL where id=%u and state!=%d",
                     gw->state, (unsigned long)gw->last_state_change,
                     gw->node_id, gw->state);
         }
@@ -315,7 +316,7 @@ void gw_update_gps(struct wigateway* gw, struct gps_payload* gpsData)
 
     int len = snprintf(query, sizeof(query),
             "insert into gps (node_id, status, latitude, longitude,"
-            "altitude, track, speed, climb) values ('%d', '%d', '%f',"
+            "altitude, track, speed, climb) values ('%u', '%d', '%f',"
             "'%f', '%f', '%f', '%f', '%f')",
             gw->node_id, gpsData->status, gpsData->latitude, gpsData->longitude,
             gpsData->altitude, gpsData->track, gpsData->speed, gpsData->climb);
@@ -350,11 +351,11 @@ void gw_update_pings(struct wigateway* gw, struct link* link, int rtt)
     // If possible, associate the ping with the GPS point.
     if( (now - gw->lastGpsTime) <= GPS_MAX_AGE ) {
         len = snprintf(query, sizeof(query),
-                 "insert into pings (node_id, network, gps_id, rtt) values (%d, '%s', %u, %d)",
+                 "insert into pings (node_id, network, gps_id, rtt) values (%u, '%s', %u, %d)",
                  gw->node_id, link->network, gw->lastGpsRowId, rtt);
     } else {
         len = snprintf(query, sizeof(query),
-                 "insert into pings (node_id, network, rtt) values (%d, '%s', %d)",
+                 "insert into pings (node_id, network, rtt) values (%u, '%s', %d)",
                  gw->node_id, link->network, rtt);
     }
    
@@ -386,12 +387,12 @@ void gw_update_activebw(struct wigateway* gw, struct link* link,
     if( (now - gw->lastGpsTime) <= GPS_MAX_AGE ) {
         len = snprintf(query, sizeof(query),
              "insert into bandwidth (node_id, network, gps_id, bw_down, bw_up, type) "
-             "values ('%d', '%s', %u, '%f', '%f', %s)",
+             "values ('%u', '%s', %u, '%f', '%f', %s)",
              gw->node_id, link->network, gw->lastGpsRowId, bw_down, bw_up, type_str);
     } else {
         len = snprintf(query, sizeof(query),
              "insert into bandwidth (node_id, network, bw_down, bw_up, type) "
-             "values ('%d', '%s', '%f', '%f', %s)",
+             "values ('%u', '%s', '%f', '%f', %s)",
              gw->node_id, link->network, bw_down, bw_up, type_str);
     }
 
@@ -406,7 +407,7 @@ void gw_update_passive(struct link_iterator* link_iter, struct passive_stats* st
     struct link* __restrict__ link = link_iter->link;
 
     int len = snprintf(query, sizeof(query),
-        "insert into passive (node_id, network, time, interval_len, bytes_tx, bytes_rx, rate_down, rate_up, packets, losses, outoforder) values (%d, '%s', FROM_UNIXTIME(%lu), %u, %llu, %llu, '%f', '%f', %u, %u, %u)",
+        "insert into passive (node_id, network, time, interval_len, bytes_tx, bytes_rx, rate_down, rate_up, packets, losses, outoforder) values (%u, '%s', FROM_UNIXTIME(%lu), %u, %llu, %llu, '%f', '%f', %u, %u, %u)",
         gw->node_id, link->network, stats->start_time.tv_sec, stats->age,
         stats->bytes_sent, stats->bytes_recvd,
         stats->rate_down, stats->rate_up,
@@ -432,7 +433,7 @@ int gw_query_quota(const struct wigateway* gw, const struct link* link,
     char query[1000];
 
     int len = snprintf(query, sizeof(query),
-            "select bytes_tx,bytes_rx,quota from links where node_id=%d and network='%s' limit 1",
+            "select bytes_tx,bytes_rx,quota from links where node_id=%u and network='%s' limit 1",
             gw->node_id, link->network);
 
     if(pthread_mutex_lock(&db_lock) != 0) {
@@ -459,7 +460,7 @@ int gw_query_quota(const struct wigateway* gw, const struct link* link,
 
     MYSQL_ROW row = mysql_fetch_row(qr);
     if(!row) {
-        snprintf(local_buf, sizeof(local_buf), "Entry missing for node %d network %s\n",
+        snprintf(local_buf, sizeof(local_buf), "Entry missing for node %u network %s\n",
                 gw->node_id, link->network);
         DEBUG_MSG(local_buf);
         mysql_free_result(qr);

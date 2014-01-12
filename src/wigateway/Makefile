@@ -24,7 +24,6 @@ endif
 GATEWAY_HEADERS := \
 	gpsHandler.h \
 	pcapSniff.h \
-	ppp.h \
 	scan.h \
 	selectInterface.h
 
@@ -36,7 +35,6 @@ GATEWAY_OBJS := \
 	interface.o \
 	netlink.o \
 	pcapSniff.o \
-	ppp.o \
 	scan.o \
 	selectInterface.o
 	#transfer.o

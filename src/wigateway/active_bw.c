@@ -215,8 +215,6 @@ void* bandwidthThreadFunc(void* clientInfo)
  */
 int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stats* stats)
 {
-    int  sockfd_data = -1;
-    int rtn;
     const int header_size = sizeof(struct tunhdr) + sizeof(struct bw_hdr);
     const int burst_size = DEFAULT_MTU;
     const int packet_size = sizeof(struct bw_hdr);
@@ -240,11 +238,11 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
     bw_hdr->bandwidth = 0.0;
     socklen_t addrLen = sizeof(struct sockaddr);
 
-    sockfd_data = openBandwidthSocket_udp(clientInfo, stats->device);
+    int sockfd_data = openBandwidthSocket_udp(clientInfo, stats->device);
     if(sockfd_data == -1)
         goto err_out;
    
-    rtn = sendto(sockfd_data, buffer, packet_size, 0, (struct sockaddr*)&remoteAddr, addrLen);
+    int rtn = sendto(sockfd_data, buffer, packet_size, 0, (struct sockaddr*)&remoteAddr, addrLen);
     if(rtn < 0) {
         ERROR_MSG("Sending RTS failed");
         goto err_out_close_sockfd;
@@ -290,17 +288,15 @@ err_out:
 
 int runActiveBandwidthTest(struct bw_client_info* clientInfo, struct bw_stats* stats)
 {
-    int sockfd = -1;
-    int rtn;
     const int header_size = sizeof(struct tunhdr) + sizeof(struct bw_hdr);
 
-    sockfd = openBandwidthSocket(clientInfo, stats->device);
+    int sockfd = openBandwidthSocket(clientInfo, stats->device);
     if(sockfd == -1) {
         return FAILURE;
     }
     
     unsigned int max_burst;
-    rtn = receiveCts(sockfd, clientInfo->timeout, &max_burst);
+    int rtn = receiveCts(sockfd, clientInfo->timeout, &max_burst);
         DEBUG_MSG("receiveCts:%d",receiveCts);
     if(rtn == FAILURE) {
         close(sockfd);
@@ -356,16 +352,13 @@ failure:
  */
 static int openBandwidthSocket(struct bw_client_info* clientInfo, const char* bindDevice)
 {
-    int sockfd = -1;
-    int rtn;
-
-    sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if(sockfd < 0) {
         ERROR_MSG("failed to open bandwidth socket");
         return -1;
     }
 
-    rtn = setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, bindDevice, IFNAMSIZ);
+    int rtn = setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, bindDevice, IFNAMSIZ);
     if(rtn < 0) {
         ERROR_MSG("failed to bind socket to device");
         goto failure;
@@ -417,16 +410,13 @@ failure:
 
 static int openBandwidthSocket_udp(struct bw_client_info* clientInfo, const char* bindDevice)
 {
-    int sockfd = -1;
-    int rtn;
-
-    sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    int sockfd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if(sockfd < 0) {
         ERROR_MSG("failed to open bandwidth socket");
         return -1;
     }
 
-    rtn = setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, bindDevice, IFNAMSIZ);
+    int rtn = setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, bindDevice, IFNAMSIZ);
     if(rtn < 0) {
         ERROR_MSG("failed to bind socket to device");
         goto failure;
@@ -447,28 +437,6 @@ static int openBandwidthSocket_udp(struct bw_client_info* clientInfo, const char
     if(rtn < 0) {
         ERROR_MSG("setsockopt SO_RCVTIMEO failed (bad, but not critical)");
     }
-/*
-    struct sockaddr_in remoteAddr;
-    memset(&remoteAddr, 0, sizeof(remoteAddr));
-    remoteAddr.sin_family       = AF_INET;
-    remoteAddr.sin_port         = htons(clientInfo->remote_port);
-    remoteAddr.sin_addr.s_addr  = clientInfo->remote_addr;
-
-    struct timespec connTimeout;
-    connTimeout.tv_sec  = timeout.tv_sec;
-    connTimeout.tv_nsec = timeout.tv_usec * 1000;
-
-    
-rtn = connect_timeout(sockfd, (struct sockaddr*)&remoteAddr, sizeof(remoteAddr), &connTimeout);
-    if(rtn < 0) {
-        if(errno == EWOULDBLOCK) {
-            DEBUG_MSG("Bandwidth connection timed out.");
-        } else {
-            ERROR_MSG("Bandwidth connection failed");
-        }
-        goto failure;
-    }
-*/
     
     return sockfd;
 
@@ -662,7 +630,7 @@ static int receiveBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_cl
 {
     struct bw_hdr *bw_hdr  = (struct bw_hdr*)(buffer + sizeof(struct tunhdr));
 
-    int flag=0, result=0;
+    int flag=0;
     int bytesRcvd = 0;
     struct timeval recvTime;
 
@@ -685,8 +653,7 @@ static int receiveBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_cl
     timeout.tv_nsec = (clientInfo->timeout % 1000000) * 1000;
     
     while(1){
-        result = pselect(sockfd + 1, &readSet, 0, 0, &timeout, &sigset);
-        //DEBUG_MSG("pselect:%d",result);
+        int result = pselect(sockfd + 1, &readSet, 0, 0, &timeout, &sigset);
         if(result < 0) {
             break;
         } else if(!FD_ISSET(sockfd, &readSet)) {
@@ -709,7 +676,6 @@ static int receiveBurst_udp(int sockfd, char* buffer, unsigned len, struct bw_cl
 
 
         result= recvfrom(sockfd, buffer, DEFAULT_MTU, MSG_WAITALL, NULL, 0);
-        //DEBUG_MSG("Rcvd %d bytes", result);
 
         //buffer += result;
 

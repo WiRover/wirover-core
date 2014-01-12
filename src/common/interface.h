@@ -88,61 +88,6 @@ struct statistics {
     short rtm_newaddr_count;
 };
 
-//struct interface {
-//    struct interface *next, *prev;
-//
-//    short link_id;
-//
-//    // Hardware info
-//    char name[IFNAMSIZ];        /* interface name        */
-//    char dev_name[IFNAMSIZ];
-//    char hwaddr[32];            /* HW address            */
-//    struct sockaddr addr;       /* IP address            */
-//    struct sockaddr ethaddr;    /* MAC address           */
-//    struct statistics stats;    /* Statistics            */
-//    int statistics_valid;       /* Valid bit             */
-//
-//    // Transfer socket
-//    int trans_sockfd;
-//
-//    // IP infromation
-//    char p_ip[20];
-//    uint32_t n_ip;
-//
-//    // Socket info
-//    int has_ip;
-//    int is_valid;
-//    int sockfd;
-//
-//    // Buffering info
-//    pthread_mutex_t lock_mutex;
-//    pthread_mutex_t condition_mutex;
-//    pthread_cond_t  condition_cond;
-//    struct buffer_node *buf_head, *buf_tail, *buf_temp;
-//    int buffer_size;
-//    int total_bytes;
-//    int total_sent;
-//    int max_buf_size;
-//
-//    // Burst buffer for UDP Pings
-//    struct ping_pkt *burst_buf[NUM_PINGS];
-//    
-//    // Match the pid of the pppd to the interface
-//    int ppp_pid;
-//
-//    // Keep the state of the interface
-//    enum IF_STATE state;
-//
-//    // Information for GW if interface has one
-//    int has_gw;
-//    char gw_ip[20];
-//
-////	unsigned short  local_seq_no_out;
-////	unsigned short  local_seq_no_in;
-////	unsigned int    packets_lost;
-////	unsigned int    out_of_order_packets;
-//};
-
 #ifdef GATEWAY
 struct interface *getInterface(int link_id);
 #endif

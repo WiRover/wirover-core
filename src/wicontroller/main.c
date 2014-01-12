@@ -258,7 +258,7 @@ int handleOutboundPacket(int sockfd, int tunfd)
     memcpy(&pktSeqNo, &tun_hdr->seq_no, sizeof(tun_hdr->seq_no));
 
     
-   if ( pktSeqNo == NAT_PUNCH_SEQ_NO )
+    if ( pktSeqNo == NAT_PUNCH_SEQ_NO )
     {
         if ( handleNatPunch(buf, (struct sockaddr *)&from, fromlen) < 0 )
         {
@@ -273,28 +273,8 @@ int handleOutboundPacket(int sockfd, int tunfd)
     linkID = ntohs(tun_hdr->link_id);
     codeLen = ntohs(tun_hdr->client_id);
 
-    DEBUG_MSG("Rcvd SeqNo: %d LinkID: %d codeLen: %d",pktSeqNo, linkID, codeLen);
+    DEBUG_MSG("Rcvd SeqNo: %u LinkID: %d codeLen: %d", pktSeqNo, linkID, codeLen);
 
-    /*
-    else
-    {
-        sprintf(local_buf, "Seq No: %d sent at %ld.%06ld.", pktSeqNo, sent->tv_sec, sent->tv_usec);
-        STATS_MSG(local_buf);
-
-        gettimeofday(arrived, &tz);
-        timersub(arrived, sent, result);
-
-        sprintf(local_buf, "Seq No: %d arrived at %ld.%06ld.", pktSeqNo, arrived->tv_sec, arrived->tv_usec);
-        STATS_MSG(local_buf);
-
-        sprintf(local_buf, "Seq No: %d took %ld.%06ld seconds to get to get to the controller.", pktSeqNo, result->tv_sec, result->tv_usec);
-        STATS_MSG(local_buf);
-    }
-
-    free(sent);
-    free(arrived);
-    free(result);
-    */
 
     total_bytes_recvd += bufSize;
     sprintf(local_buf, "Bytes recvd (from all wigateways): %llu", total_bytes_recvd);
@@ -320,12 +300,12 @@ int handleOutboundPacket(int sockfd, int tunfd)
             // Check for lost or out-of-order packets
             unsigned short localSeqNo = ntohs(tun_hdr->local_seq_no);
             updatePacketLoss(link, localSeqNo);
-            sprintf(local_buf, "Bytes recvd from node %d: %llu, from link %d (%s): %llu",
+            sprintf(local_buf, "Bytes recvd from node %u: %llu, from link %d (%s): %llu",
                     gw->node_id, gw->num_bytes_recvd_from, h_link_id, link->ifname, link->bytes_sent);
             STATS_MSG(local_buf);
 
             if(link->state != ACTIVE) {
-                DEBUG_MSG("Packet from node %d link %d (%s) on INACTIVE link, setting to ACTIVE",
+                DEBUG_MSG("Packet from node %u link %d (%s) on INACTIVE link, setting to ACTIVE",
                         gw->node_id, h_link_id, link->ifname);
                 link->state = ACTIVE;
                 gw_update_link(gw, link);

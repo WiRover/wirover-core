@@ -37,7 +37,6 @@
 #include "link_priority.h"
 
 #ifdef GATEWAY
-#include "../wigateway/ppp.h"
 #include "../wigateway/transfer.h"
 #include "../wigateway/scan.h"
 #include "../wigateway/pcapSniff.h"
@@ -687,9 +686,9 @@ int parseConfigFileGW()
 
 void *sigint(void *arg)
 {
-    int signo, err;
+    int signo;
 
-    err = sigwait(&signalSet, &signo);
+    sigwait(&signalSet, &signo);
 
     if(signo == SIGINT || signo == SIGTERM)
     {
@@ -1453,8 +1452,6 @@ u_int16_t updateCsum(u_int32_t newip, u_int32_t oldip, u_int16_t old_csum)
     csum += (newip >> 16);
     newsign = csum >> 31;
     if(newsign != oldsign) csum += 0x1;
-    oldsign = newsign;
-
 
     // Fold 32 bits to 16 bits
     while(csum>>16)
