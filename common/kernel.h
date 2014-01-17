@@ -101,7 +101,7 @@ int virt_add_remote_link(const struct in_addr *priv_ip,
 
 int virt_remove_remote_node(const struct in_addr *priv_ip);
 int virt_remove_remote_link(const struct in_addr *priv_ip,
-        const struct in_addr *pub_ip);
+        const struct in_addr *pub_ip, unsigned short data_port);
 
 int virt_set_gateway_ip(const char *device, const struct in_addr *gw_ip);
 

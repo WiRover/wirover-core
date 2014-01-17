@@ -222,7 +222,7 @@ int virt_remove_remote_node(const struct in_addr *priv_ip)
 }
 
 int virt_remove_remote_link(const struct in_addr *priv_ip,
-                const struct in_addr *pub_ip)
+                const struct in_addr *pub_ip, unsigned short data_port)
 {
     struct virt_conf_message msg;
     msg.op = VIRT_CONF_DEL_REMOTE_LINK;
@@ -230,7 +230,7 @@ int virt_remove_remote_link(const struct in_addr *priv_ip,
     struct virt_conf_remote_link *link = &msg.msg.remote_link;
     memcpy(&link->priv_ip, priv_ip, sizeof(link->priv_ip));
     memcpy(&link->pub_ip, pub_ip, sizeof(link->pub_ip));
-    link->data_port = 0;
+    link->data_port = data_port;
     
     struct ifreq ifr;
     strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));

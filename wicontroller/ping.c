@@ -353,7 +353,7 @@ static void process_ping_request(char *buffer, int len,
 
         if(ife->state == ACTIVE)
             gw->active_interfaces--;
-        virt_remove_remote_link(&private_ip, &ife->public_ip);
+        virt_remove_remote_link(&private_ip, &ife->public_ip, ife->data_port);
 
         memcpy(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr));
         ife->data_port  = from_in.sin_port;
@@ -530,7 +530,7 @@ static void remove_stale_links(int link_timeout, int node_timeout)
 
                     db_update_link(gw, ife);
 
-                    virt_remove_remote_link(&private_ip, &ife->public_ip);
+                    virt_remove_remote_link(&private_ip, &ife->public_ip, ife->data_port);
 
                     DEBUG_MSG("Removed node %hu link %hu due to timeout",
                             gw->unique_id, ife->index);

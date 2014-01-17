@@ -222,7 +222,7 @@ static void update_interface_v2(struct gateway *gw, const struct interface_info_
 
     int new_state = ifinfo->state;
     if(ife->state == ACTIVE && new_state != ACTIVE) {
-        virt_remove_remote_link(&priv_ip, &ife->public_ip);
+        virt_remove_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
     } else if(ife->state != ACTIVE && new_state == ACTIVE) {
         gw->active_interfaces++;
 
@@ -263,7 +263,7 @@ static void remove_dead_interfaces(struct gateway *gw)
             if(ife->state == ACTIVE)
                 gw->active_interfaces--;
 
-            virt_remove_remote_link(&priv_ip, &ife->public_ip);
+            virt_remove_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
 
 #ifdef WITH_DATABASE
             db_update_link(gw, ife);
@@ -350,7 +350,7 @@ static int remove_gateway(struct gateway *gw)
 
             if(ife->state == ACTIVE) {
                 gw->active_interfaces--;
-                virt_remove_remote_link(&private_ip, &ife->public_ip);
+                virt_remove_remote_link(&private_ip, &ife->public_ip, ife->data_port);
             }
         }
 
@@ -524,7 +524,7 @@ static void update_gateway_v1(struct gateway* gw, const struct cchan_notificatio
         int new_state = notif->if_info[i].state;
 
         if(ife->state == ACTIVE && new_state != ACTIVE) {
-            virt_remove_remote_link(&priv_ip, &ife->public_ip);
+            virt_remove_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
         } else if(ife->state != ACTIVE && new_state == ACTIVE) {
             gw->active_interfaces++;
 
@@ -542,7 +542,7 @@ static void update_gateway_v1(struct gateway* gw, const struct cchan_notificatio
     struct interface* tmp;
     DL_FOREACH_SAFE(gw->head_interface, ife, tmp) {
         if(ife->state == DEAD) {
-            virt_remove_remote_link(&priv_ip, &ife->public_ip);
+            virt_remove_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
 
 #ifdef WITH_DATABASE
             db_update_link(gw, ife);
