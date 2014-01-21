@@ -8,7 +8,7 @@ void obtain_read_lock(struct rwlock* lock)
     assert(lock);
     pthread_mutex_lock(&lock->access_lock);
 
-    while(lock->waiting_writers > 0) {
+    while(lock->active_writers > 0 || lock->waiting_writers > 0) {
         pthread_cond_wait(&lock->read_cond, &lock->access_lock);
     }
     lock->active_readers++;
