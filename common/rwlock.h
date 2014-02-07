@@ -3,30 +3,21 @@
 
 #include <pthread.h>
 
+/* This read-write lock code is just a wrapper around the pthread rwlock
+ * functions.  New code should use the pthread functions directly.  What
+ * happened was that I implemented read-write locks without realizing that the
+ * pthreads library provides an implementation.  After running into multiple
+ * bugs with my implementation, I decided just to call the pthreads functions. */
+
 struct rwlock {
-    pthread_mutex_t     access_lock;
-    unsigned int        active_readers;
-    unsigned int        active_writers;
-    unsigned int        waiting_writers;
-    pthread_cond_t      read_cond;
-    pthread_cond_t      write_cond;
+    pthread_rwlock_t lock;
 };
 
 #define RWLOCK_INITIALIZER                          \
 {                                                   \
-    .access_lock = PTHREAD_MUTEX_INITIALIZER,       \
-    .active_readers = 0,                            \
-    .active_writers = 0,                            \
-    .waiting_writers = 0,                           \
-    .read_cond = PTHREAD_COND_INITIALIZER,          \
-    .write_cond = PTHREAD_COND_INITIALIZER,         \
+    .lock = PTHREAD_RWLOCK_INITIALIZER,             \
 }
 
-/*
- * These functions make extensive use of assert() calls to quickly alert the
- * programmer to mistakes, especially due to improper use of upgrade/downgrade.
- * If you are concerned, compiling with the NDEBUG flag makes those disappear.
- */
 void obtain_read_lock(struct rwlock* lock);
 void obtain_write_lock(struct rwlock* lock);
 void upgrade_read_lock(struct rwlock* lock);
