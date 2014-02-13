@@ -10,7 +10,7 @@ BINARY=wigateway
 #
 # Allow command arguments to override default setting.
 override CFLAGS += -g -D GATEWAY -dH -rdynamic -std=gnu99 -Wall -pedantic -fstrict-aliasing
-override LINK_FLAGS +=-lssl -lpthread -lm -lrt -lpcap -lcrypto
+override LINK_FLAGS +=-lssl -lpthread -lm -lrt -lpcap -lcrypto -pthread
 
 #
 # Link against libgps.so if CONFIG_USE_GPSD is set.
@@ -88,7 +88,7 @@ ALL_OBJS := $(COMMON_OBJS) $(GATEWAY_OBJS)
 # Rules for final executable
 .PHONY: all
 all: $(ALL_OBJS)
-	$(CC) -g -rdynamic -o $(BINARY) $(LINK_FLAGS) $(ALL_OBJS)
+	$(CC) -g -rdynamic -o $(BINARY) $(ALL_OBJS) $(LINK_FLAGS) 
 
 #
 # Rules for all objects, using static pattern rules (4.12).

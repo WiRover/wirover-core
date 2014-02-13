@@ -205,7 +205,7 @@ extern int isSSLSet();
 
 // Configuration file location - use this file to 
 // configure the main parameters to the wigateway
-#define CONFIG_FILE_LOC "wirover"
+#define CONFIG_FILE_LOC "/etc/wirover"
 
 // This directory should contain files such as ppp0 and ppp1
 #define NETWORK_NAME_PATH "/var/lib/wirover/networks"

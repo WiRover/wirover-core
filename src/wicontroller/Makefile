@@ -1,10 +1,10 @@
 CC=gcc
-CFLAGS=-g -D CONTROLLER -std=gnu99 -pedantic -fstrict-aliasing -I/usr/include/mysql -rdynamic -L/usr/lib/mysql -lmysqlclient
+CFLAGS=-g -D CONTROLLER -std=gnu99 -pedantic -fstrict-aliasing -I/usr/include/mysql -rdynamic -L/usr/lib/mysql
 OBJECTS= main.o contChan.o selectInterface.o tunnelInterface.o packet_debug.o reOrderPackets.o utils.o special.o algoPerConnWrr.o gatewayUpdater.o udp_ping.o active_bw.o sockets.o link.o time_utils.o passive_bw.o debug.o
 BINARY= wicontroller 
 
 all:$(OBJECTS)
-	$(CC) $(CFLAGS) $(OBJECTS) -g -o $(BINARY) -lpthread -lm
+	$(CC) $(CFLAGS) $(OBJECTS) -g -o $(BINARY) -lpthread -lm -lmysqlclient
 
 main.o: main.c 
 	$(CC) $(CFLAGS) -c main.c
