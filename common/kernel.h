@@ -67,6 +67,9 @@ struct virt_perf_hint {
 #define VIRT_CONF_DEL_REMOTE_NODE   0x0001
 #define VIRT_CONF_ADD_REMOTE_LINK   0x0002
 #define VIRT_CONF_DEL_REMOTE_LINK   0x0003
+#define VIRT_CONF_SET_XOR_RATE2     0x0005
+#define VIRT_CONF_GET_DEV_FLAGS     0x0006
+#define VIRT_CONF_SET_DEV_FLAGS     0x0007
 
 struct virt_conf_remote_node {
     struct in_addr priv_ip;
@@ -81,14 +84,45 @@ struct virt_conf_remote_link {
     __be16 data_port;
 };
 
+struct virt_conf_xor_rate2 {
+    /* The combination of addresses and ports identifies the path. */
+    struct in_addr local_addr;
+    struct in_addr remote_addr;
+    __be16 local_port;
+    __be16 remote_port;
+
+    /* XOR coding rates interpreted as the number of packets used to produce a
+     * coded packet.  Setting the rate to zero disables coding; setting it to
+     * one results in duplication. 
+     * 
+     * same_path: coded packets are sent on the same path as the data packets.
+     * same_prio: coded packets are sent on other paths with the same priority.
+     * lower_prio: coded packets are sent on paths with lower priority.
+     */
+    unsigned char same_path;
+    unsigned char same_prio;
+    unsigned char lower_prio;
+};
+
+#define DEVICE_NO_TX 0x00000001
+
+struct virt_conf_dev_flags {
+    char ifname[IFNAMSIZ];
+    uint32_t flags;
+};
+
 struct virt_conf_message {
     unsigned op;
 
     union {
         struct virt_conf_remote_node remote_node;
         struct virt_conf_remote_link remote_link;
+        struct virt_conf_xor_rate2   xor_rate2;
+        struct virt_conf_dev_flags   dev_flags;
     } msg;
 };
+
+
 
 int setup_virtual_interface(__be32 ip, __be32 netmask, unsigned mtu);
 
@@ -116,6 +150,9 @@ int virt_remote_bandwidth_hint(__be32 remote_addr, long bandwidth);
 
 int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device);
 int delete_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device);
+
+int virt_set_notx_flag(const char *device);
+int virt_clear_notx_flag(const char *device);
 
 #endif //_KERNEL_H_
 

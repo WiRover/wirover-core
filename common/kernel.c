@@ -535,3 +535,57 @@ int delete_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device
     return 0;
 }
 
+int virt_set_notx_flag(const char *device) {
+    struct virt_conf_message msg;
+    msg.op = VIRT_CONF_GET_DEV_FLAGS;
+    
+    struct virt_conf_dev_flags *dev_flags = &msg.msg.dev_flags;
+    strncpy(dev_flags->ifname, device, sizeof(dev_flags->ifname));
+
+    struct ifreq ifr;
+    strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
+    ifr.ifr_data = &msg;
+
+    if(virt_ioctl(SIOCVIRTCONF, &ifr) < 0) {
+        ERROR_MSG("ioctl SIOCVIRTCONF failed");
+        return FAILURE;
+    }
+
+    msg.op = VIRT_CONF_SET_DEV_FLAGS;
+    dev_flags->flags |= DEVICE_NO_TX;
+
+    if(virt_ioctl(SIOCVIRTCONF, &ifr) < 0) {
+        ERROR_MSG("ioctl SIOCVIRTCONF failed");
+        return FAILURE;
+    }
+
+    return 0;
+}
+
+int virt_clear_notx_flag(const char *device) {
+    struct virt_conf_message msg;
+    msg.op = VIRT_CONF_GET_DEV_FLAGS;
+    
+    struct virt_conf_dev_flags *dev_flags = &msg.msg.dev_flags;
+    strncpy(dev_flags->ifname, device, sizeof(dev_flags->ifname));
+
+    struct ifreq ifr;
+    strncpy(ifr.ifr_name, VIRT_DEVICE, sizeof(ifr.ifr_name));
+    ifr.ifr_data = &msg;
+
+    if(virt_ioctl(SIOCVIRTCONF, &ifr) < 0) {
+        ERROR_MSG("ioctl SIOCVIRTCONF failed");
+        return FAILURE;
+    }
+
+    msg.op = VIRT_CONF_SET_DEV_FLAGS;
+    dev_flags->flags &= ~DEVICE_NO_TX;
+
+    if(virt_ioctl(SIOCVIRTCONF, &ifr) < 0) {
+        ERROR_MSG("ioctl SIOCVIRTCONF failed");
+        return FAILURE;
+    }
+
+    return 0;
+}
+
