@@ -338,6 +338,58 @@ int handle_netlink_message(const char* msg, int msg_len)
                     release_read_lock(&interface_list_lock);
                 }
             }
+        } else if(nh->nlmsg_type == RTM_DELROUTE) {
+            struct rtmsg *rtm = (struct rtmsg *)NLMSG_DATA(nh);
+            struct rtattr *rta = RTM_RTA(rtm);
+
+            if(rtm->rtm_family == AF_INET && rtm->rtm_table == RT_TABLE_MAIN) {
+                struct in_addr dstaddr = {.s_addr = 0};
+                int ifindex = 0;
+
+                int dstaddr_set = 0;
+                int ifindex_set = 0;
+
+                int rta_len;
+                for(rta_len = RTM_PAYLOAD(nh); rta_len > 0 && RTA_OK(rta, rta_len);
+                        rta = RTA_NEXT(rta, rta_len)) {
+                    switch(rta->rta_type) {
+                        case RTA_DST:
+                            memcpy(&dstaddr, RTA_DATA(rta), sizeof(dstaddr));
+                            dstaddr_set = 1;
+                            break;
+                        case RTA_OIF:
+                            ifindex = *((int *)RTA_DATA(rta));
+                            ifindex_set = 1;
+                            break;
+                        default:
+                            break;
+                    }
+                }
+
+                /* If a default route for one of our slave devices was deleted,
+                 * then this is a signal that the interface should be marked
+                 * INACTIVE. */
+                if(dstaddr_set && ifindex_set && dstaddr.s_addr == 0) {
+                    char dstaddr_p[INET_ADDRSTRLEN];
+                    inet_ntop(AF_INET, &dstaddr, dstaddr_p, sizeof(dstaddr_p));
+
+                    obtain_read_lock(&interface_list_lock);
+
+                    struct interface *ife = find_interface_by_index(
+                            interface_list, ifindex);
+                    if(ife) {
+                        DEBUG_MSG("RTM_DELROUTE dst %s dev %s",
+                                dstaddr_p, ife->name);
+
+                        if(ife->state == ACTIVE) {
+                            change_interface_state(ife, INACTIVE);
+                            should_notify = 1;
+                        }
+                    }
+
+                    release_read_lock(&interface_list_lock);
+                }
+            }
         }
     }
 
