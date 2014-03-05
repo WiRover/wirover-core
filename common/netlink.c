@@ -345,8 +345,6 @@ int handle_netlink_message(const char* msg, int msg_len)
             if(rtm->rtm_family == AF_INET && rtm->rtm_table == RT_TABLE_MAIN) {
                 struct in_addr dstaddr = {.s_addr = 0};
                 int ifindex = 0;
-
-                int dstaddr_set = 0;
                 int ifindex_set = 0;
 
                 int rta_len;
@@ -355,7 +353,6 @@ int handle_netlink_message(const char* msg, int msg_len)
                     switch(rta->rta_type) {
                         case RTA_DST:
                             memcpy(&dstaddr, RTA_DATA(rta), sizeof(dstaddr));
-                            dstaddr_set = 1;
                             break;
                         case RTA_OIF:
                             ifindex = *((int *)RTA_DATA(rta));
@@ -368,8 +365,11 @@ int handle_netlink_message(const char* msg, int msg_len)
 
                 /* If a default route for one of our slave devices was deleted,
                  * then this is a signal that the interface should be marked
-                 * INACTIVE. */
-                if(dstaddr_set && ifindex_set && dstaddr.s_addr == 0) {
+                 * INACTIVE. 
+                 * 
+                 * For anything other than a default route, dstaddr will be set
+                 * to a non-zero value. */
+                if(ifindex_set && dstaddr.s_addr == 0) {
                     char dstaddr_p[INET_ADDRSTRLEN];
                     inet_ntop(AF_INET, &dstaddr, dstaddr_p, sizeof(dstaddr_p));
 
