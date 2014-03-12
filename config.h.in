@@ -80,5 +80,8 @@
 // negative.
 #define BANDWIDTH_MEASUREMENT_DECAY (-0.016666666667)
 
+// Limit ping error responses to 5 per second to prevent flooding.
+#define ERROR_RESPONSE_LIMIT 5
+
 #endif //_CONFIG_H_
 

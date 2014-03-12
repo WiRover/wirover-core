@@ -46,6 +46,9 @@ static void remove_stale_links(int link_timeout, int node_timeout);
 static int          running;
 static pthread_t    ping_thread;
 
+static int error_responses = 0;
+static time_t last_error_response = 0;
+
 int start_ping_thread()
 {
     if(running) {
@@ -150,9 +153,18 @@ static int handle_incoming(int sockfd)
         DEBUG_MSG("Packet from %s:%hu produced error: %s", src_addr, src_port, 
                 ping_err_str(valid));
 
-        if(send_response(sockfd, 0, PING_RESPONSE_ERROR, buffer, 
-                    bytes_recvd, (struct sockaddr *)&from, from_len) < 0) {
-            ERROR_MSG("Failed to send error response");
+        time_t now = time(NULL);
+        if(now != last_error_response)
+            error_responses = 0;
+
+        if(error_responses < ERROR_RESPONSE_LIMIT) {
+            if(send_response(sockfd, 0, PING_RESPONSE_ERROR, buffer, 
+                        bytes_recvd, (struct sockaddr *)&from, from_len) < 0) {
+                ERROR_MSG("Failed to send error response");
+            }
+
+            error_responses++;
+            last_error_response = now;
         }
 
         return 0;
