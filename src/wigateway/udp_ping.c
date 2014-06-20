@@ -147,6 +147,7 @@ int sendPing(struct link *link)
     ping_pkt->sent_time_usec = htonl(send_tv.tv_usec);
 #endif
     // Send ping packet now
+    DEBUG_MSG("IFNAME: %s ID: %d", link->ifname, link->id);
     if(sendto(link->ping_socket, buffer,
                 sizeof(buffer), 0, &ping_dest, ping_dest_len) < 0) {
         // The error here may have resulted from the interface going down,
@@ -212,6 +213,8 @@ void registerPingCallback(
 /* Ping reception handling routine. */
 static int handlePingResponse(struct ping_client_info *clientInfo, struct link *link)
 {
+    DEBUG_MSG("PING RESP: %s, %d", link->ifname, link->id);
+
     // Receive packet and record reception time
 #ifdef SUPPORT_ICMP_PING
     char buffer[sizeof(struct iphdr) +
@@ -305,6 +308,7 @@ void* pingThreadFunc(void* clientInfo)
         struct timeval select_tv;
         fd_set read_set;
         FD_ZERO(&read_set);
+        int cnt = 0;
 
         // Check if it is time to run another ping test.
         gettimeofday(&currTime_tv, 0);
@@ -314,6 +318,7 @@ void* pingThreadFunc(void* clientInfo)
             // XXX race condition
             for(link = head_link__; link; link = link->next) {
                 if(link->state != DEAD) {
+                    cnt++;
                     if(sendPing(link) == SUCCESS) {
                         FD_SET(link->ping_socket, &read_set);
                         if(link->ping_socket > max_fd)

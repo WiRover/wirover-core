@@ -269,7 +269,7 @@ int getLease()
     const unsigned packet_size = sizeof(struct contchan_response);
     char packet[packet_size];
     
-    lease_ife = selectInterface(WRR_PKT, 0, 0);
+    lease_ife = selectInterface(WRR_PKT, 0, 0, NULL);
 
     if ( lease_ife == NULL ) 
     {
@@ -420,7 +420,7 @@ int notifyController()
         return FAILURE;
     }
 
-    send_ife = selectInterface(WRR_PKT, 0, 0);
+    send_ife = selectInterface(WRR_PKT, 0, 0, NULL);
     dumpInterfaces(head_link__, "");
 
     if ( send_ife == NULL ) 
@@ -470,7 +470,7 @@ int shutdownContChan()
     int     rtn;
     int     retval;
 
-    struct link *ife = selectInterface(WRR_PKT, 0, 0);
+    struct link *ife = selectInterface(WRR_PKT, 0, 0, NULL);
     if( !ife )
     {
         DEBUG_MSG("selectInterface() failed");

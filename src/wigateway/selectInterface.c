@@ -574,7 +574,7 @@ struct link *per_packet_wdrr(struct link *list, int packet_size)
  *      Failure: -1 
  *
  */
-struct link *selectInterface(int algo, unsigned short port, int size)
+struct link *selectInterface(int algo, unsigned short port, int size, char *packet)
 {
     struct link *head = head_link__;
 
@@ -587,7 +587,7 @@ struct link *selectInterface(int algo, unsigned short port, int size)
         return per_packet_rr(head);
 
         case WRR_CONN:
-        //return per_conn_wrr(head, port);
+        return per_conn_wrr(head, packet, size);
 
         case WRR_PKT:
         return per_packet_wrr(head);
@@ -604,86 +604,13 @@ struct link *selectInterface(int algo, unsigned short port, int size)
         default:
         return NULL;
     }
-    
-    DEBUG_MSG("Algo not found");
 
     return NULL;
 } // End function int selectInterface()
 
-
-/*
- * S T R I P E  P A C K E T
- *
- * Send a packet out depending on the algorithm being used.
- *
- * Returns (int)
- *      Success: the number of bytes sent out
- *      Failure: -1
- *
- */
-int stripePacket(char *packet, int size, int algo)
+int sendPacket(char *packet, int size, struct link *ife, uint32_t *pseq_num)
 {
     int rtn = 0;
-    struct link *head = head_link__;
-    struct link *ife = NULL;
-        
-    int offset = 0;
-    if( USE_CONTROLLER )
-        offset = TUNTAP_OFFSET;
-    else
-        offset = ETH_HLEN;
-
-    unsigned short port = 0;
-    if(algo == RR_CONN)
-    {
-        int th_offset;
-        int proto = find_transport_header(packet + offset, size - offset, &th_offset);
-        if(proto == IPPROTO_TCP) {
-            struct tcphdr *tcp_hdr = (struct tcphdr *)(packet + offset + th_offset);
-            port = ntohs(tcp_hdr->source);
-        } else if(proto == IPPROTO_UDP) {
-            struct udphdr *udp_hdr = (struct udphdr *)(packet + offset + th_offset);
-            port = ntohs(udp_hdr->source);
-        } else if(proto < 0) {
-            // The packet was invalid, so drop it.
-            return FAILURE;
-        }
-    }
-
-    switch(algo) 
-    {
-        case RR_CONN:
-            ife = per_conn_rr(head, port);
-            break;
-
-        case RR_PKT:
-            ife = per_packet_rr(head);
-            break;
-
-        case WRR_CONN:
-            ife = per_conn_wrr(head, packet + offset, size - offset);
-            break;
-
-        case WRR_PKT:
-            ife = per_packet_wrr(head);
-            break;
-
-        case WRR_PKT_v1:
-            ife = per_packet_wrr_v1(head);
-            break;
-        
-        case WDRR_PKT:
-            ife = per_packet_wdrr(head, size);
-            break;
-
-        case SPF:
-            ife = per_packet_spf(head, size);
-            break;
-        
-        default:
-            return FAILURE;
-    }
-
     if ( ife == NULL )
     {
         ERROR_MSG("stripe algorithm returned NULL");
@@ -696,7 +623,11 @@ int stripePacket(char *packet, int size, int algo)
         struct tunhdr tun_hdr;
         memset(&tun_hdr, 0, sizeof(tun_hdr));
 
-        tun_hdr.seq_no = htonl(getSeqNo());
+        if(*pseq_num == -1) {
+            *pseq_num = getSeqNo();
+        }
+
+        tun_hdr.seq_no = htonl(*pseq_num);
         tun_hdr.client_id = 0; // TODO: Add a client ID.
         tun_hdr.node_id = htons(getNodeID());
         tun_hdr.link_id = htons(ife->id);
@@ -762,7 +693,7 @@ int stripePacket(char *packet, int size, int algo)
 
             memset(code_buffer, 0, MTU);
         }
-#endif
+ #endif
         free(new_packet);
     }
     else
@@ -868,6 +799,86 @@ int stripePacket(char *packet, int size, int algo)
     incrementBytesSent(ife->id, rtn);
 
     return rtn;
+
+
+}
+
+
+int sendAllInterfaces(char *packet, int size) {
+    struct link *head = head_link__;
+    int rtn = 0;
+    int tmpRtn;
+    uint32_t seqNum = -1;
+
+    int count = 0;
+
+    while(head) {
+        if(head->state == ACTIVE) {
+            count++;
+            tmpRtn = sendPacket(packet, size, head, &seqNum);
+            if(tmpRtn != FAILURE) {
+                rtn += tmpRtn;
+            }
+        }
+        head = head->next;
+    }
+
+    return rtn;
+}
+
+
+
+/*
+ * S T R I P E  P A C K E T
+ *
+ * Send a packet out depending on the algorithm being used.
+ *
+ * Returns (int)
+ *      Success: the number of bytes sent out
+ *      Failure: -1
+ *
+ */
+int stripePacket(char *packet, int size, int algo)
+{
+    struct link *ife = NULL;
+        
+    int offset = 0;
+    if( USE_CONTROLLER )
+        offset = TUNTAP_OFFSET;
+    else
+        offset = ETH_HLEN;
+
+    unsigned short port = 0;
+    if(algo == RR_CONN)
+    {
+        int th_offset;
+        int proto = find_transport_header(packet + offset, size - offset, &th_offset);
+        if(proto == IPPROTO_TCP) {
+            struct tcphdr *tcp_hdr = (struct tcphdr *)(packet + offset + th_offset);
+            port = ntohs(tcp_hdr->source);
+        } else if(proto == IPPROTO_UDP) {
+            struct udphdr *udp_hdr = (struct udphdr *)(packet + offset + th_offset);
+            port = ntohs(udp_hdr->source);
+        } else if(proto < 0) {
+            // The packet was invalid, so drop it.
+            return FAILURE;
+        }
+    }
+
+    if(algo == WRR_CONN) {
+        ife = selectInterface(algo, port, size - offset, packet + offset);
+    }
+    else {
+        ife = selectInterface(algo, port, size, packet);
+    }
+
+    if(ife == NULL) {
+        return FAILURE;
+    }
+
+    uint32_t seq = -1;
+    return sendPacket(packet, size, ife, &seq);
+
 } // End function int stripePacket()
 
 

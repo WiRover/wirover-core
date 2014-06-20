@@ -59,6 +59,10 @@
 #include "../common/udp_ping.h"
 #include "../common/utils.h"
 #include "../common/special.h"
+#include "../common/headerParse.h"
+#include "../common/flowTable.h"
+#include "../common/policy/policyTypes.h"
+#include "../common/packetBuffer.h"
 #include "pcapSniff.h"
 #include "selectInterface.h"
 #include "scan.h"
@@ -73,6 +77,8 @@ static sigset_t orig_set; //, block_set;
 static char local_buf[MAX_LINE];
 static unsigned short dmz_orig_port = 0;
 
+static struct buffer_storage *packet_buffer[PACKET_BUFFER_SIZE];
+
 //static pthread_t    sigintThread;
 
 // Function Header Definitions
@@ -83,7 +89,7 @@ int handleNoControllerPacket(int tunfd, fd_set readSet);
 // Used for IPSEC information
 // static ipsec_req_t ipsr;
 
-/*
+/*=
  * O P E N  C O N T R O L L E R  S O C K E T
  *
  * Returns (int)
@@ -180,6 +186,15 @@ int handlePackets(int tunfd, struct tunnel *tun)
     */
 
     //int netlink_sockfd = createNetLinkSocket();
+
+    //Clear outData file
+    FILE *ofp;
+    ofp = fopen("outData.dat", "w");
+    if (ofp == NULL) {
+        ERROR_MSG("fopen() Failed");
+        return FILE_ERROR;
+    }
+    fclose(ofp);
 
     while( 1 )
     {
@@ -440,6 +455,10 @@ int handleInboundPacket(int tunfd, int incoming_sockfd)
     // Copy temporary to host format
     unsigned int h_seq_no = ntohl(n_tun_hdr.seq_no);
     
+    if(addSeqNum(packet_buffer, h_seq_no) == NOT_ADDED) {
+        return SUCCESS;
+    }
+
     //unsigned short h_node_id = ntohs(n_tun_hdr.node_id);
     unsigned short h_link_id = ntohs(n_tun_hdr.link_id);
 
@@ -576,8 +595,10 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
             return SUCCESS;
         }
 
+        struct flow_tuple *ft = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
         struct iphdr    *ip_hdr = (struct iphdr *)(buffer + TUNTAP_OFFSET);
         struct tcphdr   *tcp_hdr = (struct tcphdr *)(buffer + TUNTAP_OFFSET + (ip_hdr->ihl * 4));
+
 
         // If client is not authorized, redirect to agreement page
 
@@ -607,8 +628,67 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
             }
         }
 
+
+        // Policy and Flow table
+        fill_flow_tuple(ip_hdr, tcp_hdr, ft);
+
+        struct flow_table_data *ftd = get_flow_data(ft);
+
+        if(ftd == NULL) {
+            struct policy_data *pd = malloc(sizeof(struct policy_data));
+            getMatch(ft, pd, OUT_DIR);
+            update_flow_table(ft,pd);
+            free(pd);
+            ftd = get_flow_data(ft);
+        }
+        else {
+            update_flow_table(ft, NULL);
+        }
+
+        #ifdef DEBUG_PRINT
+        record_data_to_file("outData.dat", ft, ftd);
+        #endif
+
+        free(ft);
+
+        // Check for drop
+        if((ftd->action & POLICY_ACT_DROP) != 0) {
+            return SUCCESS;
+        }
+
+        // Send on all interfaces
+        if((ftd->action & POLICY_OP_DUPLICATE) != 0) {
+            sendAllInterfaces(buffer, bufSize);
+            return SUCCESS;
+        }
+
         // Select interface and send
-        int rtn = stripePacket(buffer, bufSize, getRoutingAlgorithm());
+        int rtn;
+        if(strcmp(ftd->alg_name, "rr_conn") == 0) {
+            rtn = stripePacket(buffer, bufSize, RR_CONN);
+        }
+        else if(strcmp(ftd->alg_name, "rr_pkt") == 0) {
+            rtn = stripePacket(buffer, bufSize, RR_PKT);
+        }
+        else if(strcmp(ftd->alg_name, "wrr_conn") == 0) {
+            rtn = stripePacket(buffer, bufSize, WRR_CONN);
+        }
+        else if(strcmp(ftd->alg_name, "wrr_pkt") == 0) {
+            rtn = stripePacket(buffer, bufSize, WRR_PKT);
+        }
+        else if(strcmp(ftd->alg_name, "wrr_pktv1") == 0) {
+            rtn = stripePacket(buffer, bufSize, WRR_PKT_v1);
+        }
+        else if(strcmp(ftd->alg_name, "wdrr_pkt") == 0) {
+            rtn = stripePacket(buffer, bufSize, WDRR_PKT);
+        }
+        else if(strcmp(ftd->alg_name, "spf") == 0) {
+            rtn = stripePacket(buffer, bufSize, SPF);
+        }
+        else {
+            rtn = stripePacket(buffer, bufSize, getRoutingAlgorithm());
+        }
+        
         if(rtn < 0) {
             ERROR_MSG("stripePacket() failed");
         }
@@ -950,6 +1030,7 @@ int main(int argc, char *argv[])
     GENERAL_MSG("Detected interfaces:\n");
     dumpInterfaces(head_link__, "  ");
 
+    initPacketBuffer(packet_buffer);
 
     // Initialize the BW estimation start time
     int rtn = handlePackets(getTunnelDescriptor(), tun);

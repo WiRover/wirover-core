@@ -55,6 +55,11 @@
 #include "../common/packet_debug.h"
 #include "../common/passive_bw.h"
 #include "../common/special.h"
+#include "../common/headerParse.h"
+#include "../common/flowTable.h"
+#include "../common/policy/policyTypes.h"
+#include "../common/packetBuffer.h"
+#include "../common/policyRet.h"
 
 
 static sigset_t      orig_set, block_set;
@@ -64,6 +69,8 @@ static char               internal_if[CONFIG_FILE_PARAM_DATA_LENGTH];
 static char               local_buf[MAX_LINE];
 static unsigned long long total_bytes_recvd = 0;
 
+
+//TODO: REST OUT.TXT FILE
 
 
 int handleNatPunch(char *buf, const struct sockaddr *from, socklen_t fromlen);
@@ -117,6 +124,84 @@ int openRawsock(char *device, int protocol)
 } // End function openRawsock()
 
 
+struct flow_table_data *getFtd(struct iphdr *ip_hdr, struct tcphdr *tcp_hdr) {
+    struct flow_tuple *ft = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
+
+    // Policy and Flow table
+    fill_flow_tuple(ip_hdr, tcp_hdr, ft);
+
+    struct flow_table_data *ftd = get_flow_data(ft);
+
+    if(ftd == NULL) {
+        struct policy_data *pd = malloc(sizeof(struct policy_data));
+        getMatch(ft, pd, OUT_DIR);
+        update_flow_table(ft,pd);
+        free(pd);
+        ftd = get_flow_data(ft);
+    }
+    else {
+        update_flow_table(ft, NULL);
+    }
+
+    #ifdef DEBUG_PRINT
+    record_data_to_file("outData.dat", ft, ftd);
+    #endif
+
+    free(ft);
+
+    return ftd;
+}
+
+
+int pickAlgo(int sockfd, char *buffer, int bufSize, int offset) {
+    struct iphdr *ip_hdr = (struct iphdr *)(buffer + offset);
+    struct tcphdr *tcp_hdr = (struct tcphdr *)(buffer + offset + (ip_hdr->ihl * 4));
+
+    struct flow_table_data *ftd = getFtd(ip_hdr, tcp_hdr);
+
+    // Check for drop
+    if((ftd->action & POLICY_ACT_DROP) != 0) {
+        return 0;
+    }
+
+    // Send on all interfaces
+    if((ftd->action & POLICY_OP_DUPLICATE) != 0) {
+        return sendAllInterfaces(sockfd, buffer, bufSize, offset);
+    }
+
+    // Select interface and send
+    int rtn;
+    if(strcmp(ftd->alg_name, "rr_conn") == 0) {
+        rtn = stripePacket(sockfd, buffer, bufSize, offset, RR_CONN);
+    }
+    else if(strcmp(ftd->alg_name, "rr_pkt") == 0) {
+        rtn = stripePacket(sockfd, buffer, bufSize, offset, RR_PKT);
+    }
+    else if(strcmp(ftd->alg_name, "wrr_conn") == 0) {
+        rtn = stripePacket(sockfd, buffer, bufSize, offset, WRR_CONN);
+    }
+    else if(strcmp(ftd->alg_name, "wrr_pkt") == 0) {
+        rtn = stripePacket(sockfd, buffer, bufSize, offset, WRR_PKT);
+    }
+    else if(strcmp(ftd->alg_name, "wrr_pktv1") == 0) {
+        rtn = stripePacket(sockfd, buffer, bufSize, offset, WRR_PKT_v1);
+    }
+    else if(strcmp(ftd->alg_name, "wdrr_pkt") == 0) {
+        rtn = stripePacket(sockfd, buffer, bufSize, offset, WDRR_PKT);
+    }
+    else if(strcmp(ftd->alg_name, "spf") == 0) {
+        rtn = stripePacket(sockfd, buffer, bufSize, offset, SPF);
+    }
+    else {
+        rtn = stripePacket(sockfd, buffer, bufSize, offset, getRoutingAlgorithm());
+    }
+
+    return rtn;
+
+}
+
+
+
 /*
  * F O R W A R D  P A C K E T
  * 
@@ -153,6 +238,7 @@ int forwardPacket(int fwd_sockfd, int sockfd)
     offset = sizeof( struct ethhdr );
 
     ip_hdr = (struct iphdr *)(buf + offset); 
+
 
     // We know they're using TCP for the buswatch traffic
     if ( ip_hdr->protocol == IPPROTO_TCP )
@@ -204,7 +290,7 @@ int forwardPacket(int fwd_sockfd, int sockfd)
         // Ethernet header needs to be truncated to mimic tun packet.  Providing additional 4 bytes
         // for sequence number.
         offset = TUNTAP_OFFSET;
-        stripePacket(sockfd, buf+sizeof(struct ethhdr)-TUNTAP_OFFSET, bufSize-sizeof(struct ethhdr)+TUNTAP_OFFSET, offset);
+        pickAlgo(sockfd, buf+sizeof(struct ethhdr)-TUNTAP_OFFSET, bufSize-sizeof(struct ethhdr)+TUNTAP_OFFSET, offset);
     }
 
 DROP_PACKET:
@@ -257,7 +343,8 @@ int handleOutboundPacket(int sockfd, int tunfd)
     // This gets the sequence number from the packet
     memcpy(&pktSeqNo, &tun_hdr->seq_no, sizeof(tun_hdr->seq_no));
 
-    
+
+
     if ( pktSeqNo == NAT_PUNCH_SEQ_NO )
     {
         if ( handleNatPunch(buf, (struct sockaddr *)&from, fromlen) < 0 )
@@ -277,12 +364,18 @@ int handleOutboundPacket(int sockfd, int tunfd)
 
 
     total_bytes_recvd += bufSize;
+
     sprintf(local_buf, "Bytes recvd (from all wigateways): %llu", total_bytes_recvd);
     STATS_MSG(local_buf);
 
     unsigned short h_node_id = ntohs(tun_hdr->node_id);
     struct wigateway *gw = searchWigatewaysByNodeID(h_node_id);
+
     if(gw) {
+        if(addSeqNum(gw->packet_buffer, pktSeqNo) == NOT_ADDED) {
+            return SUCCESS;
+        }
+
         gw->num_bytes_recvd_from += bufSize;
         time(&gw->last_seen_pkt_time);
         
@@ -336,12 +429,24 @@ int handleOutboundPacket(int sockfd, int tunfd)
     // the flags field, the next two byte (0800 are the protocol field, in this
     // case IP): http://www.mjmwired.net/kernel/Documentation/networking/tuntap.txt 
 
-    const struct iphdr *ip_hdr = (const struct iphdr *)(buf + sizeof(struct tunhdr));
+    struct iphdr *ip_hdr = (struct iphdr *)(buf + sizeof(struct tunhdr));
 
     unsigned short tun_info[2];
     tun_info[0] = 0; //flags
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
     memcpy(&buf[sizeof(struct tunhdr) - TUNTAP_OFFSET], tun_info, TUNTAP_OFFSET);
+
+
+    //DEBUG
+    char sAddrString[20];
+    char dAddrString[20];
+
+    strcpy(sAddrString, inet_ntoa(*(struct in_addr*)&ip_hdr->saddr));
+    strcpy(dAddrString, inet_ntoa(*(struct in_addr*)&ip_hdr->daddr));
+
+
+    //END DEBUG
+
 
     /*
     // Flags 2 bytes
@@ -428,6 +533,8 @@ int handleOutboundPacket(int sockfd, int tunfd)
 
     */
 
+    struct tcphdr *tcp_hdr = (struct tcphdr *)(buf + TUNTAP_OFFSET + (ip_hdr->ihl * 4));
+    getFtd(ip_hdr, tcp_hdr);
 
 #ifdef ARE_BUFFERING
     // Put packets in the buffer
@@ -444,7 +551,8 @@ int handleOutboundPacket(int sockfd, int tunfd)
         return FAILURE;
     }
 #endif
-    
+
+
     return SUCCESS;
 } // End function handleOutboundPacket
 
@@ -567,6 +675,14 @@ int handlePackets(int tunfd)
 #endif
     }
 
+    //Clear outData file
+    FILE *ofp;
+    ofp = fopen("outData.dat", "w");
+    if (ofp == NULL) {
+        ERROR_MSG("fopen() Failed");
+        return FILE_ERROR;
+    }
+    fclose(ofp);
 
     while( 1 )
     {
@@ -622,7 +738,7 @@ int handlePackets(int tunfd)
             }
             else
             {
-                stripePacket(sockfd, buf, bufSize, TUNTAP_OFFSET);
+                pickAlgo(sockfd, buf, bufSize, TUNTAP_OFFSET);
             }
         }    
 

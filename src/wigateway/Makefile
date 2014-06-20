@@ -46,14 +46,19 @@ COMMON_HEADER := \
 	contChan.h \
 	debug.h \
 	evdo_buffer.h \
+    flowTable.h \
 	handleTransfer.h \
+    headerParse.h \
 	interface.h \
 	link.h \
 	link_priority.h \
 	myssl.h \
+    packetBuffer.h \
 	packet_debug.h \
 	parameters.h \
 	passive_bw.h \
+    policy/policyFunctions.h \
+    policyRet.h \
 	reOrderPackets.h \
 	sockets.h \
 	special.h \
@@ -64,12 +69,16 @@ COMMON_HEADER := \
 
 COMMON_OBJS := \
 	debug.o \
+    flowTable.o \
 	handleTransfer.o \
+    headerParse.o \
 	link.o \
 	link_priority.o \
 	myssl.o \
+    packetBuffer.o \
 	packet_debug.o \
 	passive_bw.o \
+    policyRet.o \
 	reOrderPackets.o \
 	sockets.o \
 	special.o \

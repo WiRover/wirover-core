@@ -37,6 +37,10 @@
 #include "../common/utils.h"
 #include "../common/special.h"
 #include "../common/tunnelInterface.h"
+#include "../common/headerParse.h"
+#include "../common/flowTable.h"
+#include "../common/policy/policyTypes.h"
+#include "../common/packetBuffer.h"
 
 const char* CONTROLLER_IFNAME = "CONT_PKT";
 
@@ -44,8 +48,6 @@ extern struct link *algoPerConnWrr(struct wigateway *list, const char *pkt, int 
 
 static char local_buf[MAX_LINE];
 
-// Sequence number for outgoing packets to controller 
-static unsigned out_seqNo = 0;
 
 /*
  * I N I T  S E L E C T  I N T E R F A C E
@@ -67,13 +69,13 @@ int initSelectInterface(int port)
  * Returns (int): The next sequence number in network format
  *
  */
-unsigned getSeqNo()
+unsigned getSeqNo(struct wigateway *gateway)
 {
-    unsigned temp = htonl(out_seqNo);
-    out_seqNo++;
-    if( out_seqNo == SPECIAL_PKT_SEQ_NO )
+    unsigned temp = htonl(gateway->seq_num);
+    gateway->seq_num++;
+    if( gateway->seq_num == SPECIAL_PKT_SEQ_NO )
     {
-        out_seqNo++;
+        gateway->seq_num++;
     }
 
     return temp;
@@ -526,102 +528,18 @@ struct link* per_packet_wdrr(struct wigateway *gw_ptr, int packet_size)
 } // End function int per_packet_wdrr()
 
 
-/* 
- *
- * S E L E C T  I N T E R F A C E
- *
- * This functions is a wrapper that is globally visable to select the desired algorithm
- * and receive the socket file descriptor in return.  The algorithms are enumerated in
- * the header file.
- *
- */
-int stripePacket(int fd, char *packet, int size, int offset)
-{
-    int algo = 0;
-    unsigned short dport = 0;
-
-    struct wigateway *gw_ptr = 0;
-
-    const struct iphdr* ip_hdr = (const struct iphdr *)(packet + offset);
-    if(ip_hdr->version == 4) {
-        uint32_t ip = ip_hdr->daddr;
-        gw_ptr = searchWigatewaysByIP(ip);
-
-        // Get the destination port for RR_CONN.  This works for TCP too.
-        const unsigned th_offset = offset + ip_hdr->ihl*4;
-        if(size >= th_offset + 4) {
-            const struct udphdr *udphdr = (const struct udphdr *)(packet + th_offset);
-            dport = ntohs(udphdr->dest);
-        }
-    } else if(ip_hdr->version == 6) {
-        // TODO: This makes the assumption that our IPv6 addresses include the
-        // node id.  We may want a hash table mapping subnets to gateways
-        // instead.
-        const struct ip6_hdr* ip6_hdr = (const struct ip6_hdr *)ip_hdr;
-        const uint16_t *ip = (const uint16_t *)ip6_hdr->ip6_dst.s6_addr;
-        unsigned node_id = (ntohs(ip[3]) & 0xfff0) >> 4;
-        gw_ptr = searchWigatewaysByNodeID(node_id);
-    } else {
-        DEBUG_MSG("Unrecognized ip version field (%u)", ip_hdr->version);
-        return FAILURE;
-    }
-
-    if(!gw_ptr) {
-        DEBUG_MSG("Gateway unrecognized, not connected");
-        return FAILURE;
-    }
-
-    // Debug
-    //dumpNetworkTunHdr(&tun_hdr);
-
-    // Copy in the algorithm that the gw is using
-    algo = gw_ptr->algo;
-
-    struct link* sel_link = 0;
-    switch(algo) 
-    {
-        case RR_CONN:
-            sel_link = per_conn_rr(gw_ptr, dport);
-            break;
-
-        case RR_PKT:
-            sel_link = per_packet_rr(gw_ptr);
-            break;
-
-        case WRR_CONN:
-            sel_link = algoPerConnWrr(gw_ptr, packet + offset, size - offset);
-            break;
-
-        case WRR_PKT:
-            sel_link = per_packet_wrr(gw_ptr);
-            break;
-        
-        case WRR_PKT_v1:
-            sel_link = per_packet_wrr_v1(gw_ptr);
-            break;
-
-        case SPF:
-            sel_link = per_packet_spf(gw_ptr, size);
-            break;
-        
-        case WDRR_PKT:
-            sel_link = per_packet_wdrr(gw_ptr, size);
-            break;
-
-        default:
-            return FAILURE;
-    }
-
-    if(sel_link == NULL) {
-        ERROR_MSG("selectInterface returned zero\n");
-        return FAILURE;
-    }
+int sendPacket(int fd, char *packet, int size, int offset, struct link* sel_link,
+               struct wigateway *gw_ptr, uint32_t *pseq_num) {
 
     struct tunhdr tun_hdr;
     memset(&tun_hdr, 0, sizeof(struct tunhdr));
 
+    if(*pseq_num == -1) {
+        *pseq_num = getSeqNo(gw_ptr);
+    }
+
     // Construct tunnel header for outgoing packet
-    tun_hdr.seq_no = getSeqNo();
+    tun_hdr.seq_no = *pseq_num;
     tun_hdr.client_id = 0; // TODO: Can we use this?
     tun_hdr.node_id = htons(gw_ptr->node_id);
     tun_hdr.link_id = htons(sel_link->id);
@@ -676,5 +594,148 @@ int stripePacket(int fd, char *packet, int size, int offset)
     }
 
     return rtn;
+
+}
+
+
+int sendAllInterfaces(int sockfd, char *packet, int size, int offset) {
+    struct wigateway *gw_ptr = 0;
+
+    const struct iphdr* ip_hdr = (const struct iphdr *)(packet + offset);
+    if(ip_hdr->version == 4) {
+        uint32_t ip = ip_hdr->daddr;
+        gw_ptr = searchWigatewaysByIP(ip);
+    } else if(ip_hdr->version == 6) {
+        // TODO: This makes the assumption that our IPv6 addresses include the
+        // node id.  We may want a hash table mapping subnets to gateways
+        // instead.
+        const struct ip6_hdr* ip6_hdr = (const struct ip6_hdr *)ip_hdr;
+        const uint16_t *ip = (const uint16_t *)ip6_hdr->ip6_dst.s6_addr;
+        unsigned node_id = (ntohs(ip[3]) & 0xfff0) >> 4;
+        gw_ptr = searchWigatewaysByNodeID(node_id);
+    } else {
+        DEBUG_MSG("Unrecognized ip version field (%u)", ip_hdr->version);
+        return FAILURE;
+    }
+
+    if(!gw_ptr) {
+        DEBUG_MSG("Gateway unrecognized, not connected");
+        return FAILURE;
+    }
+
+
+    struct link *head = gw_ptr->head_link;
+    int rtn = 0;
+    int tmpRtn;
+    uint32_t seqNum = -1;
+
+    int count = 0;
+
+    while(head) {
+        if(head->state == ACTIVE) {
+            count++;
+            tmpRtn = sendPacket(sockfd, packet, size, offset, head, gw_ptr, &seqNum);
+            if(tmpRtn != FAILURE) {
+                rtn += tmpRtn;
+            }
+        }
+        head = head->next;
+    }
+
+    return rtn;
+}
+
+
+/* 
+ *
+ * S E L E C T  I N T E R F A C E
+ *
+ * This functions is a wrapper that is globally visable to select the desired algorithm
+ * and receive the socket file descriptor in return.  The algorithms are enumerated in
+ * the header file.
+ *
+ */
+int stripePacket(int fd, char *packet, int size, int offset, int algo)
+{
+    unsigned short dport = 0;
+
+    struct wigateway *gw_ptr = 0;
+
+    const struct iphdr* ip_hdr = (const struct iphdr *)(packet + offset);
+    if(ip_hdr->version == 4) {
+        uint32_t ip = ip_hdr->daddr;
+        gw_ptr = searchWigatewaysByIP(ip);
+
+        // Get the destination port for RR_CONN.  This works for TCP too.
+        const unsigned th_offset = offset + ip_hdr->ihl*4;
+        if(size >= th_offset + 4) {
+            const struct udphdr *udphdr = (const struct udphdr *)(packet + th_offset);
+            dport = ntohs(udphdr->dest);
+        }
+    } else if(ip_hdr->version == 6) {
+        // TODO: This makes the assumption that our IPv6 addresses include the
+        // node id.  We may want a hash table mapping subnets to gateways
+        // instead.
+        const struct ip6_hdr* ip6_hdr = (const struct ip6_hdr *)ip_hdr;
+        const uint16_t *ip = (const uint16_t *)ip6_hdr->ip6_dst.s6_addr;
+        unsigned node_id = (ntohs(ip[3]) & 0xfff0) >> 4;
+        gw_ptr = searchWigatewaysByNodeID(node_id);
+    } else {
+        DEBUG_MSG("Unrecognized ip version field (%u)", ip_hdr->version);
+        return FAILURE;
+    }
+
+    if(!gw_ptr) {
+        DEBUG_MSG("Gateway unrecognized, not connected");
+        return FAILURE;
+    }
+
+    // Debug
+    //dumpNetworkTunHdr(&tun_hdr);
+
+    // Copy in the algorithm that the gw is using
+
+    struct link* sel_link = 0;
+    switch(algo) 
+    {
+        case RR_CONN:
+            sel_link = per_conn_rr(gw_ptr, dport);
+            break;
+
+        case RR_PKT:
+            sel_link = per_packet_rr(gw_ptr);
+            break;
+
+        case WRR_CONN:
+            sel_link = algoPerConnWrr(gw_ptr, packet + offset, size - offset);
+            break;
+
+        case WRR_PKT:
+            sel_link = per_packet_wrr(gw_ptr);
+            break;
+        
+        case WRR_PKT_v1:
+            sel_link = per_packet_wrr_v1(gw_ptr);
+            break;
+
+        case SPF:
+            sel_link = per_packet_spf(gw_ptr, size);
+            break;
+        
+        case WDRR_PKT:
+            sel_link = per_packet_wdrr(gw_ptr, size);
+            break;
+
+        default:
+            return FAILURE;
+    }
+
+    if(sel_link == NULL) {
+        ERROR_MSG("selectInterface returned zero\n");
+        return FAILURE;
+    }
+
+    uint32_t seqNum = -1;
+    return sendPacket(fd, packet, size, offset, sel_link, gw_ptr, &seqNum); 
 } // End function int stripePacket()
 

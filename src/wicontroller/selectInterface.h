@@ -6,6 +6,7 @@
 #define SELECT_INTERFACE_H
 
 int initSelectInterface(int port);
-int stripePacket(int fd, char *packet, int size, int offset);
+int sendAllInterfaces(int fd, char *packet, int size, int offset);
+int stripePacket(int fd, char *packet, int size, int offset, int algo);
 
 #endif

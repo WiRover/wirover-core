@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS=-g -D CONTROLLER -std=gnu99 -pedantic -fstrict-aliasing -I/usr/include/mysql -rdynamic -L/usr/lib/mysql
-OBJECTS= main.o contChan.o selectInterface.o tunnelInterface.o packet_debug.o reOrderPackets.o utils.o special.o algoPerConnWrr.o gatewayUpdater.o udp_ping.o active_bw.o sockets.o link.o time_utils.o passive_bw.o debug.o
+OBJECTS= main.o contChan.o selectInterface.o tunnelInterface.o packet_debug.o reOrderPackets.o utils.o special.o algoPerConnWrr.o gatewayUpdater.o udp_ping.o active_bw.o sockets.o link.o time_utils.o passive_bw.o debug.o headerParse.o flowTable.o packetBuffer.o policyRet.o
 BINARY= wicontroller 
 
 all:$(OBJECTS)
@@ -56,6 +56,18 @@ passive_bw.o: ../common/passive_bw.c ../common/passive_bw.h
 
 debug.o: ../common/debug.c ../common/debug.h
 	$(CC) $(CFLAGS) -c ../common/debug.c
+
+flowTable.o: ../common/flowTable.c ../common/flowTable.h
+	$(CC) $(CFLAGS) -c ../common/flowTable.c
+
+headerParse.o: ../common/headerParse.c ../common/headerParse.h
+	$(CC) $(CFLAGS) -c ../common/headerParse.c
+
+packetBuffer.o: ../common/packetBuffer.c ../common/packetBuffer.h
+	$(CC) $(CFLAGS) -c ../common/packetBuffer.c
+
+policyRet.o: ../common/policyRet.c ../common/policyRet.h
+	$(CC) $(CFLAGS) -c ../common/policyRet.c
 
 clean: 
 	rm -f $(BINARY) $(OBJECTS) ../common/*.o 

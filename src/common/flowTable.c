@@ -12,6 +12,7 @@
 #include "flowTable.h"
 #include "uthash.h"
 #include "headerParse.h"
+#include "policyRet.h"
 
 #define TIME_BUFFER_SIZE 1024
 #define TIME_BETWEEN_EXPIRATION_CHECKS 5
@@ -71,11 +72,28 @@ struct flow_table_data *get_flow_data(struct flow_tuple *entry) {
     return fe->ftd;
 }
 
-int update_flow_table(struct flow_tuple *entry) {
+void expiration_time_check() {
+    struct flow_entry *current_key, *tmp;
+
+    HASH_ITER(hh, flow_table, current_key, tmp) {
+        if(time(NULL) - current_key->last_visit_time > flow_table_timeout) {
+            free(current_key->ftd);
+            HASH_DEL(flow_table, current_key);
+            free(current_key);
+        }
+    }
+}
+
+int update_flow_table(struct flow_tuple *entry, struct policy_data *pd) {
     struct flow_table_data *ftd = get_flow_data(entry);
     if(ftd == NULL) {
         ftd = (struct flow_table_data *) malloc(sizeof(struct flow_table_data));
         memset(ftd, 0, sizeof(struct flow_table_data));
+        if(pd != NULL) {
+            ftd->action = pd->action;
+            ftd->type = pd->type;
+            strcpy(ftd->alg_name, pd->alg_name);
+        }
         ftd->count = 1;
         int rc = add_entry(entry, ftd);
         if(rc == DUPLICATE_ENTRY) {
@@ -84,6 +102,13 @@ int update_flow_table(struct flow_tuple *entry) {
         return rc;
     }
     ftd->count++;
+    //Do we want to update ftd with pd if pd is not NULL here?
+    if(pd != NULL) {
+        ftd->action = pd->action;
+        ftd->type = pd->type;
+        strcpy(ftd->alg_name, pd->alg_name);
+    }
+
 
     if(last_expiration_check == 0) {
         last_expiration_check = time(NULL);
@@ -96,28 +121,17 @@ int update_flow_table(struct flow_tuple *entry) {
     return SUCCESS;
 }
 
-void expiration_time_check() {
-    struct flow_entry *current_key, *tmp;
-    record_message_to_file("outData.dat", "Starting time check");
-
-    HASH_ITER(hh, flow_table, current_key, tmp) {
-        if(time(NULL) - current_key->last_visit_time > flow_table_timeout) {
-            free(current_key->ftd);
-            HASH_DEL(flow_table, current_key);
-            free(current_key);
-        }
-    }
-}
-
 
 int set_flow_table_timeout(int value) {
     flow_table_timeout = value;
+
+    return 0;
 }
 
 
 
 //All methods below here are for debugging purposes
-void print_keys(char * file_name) {
+int print_keys(char * file_name) {
     struct flow_entry *current_key, *tmp;
 
     record_message_to_file(file_name, "-----STARTING KEY PRINT-----");
@@ -139,6 +153,8 @@ void print_keys(char * file_name) {
 
     fclose(ofp);
     record_message_to_file(file_name, "-----ENDING   KEY PRINT-----");
+
+    return 0;
 }
 
 
@@ -163,7 +179,7 @@ int record_message_to_file(char * file_name, char * msg) {
             nowTm.tm_mon + 1, nowTm.tm_mday, nowTm.tm_year + 1900,
             nowTm.tm_hour, nowTm.tm_min, nowTm.tm_sec, (int)now.tv_usec);
 
-    fprintf(ofp, "%s -- %d -- MSG: %s\n", pbuff, getpid(), msg);
+    fprintf(ofp, "%s -- MSG: %s\n", pbuff, msg);
 
     fclose(ofp);
 
@@ -193,14 +209,14 @@ int record_data_to_file(char * file_name,
             nowTm.tm_mon + 1, nowTm.tm_mday, nowTm.tm_year + 1900,
             nowTm.tm_hour, nowTm.tm_min, nowTm.tm_sec, (int)now.tv_usec);
 
-    char *sAddrString;
-    char *dAddrString;
+    char sAddrString[20];
+    char dAddrString[20];
 
-    sAddrString = inet_ntoa(*(struct in_addr*)&ft->sAddr);
-    dAddrString = inet_ntoa(*(struct in_addr*)&ft->dAddr);
+    strcpy(sAddrString, inet_ntoa(*(struct in_addr*)&ft->sAddr));
+    strcpy(dAddrString, inet_ntoa(*(struct in_addr*)&ft->dAddr));
 
-    /*fprintf(ofp, "%s -- THE COUNT IS: %d FROM: %" PRIu32 " TO: %" PRIu32 " PORTFROM: %" PRIu16 " PORTTO: %" PRIu16 ", NETPROTO: %" PRIu8 ", PROTO: %" PRIu8 "\n",
-            pbuff, ftd->count, ft->sAddr, ft->dAddr, ft->sPort, ft->dPort, ft->net_proto, ft->proto);*/
+    //fprintf(ofp, "%s -- THE COUNT IS: %d FROM: %" PRIu32 " TO: %" PRIu32 " PORTFROM: %" PRIu16 " PORTTO: %" PRIu16 ", NETPROTO: %" PRIu8 ", PROTO: %" PRIu8 "\n",
+            //pbuff, ftd->count, ft->sAddr, ft->dAddr, ft->sPort, ft->dPort, ft->net_proto, ft->proto);
 
     fprintf(ofp, "%s -- THE COUNT IS: %d FROM: %s TO: %s PORTFROM: %" PRIu16 " PORTTO: %" PRIu16 " NETPROTO: %" PRIu8 " PROTO: %" PRIu8 "\n",
             pbuff, ftd->count, sAddrString, dAddrString, ft->sPort, ft->dPort, ft->net_proto, ft->proto);

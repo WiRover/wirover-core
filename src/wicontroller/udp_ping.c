@@ -21,6 +21,8 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 
+
+
 #include "gatewayUpdater.h"
 #include "../common/contChan.h"
 #include "../common/interface.h"
@@ -146,15 +148,22 @@ void* pingServerThread(void* serverInfo)
 
 int handleInboundPing(int sockfd, char* buffer, int numBytes, struct sockaddr* from, socklen_t fromSize)
 {
+
     struct tunhdr* tun_hdr = (struct tunhdr*)buffer;
     unsigned short h_node_id = ntohs(tun_hdr->node_id);
     unsigned short h_link_id = ntohs(tun_hdr->link_id);
     unsigned short h_type = ntohs(*(uint16_t*)(buffer + sizeof(struct tunhdr)));
 
+    DEBUG_MSG("LINK ID: %d", h_link_id);
+
     if(h_type == SPKT_UDP_PING) {
         struct ping_pkt *ping_h = (struct ping_pkt*)(buffer + sizeof(struct tunhdr));
 
         gettimeofday(&ping_h->rcvd_time, NULL);
+
+    
+        char buffer1[16];
+        const char* result=inet_ntop(AF_INET,&(from->sa_data),buffer1,sizeof(buffer1));
 
         if(sendto(sockfd, buffer, numBytes, 0, from, fromSize) < 0) {
             DEBUG_MSG("sendto() failed");

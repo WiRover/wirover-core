@@ -1,4 +1,7 @@
+#include <string.h> /* memset */
+
 #include "headerParse.h"
+
 
 int fill_flow_tuple(struct iphdr* ip_hdr, struct tcphdr* tcp_hdr, struct flow_tuple* ft) {
     memset(ft, 0, sizeof(struct flow_tuple));

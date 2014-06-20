@@ -7,6 +7,7 @@
 #define CONTCHAN_H
 
 #include "interface.h"
+#include "packetBuffer.h"
 
 // Packet Types
 #define CONTCHAN_REQUEST        1
@@ -111,6 +112,9 @@ struct wigateway
 
     time_t      lastGpsTime;
     unsigned    lastGpsRowId;
+
+    unsigned seq_num;
+    struct buffer_storage *packet_buffer[PACKET_BUFFER_SIZE];
 
     // A linked list of the WiGateway's private IP's
 	struct link*	head_link;

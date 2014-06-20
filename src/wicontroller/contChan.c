@@ -191,6 +191,8 @@ struct wigateway* createGateway()
 
     gateway->state = GW_STATE_UNKNOWN;
 
+    initPacketBuffer(gateway->packet_buffer);
+
     return gateway;
 } // End function createGateway()
 
