@@ -28,6 +28,7 @@ provide service to many gateways.
 The source code is divided into three directories.  The wigateway and
 wicontroller subdirectories are specific to their respective components.
 The common subdirectory contains some shared code and header files.
+Dependencies: lib-ssl, libnl-dev, libpcap-dev
 
 ===================
 3   Installation
@@ -82,4 +83,3 @@ wicontroller from the command line as root.  You can also configure the
 system to start either on startup.  The exact method to do this varies
 from distribution to distribution, but an almost universal way is to
 add "wigateway &" or "wicontroller &" to /etc/rc.local.
-
