@@ -4,14 +4,13 @@ add_executable(wigateway
     wigateway.c
     bandwidth.c
     contchan.c
-	datapath.c
     gps_handler.c
     ping.c
-	selectInterface.c
     arguments.c
     ${COMMON}/bandwidth.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
+	${COMMON}/datapath.c
 	${COMMON}/flowTable.c
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
@@ -23,6 +22,7 @@ add_executable(wigateway
     ${COMMON}/timing.c
 	${COMMON}/packetBuffer
     ${COMMON}/tunnelInterface.c
+	${COMMON}/selectInterface.c
     ${COMMON}/callback.c
     ${COMMON}/format.c
     ${COMMON}/version.c

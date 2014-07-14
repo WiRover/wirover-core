@@ -298,7 +298,7 @@ static int update_path_bandwidths()
         DL_FOREACH(gw->head_interface, ife) {
             if(ife->state == ACTIVE) {
                 long hint = calc_bw_hint(ife);
-                virt_remote_bandwidth_hint(ife->public_ip.s_addr, hint);
+                //TODO: Handle bandwidth hint
             }
 
             count++;

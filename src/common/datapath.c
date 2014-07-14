@@ -24,7 +24,7 @@
 
 static struct buffer_storage *packet_buffer[PACKET_BUFFER_SIZE];
 
-int handleInboundPacket(int tunfd, int incoming_sockfd);
+int handleInboundPacket(int tunfd, int data_socket);
 int handleOutboundPacket(int tunfd, struct tunnel *tun);
 int handleNoControllerPacket(int tunfd, fd_set readSet);
 int handlePackets();
@@ -33,9 +33,11 @@ static int                  running = 0;
 static pthread_t            data_thread;
 static int                  data_socket = -1;
 static struct sockaddr_in   *cont_addr;
+struct tunnel *tun;
 
-int start_data_thread(uint32_t cont_ip, uint16_t cont_port)
+int start_data_thread(struct tunnel *tun_in, uint32_t cont_ip, uint16_t cont_port)
 {
+    tun = tun_in;
     cont_addr = (struct sockaddr_in*) malloc (sizeof(struct sockaddr_in));
     memset(cont_addr, 0, sizeof(cont_addr));
     cont_addr->sin_family = AF_INET;
@@ -75,25 +77,16 @@ int start_data_thread(uint32_t cont_ip, uint16_t cont_port)
 int handlePackets()
 {
     // The File Descriptor set to add sockets to
-    struct tunnel *tun = getTunnel();
     fd_set read_set;
     sigset_t orig_set;
 
     initPacketBuffer(packet_buffer);
 
-    int incoming_sockfd = -1;
-
-    // Set up the general traffic listening socket
-    if( (incoming_sockfd = udp_bind_open(get_data_port(), NULL)) == FAILURE )
-    {
-        DEBUG_MSG("openControllerSocket() failed");
-        return FAILURE;
-    }
 
     while( 1 )
     {
         FD_ZERO(&read_set);
-        FD_SET(incoming_sockfd, &read_set);
+        FD_SET(data_socket, &read_set);
         FD_SET(tun->tunnelfd, &read_set);
 
         // Pselect should return
@@ -110,9 +103,9 @@ int handlePackets()
             continue;
         }
 
-        if( FD_ISSET(incoming_sockfd, &read_set) ) 
+        if( FD_ISSET(data_socket, &read_set) ) 
         {
-            handleInboundPacket(tun->tunnelfd, incoming_sockfd);
+            handleInboundPacket(tun->tunnelfd, data_socket);
         }
 
         if( FD_ISSET(tun->tunnelfd, &read_set) ) 
@@ -125,7 +118,7 @@ int handlePackets()
     return SUCCESS;
 } // End function int handlePackets()
 
-int handleInboundPacket(int tunfd, int incoming_sockfd) 
+int handleInboundPacket(int tunfd, int data_socket) 
 {
     struct  tunhdr n_tun_hdr;
     int     bufSize;
@@ -134,7 +127,7 @@ int handleInboundPacket(int tunfd, int incoming_sockfd)
     struct sockaddr_storage     from;
     unsigned    fromlen = sizeof(from);
 
-    bufSize = recvfrom(incoming_sockfd, buffer, sizeof(buffer), 0, 
+    bufSize = recvfrom(data_socket, buffer, sizeof(buffer), 0, 
         (struct sockaddr *)&from, &fromlen);
     if(bufSize < 0) {
         ERROR_MSG("recvfrom() failed");
@@ -142,7 +135,7 @@ int handleInboundPacket(int tunfd, int incoming_sockfd)
     }
 
     struct timeval arrival_time;
-    if(ioctl(incoming_sockfd, SIOCGSTAMP, &arrival_time) == -1) {
+    if(ioctl(data_socket, SIOCGSTAMP, &arrival_time) == -1) {
         ERROR_MSG("ioctl SIOCGSTAMP failed");
         gettimeofday(&arrival_time, 0);
     }
@@ -156,24 +149,6 @@ int handleInboundPacket(int tunfd, int incoming_sockfd)
 
     if(addSeqNum(packet_buffer, h_seq_no) == NOT_ADDED) {
         return SUCCESS;
-    }
-
-    unsigned short h_link_id = ntohs(n_tun_hdr.link_id);
-
-    obtain_read_lock(&interface_list_lock);
-    struct interface* ife = find_interface_by_index(interface_list, h_link_id);
-    release_read_lock(&interface_list_lock);
-    if(ife) {
-
-        //unsigned short h_local_seq_no = ntohs(n_tun_hdr.local_seq_no);
-
-        //unsigned short lost = h_local_seq_no - ife->local_seq_no_in;
-        //if(lost > MAX_PACKET_LOSS) {
-        //    ife->out_of_order_packets++;
-        //} else {
-        //    ife->packets_lost += lost;
-        //    ife->local_seq_no_in = h_local_seq_no + 1;
-        //}
     }
 
     // This is needed to notify tun0 we are passing an IP packet
@@ -249,12 +224,17 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
 
         // Select interface and send
         int rtn = 0;
+#ifdef CONTROLLER
+#endif
+#ifdef GATEWAY
         struct interface *ife;
         obtain_read_lock(&interface_list_lock);
 
         ife = interface_list;
         sendPacket(buffer, bufSize, ife, cont_addr, 0);
         release_read_lock(&interface_list_lock);
+#endif
+
         //ife = selectInterface(algo, port, size - offset, packet + offset);
 
         /*if(strcmp(ftd->alg_name, "rr_conn") == 0) {

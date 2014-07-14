@@ -10,15 +10,16 @@
 #include "contchan.h"
 #include "constants.h"
 #include "database.h"
+#include "datapath.h"
 #include "debug.h"
 #include "pathperf.h"
 #include "ping.h"
 #include "rootchan.h"
 #include "sockets.h"
 #include "utlist.h"
-#include "kernel.h"
 #include "config.h"
 #include "timing.h"
+#include "tunnelInterface.h"
 
 const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_idle_clients()
 const unsigned int  CLIENT_TIMEOUT = 5;
@@ -82,9 +83,9 @@ int main(int argc, char* argv[])
     ipaddr_to_ipv4(&lease.priv_ip, &priv_ip);
     priv_netmask = htonl(slash_to_netmask(lease.priv_subnet_size));
 
-    result = setup_virtual_interface(priv_ip, priv_netmask, get_mtu());
+    result = tunnel_create(priv_ip, priv_netmask, get_mtu());
     if(result == -1) {
-        DEBUG_MSG("Fatal error: failed to bring up virtual interface");
+        DEBUG_MSG("Fatal error: failed to bring up tunnel interface");
     }
 
     int cchan_sock = tcp_passive_open(control_port, SOMAXCONN);
@@ -155,20 +156,6 @@ int main(int argc, char* argv[])
         exit(1);
     }
 
-#ifdef WITH_KERNEL
-    const char* external_if = get_external_interface();
-    if(kernel_enslave_device(external_if) == FAILURE) {
-        DEBUG_MSG("Failed to enslave device %s", external_if);
-    }
-    
-    struct in_addr gateway_ip;
-    if(find_gateway_ip(external_if, &gateway_ip) == 0) {
-        DEBUG_MSG("Found gateway 0x%x for %s", ntohl(gateway_ip.s_addr),
-                external_if);
-        virt_set_gateway_ip(external_if, &gateway_ip);
-    }
-#endif
-
     start_path_perf_thread();
 
     server_loop(cchan_sock);
@@ -208,6 +195,7 @@ static void server_loop(int cchan_sock)
         } else {
             if(FD_ISSET(cchan_sock, &read_set)) {
                 handle_connection(&cchan_clients, cchan_sock);
+                DEBUG_MSG("Handled accept connection");
             }
 
             struct client* client;
@@ -342,11 +330,7 @@ static int request_lease(const struct lease_info *old_lease, struct lease_info *
     
             uint32_t priv_netmask = htonl(slash_to_netmask(new_lease->priv_subnet_size));
             
-            result = setup_virtual_interface(priv_ip, priv_netmask, get_mtu());
-            if(result < 0) {
-                DEBUG_MSG("Fatal error: failed to bring up virtual interface");
-                exit(1);
-            }
+
         }
 
         return 0;

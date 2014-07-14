@@ -4,5 +4,5 @@
 #include "tunnelInterface.h"
 
 int handlePackets(struct tunnel *tun);
-int start_data_thread();
+int start_data_thread(struct tunnel *tun_in, uint32_t cont_ip, uint16_t cont_port);
 #endif

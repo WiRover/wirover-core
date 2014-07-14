@@ -207,11 +207,6 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
     tun->destAddr.sin_port          = 0;  
     tun->destAddr.sin_addr.s_addr   = 0;
 
-    #ifdef CONTROLLER
-        char *privateIP = ip
-        strncpy(tun->localIP, privateIP, IFNAMSIZ);
-    #endif
-
     //tun = (struct tunnel *)malloc(sizeof(struct tunnel));
 
     if((tun->tunnelfd = tunnelAlloc(tun)) < 0) 

@@ -11,6 +11,8 @@ add_executable(wicontroller
     ${COMMON}/bandwidth.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
+	${COMMON}/datapath.c
+	${COMMON}/flowTable.c
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
     ${COMMON}/netlink.c
@@ -19,8 +21,12 @@ add_executable(wicontroller
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
     ${COMMON}/timing.c
+	${COMMON}/tunnelInterface.c
+	${COMMON}/selectInterface.c
     ${COMMON}/format.c
     ${COMMON}/pathperf.c
+	${COMMON}/packetBuffer.c
+	${POLICY}/policyTable.c
 )
 
 target_link_libraries(wicontroller pthread config mysqlclient ssl crypto m)

@@ -29,7 +29,6 @@
 #include "debug.h"
 #include "gateway.h"
 #include "interface.h"
-#include "kernel.h"
 #include "sockets.h"
 #include "timing.h"
 #include "tunnel.h"
@@ -214,7 +213,7 @@ static int handle_stats_packet(struct bw_server_info *server, struct bw_session 
                 ife->meas_bw = bps;
                 ife->meas_bw_time = time(NULL);
 
-                virt_remote_bandwidth_hint(ife->public_ip.s_addr, bps);
+                //TODO: Handle bandwidth hint
             }
 
 #ifdef WITH_DATABASE

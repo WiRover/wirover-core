@@ -18,7 +18,6 @@
 #include "debug.h"
 #include "gateway.h"
 #include "interface.h"
-#include "kernel.h"
 #include "netlink.h"
 #include "ping.h"
 #include "rootchan.h"
@@ -363,24 +362,12 @@ static void process_ping_request(char *buffer, int len,
                 ntohl(ife->public_ip.s_addr), ntohs(ife->data_port),
                 ntohl(from_in.sin_addr.s_addr), ntohs(from_in.sin_port));
 
-        if(ife->state == ACTIVE)
-            gw->active_interfaces--;
-        virt_remove_remote_link(&private_ip, &ife->public_ip, ife->data_port);
-
         memcpy(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr));
         ife->data_port  = from_in.sin_port;
         ife->state      = ping->link_state;
 
-        if(ife->state == ACTIVE) {
-            gw->active_interfaces++;
-            virt_add_remote_link(&private_ip, &from_in.sin_addr,
-                    from_in.sin_port);
-        }
-
         /* We now know that ife->public_ip and ife->data_port are correct. */
         ife->flags |= IFFLAG_SOURCE_VERIFIED;
-
-        virt_remote_prio(&private_ip, &ife->public_ip, ife->priority);
 
 #ifdef WITH_DATABASE
         db_update_link(gw, ife);
@@ -392,11 +379,6 @@ static void process_ping_request(char *buffer, int len,
         if(ife->state == ACTIVE) {
             struct in_addr private_ip;
             ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
-
-            virt_add_remote_link(&private_ip, &from_in.sin_addr,
-                    from_in.sin_port);
-
-            virt_remote_prio(&private_ip, &ife->public_ip, ife->priority);
         }
     }
 
@@ -457,14 +439,6 @@ static void process_ping_response(char *buffer, int len,
             DEBUG_MSG("Unable to add interface with address %s (IPv6?)", p_ip);
             return;
         }
-
-        struct in_addr private_ip;
-        ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
-
-        virt_add_remote_link(&private_ip, &from_in.sin_addr,
-                from_in.sin_port);
-        
-        virt_remote_prio(&private_ip, &ife->public_ip, ife->priority);
     }
 
     db_update_pings(gw, ife, rtt);
@@ -542,8 +516,6 @@ static void remove_stale_links(int link_timeout, int node_timeout)
 
                     db_update_link(gw, ife);
 
-                    virt_remove_remote_link(&private_ip, &ife->public_ip, ife->data_port);
-
                     DEBUG_MSG("Removed node %hu link %hu due to timeout",
                             gw->unique_id, ife->index);
                 }
@@ -553,12 +525,6 @@ static void remove_stale_links(int link_timeout, int node_timeout)
         }
 
         if(num_ifaces == 0 && (now - gw->last_ping_time) >= node_timeout) {
-            virt_remove_remote_node(&private_ip);
-
-            // TODO: This could be made more configurable.
-            uint32_t client_network = htonl(0x0A000000 | ((uint32_t)gw->unique_id << 8));
-            uint32_t client_netmask = htonl(0xFFFFFF00);
-            virt_delete_vroute(client_network, client_netmask, private_ip.s_addr);
 
             DEBUG_MSG("Removed node %hu due to timeout", gw->unique_id);
 

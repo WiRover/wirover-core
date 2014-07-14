@@ -10,7 +10,6 @@
 #include "pathperf.h"
 #include "rootchan.h"
 #include "utlist.h"
-#include "kernel.h"
 
 static int process_notification_v2(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port);
 static struct gateway *update_gateway_v2(const struct cchan_notification_v2 *notif);
@@ -165,16 +164,7 @@ static struct gateway *update_gateway_v2(const struct cchan_notification_v2 *not
         gw->state = ACTIVE;
         state_change = 1;
 
-        struct in_addr priv_ip;
-        ipaddr_to_ipv4(&notif->priv_ip, (uint32_t *)&priv_ip.s_addr);
-
-        virt_add_remote_node(&priv_ip);
-
-        // TODO: This gives the gateway 10.xxx.xxx.0/24 based on its unique_id.
-        // This could be made more configurable though.
-        uint32_t client_network = htonl(0x0A000000 | (gw->unique_id << 8));
-        uint32_t client_netmask = htonl(0xFFFFFF00);
-        virt_add_vroute(client_network, client_netmask, priv_ip.s_addr);
+  
 
         char p_ip[INET6_ADDRSTRLEN];
         ipaddr_to_string(&gw->private_ip, p_ip, sizeof(p_ip));
@@ -221,22 +211,13 @@ static void update_interface_v2(struct gateway *gw, const struct interface_info_
     ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&priv_ip.s_addr);
 
     int new_state = ifinfo->state;
-    if(ife->state == ACTIVE && new_state != ACTIVE) {
-        virt_remove_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
-    } else if(ife->state != ACTIVE && new_state == ACTIVE) {
+    if(ife->state != ACTIVE && new_state == ACTIVE) {
         gw->active_interfaces++;
-
-        /* Do not add the interface until the source has been verified by a ping. */
-        if(ife->flags & IFFLAG_SOURCE_VERIFIED)
-            virt_add_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
     }
     ife->state = new_state;
 
     if(ifinfo->priority != ife->priority) {
         ife->priority = ifinfo->priority;
-
-        if(ife->flags & IFFLAG_SOURCE_VERIFIED)
-            virt_remote_prio(&priv_ip, &ife->public_ip, ife->priority);
     }
 
     ife->update_num = gw->cchan_updates;
@@ -262,8 +243,6 @@ static void remove_dead_interfaces(struct gateway *gw)
         if(ife->state == DEAD || ife->update_num != gw->cchan_updates) {
             if(ife->state == ACTIVE)
                 gw->active_interfaces--;
-
-            virt_remove_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
 
 #ifdef WITH_DATABASE
             db_update_link(gw, ife);
@@ -350,20 +329,12 @@ static int remove_gateway(struct gateway *gw)
 
             if(ife->state == ACTIVE) {
                 gw->active_interfaces--;
-                virt_remove_remote_link(&private_ip, &ife->public_ip, ife->data_port);
             }
         }
 
         DL_DELETE(gw->head_interface, ife);
         free(ife);
     }
-
-    virt_remove_remote_node(&private_ip);
-
-    // TODO: This could be made more configurable.
-    uint32_t client_network = htonl(0x0A000000 | ((uint32_t)gw->unique_id << 8));
-    uint32_t client_netmask = htonl(0xFFFFFF00);
-    virt_delete_vroute(client_network, client_netmask, private_ip.s_addr);
                 
     gw->state = DEAD;
 
@@ -448,14 +419,6 @@ static struct gateway* make_gateway_v1(const struct cchan_notification_v1* notif
     struct in_addr priv_ip;
     ipaddr_to_ipv4(&notif->priv_ip, (uint32_t *)&priv_ip.s_addr);
 
-    virt_add_remote_node(&priv_ip);
-
-    // TODO: This gives the gateway 10.xxx.xxx.0/24 based on its unique_id.
-    // This could be made more configurable though.
-    uint32_t client_network = htonl(0x0A000000 | (gw->unique_id << 8));
-    uint32_t client_netmask = htonl(0xFFFFFF00);
-    virt_add_vroute(client_network, client_netmask, priv_ip.s_addr);
-
     int i;
     for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
         struct interface* ife = alloc_interface();
@@ -469,8 +432,6 @@ static struct gateway* make_gateway_v1(const struct cchan_notification_v1* notif
 
         if(ife->state == ACTIVE) {
             gw->active_interfaces++;
-
-            virt_add_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
         }
 
         DL_APPEND(gw->head_interface, ife);
@@ -523,14 +484,8 @@ static void update_gateway_v1(struct gateway* gw, const struct cchan_notificatio
         ife->index = ntohl(notif->if_info[i].link_id);
         int new_state = notif->if_info[i].state;
 
-        if(ife->state == ACTIVE && new_state != ACTIVE) {
-            virt_remove_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
-        } else if(ife->state != ACTIVE && new_state == ACTIVE) {
+        if(ife->state != ACTIVE && new_state == ACTIVE) {
             gw->active_interfaces++;
-
-            /* Do not add the interface until the source has been verified by a ping. */
-            if(ife->flags & IFFLAG_SOURCE_VERIFIED)
-                virt_add_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
         }
 
         ife->state = new_state;
@@ -542,7 +497,6 @@ static void update_gateway_v1(struct gateway* gw, const struct cchan_notificatio
     struct interface* tmp;
     DL_FOREACH_SAFE(gw->head_interface, ife, tmp) {
         if(ife->state == DEAD) {
-            virt_remove_remote_link(&priv_ip, &ife->public_ip, ife->data_port);
 
 #ifdef WITH_DATABASE
             db_update_link(gw, ife);
