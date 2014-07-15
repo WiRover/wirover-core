@@ -105,7 +105,7 @@ int handlePackets()
         FD_ZERO(&read_set);
         FD_SET(data_socket, &read_set);
         FD_SET(tun->tunnelfd, &read_set);
-        
+#ifdef GATEWAY        
 	    obtain_read_lock(&interface_list_lock);
 	    struct interface* curr_ife = interface_list;
         while (curr_ife) {
@@ -115,6 +115,7 @@ int handlePackets()
             curr_ife = curr_ife->next;
         }
 	    release_read_lock(&interface_list_lock);
+#endif
         // Pselect should return
         // when SIGINT, or SIGTERM is delivered, but block SIGALRM
         sigemptyset(&orig_set);
@@ -127,12 +128,13 @@ int handlePackets()
             DEBUG_MSG("select() failed");
             continue;
         }
-
+        
+    DEBUG_MSG("pselect");
         if( FD_ISSET(data_socket, &read_set) ) 
         {
             handleInboundPacket(tun->tunnelfd, data_socket);
         }
-
+#ifdef GATEWAY        
         obtain_read_lock(&interface_list_lock);
 	    curr_ife = interface_list;
         while (curr_ife) {
@@ -143,7 +145,7 @@ int handlePackets()
             curr_ife = curr_ife->next;
         }
 	    release_read_lock(&interface_list_lock);
-
+#endif
         if( FD_ISSET(tun->tunnelfd, &read_set) ) 
         {
             handleOutboundPacket(tun->tunnelfd, tun);
@@ -190,7 +192,7 @@ int handleInboundPacket(int tunfd, int data_socket)
     // This is needed to notify tun0 we are passing an IP packet
     // Have to pass in the IP proto as last two bytes in ethernet header
     //
-    // Copy in four bytes, these four bytes represent the four bytes of the
+    // Copy in four bytes, these four bytes represent the four bytes of the 
     // tunnel header (added by the tun device) this field is in network order.
     // In host order it would be 0x00000800 the first two bytes (0000) are
     // the flags field, the next two byte (0800 are the protocol field, in this
@@ -207,8 +209,8 @@ int handleInboundPacket(int tunfd, int data_socket)
     DEBUG_MSG("Writing data");
     if( write(tunfd, buffer, 
         (bufSize)) < 0) 
-    /*if( write(tunfd, &buffer[sizeof(struct tunhdr)-TUNTAP_OFFSET], 
-        (bufSize-sizeof(struct tunhdr)+TUNTAP_OFFSET)) < 0) */
+    if( write(tunfd, &buffer[sizeof(struct tunhdr)-TUNTAP_OFFSET], 
+        (bufSize-sizeof(struct tunhdr)+TUNTAP_OFFSET)) < 0)
     {
         ERROR_MSG("write() failed");
         return FAILURE;

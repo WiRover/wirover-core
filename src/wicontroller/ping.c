@@ -91,7 +91,7 @@ void* ping_thread_func(void* arg)
         }
     }
 
-    sockfd = udp_bind_open(data_port, 0);
+    sockfd = udp_bind_open(data_port, "tun0");
     if(sockfd == FAILURE) {
         DEBUG_MSG("Ping thread cannot continue due to failure");
         return 0;

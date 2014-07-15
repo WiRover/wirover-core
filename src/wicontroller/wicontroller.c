@@ -95,6 +95,11 @@ int main(int argc, char* argv[])
     }
     set_nonblock(cchan_sock, 1);
 
+    if(start_data_thread(getTunnel()) == FAILURE) {
+        DEBUG_MSG("Failed to start data thread");
+        exit(1);
+    }
+
     if(start_ping_thread() == FAILURE) {
         DEBUG_MSG("Failed to start ping thread");
         exit(1);
