@@ -54,13 +54,23 @@ struct flow_entry *add_entry(struct flow_tuple* entry) {
     return NULL;
 }
 
-struct flow_entry *get_flow_entry(struct flow_tuple *entry) {
+struct flow_entry *get_flow_entry(struct flow_tuple *ft) {
     struct flow_entry *fe;
 
-    HASH_FIND(hh, flow_table, entry, sizeof(struct flow_tuple), fe);
-    if(fe != NULL) {
-        fe->last_visit_time = time(NULL);
+    HASH_FIND(hh, flow_table, ft, sizeof(struct flow_tuple), fe);
+    if(fe == NULL) {
+        struct policy_entry *pd = malloc(sizeof(struct policy_entry));
+        getMatch(ft, pd, EGRESS);
+
+        fe = add_entry(ft);
+        if(fe == NULL) { return NULL; }
+        fe->action = pd->action;
+        fe->type = pd->type;
+        strcpy(fe->alg_name, pd->alg_name);
+
+        free(pd);
     }
+    fe->last_visit_time = time(NULL);
 
     return fe;
 } 
@@ -77,21 +87,10 @@ void expiration_time_check() {
 }
 
 //Updates an entry and expires old entries in the flow table
-int update_flow_table(struct flow_tuple *tuple, uint32_t action, int32_t type, char *alg_name) {
+int update_flow_table(struct flow_tuple *tuple, struct interface *ife) {
     struct flow_entry *ftd = get_flow_entry(tuple);
-    if(ftd == NULL) {
-        ftd = add_entry(tuple);
-        if(ftd == NULL) {
-            DEBUG_MSG("Error adding flow tuple entry");
-            return FAILURE;
-        }
-    }
 
     ftd->count++;
-
-    ftd->action = action;
-    ftd->type = type;
-    strcpy(ftd->alg_name, alg_name);
 
     if(last_expiration_check == 0) {
         last_expiration_check = time(NULL);

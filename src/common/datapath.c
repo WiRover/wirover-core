@@ -129,7 +129,6 @@ int handlePackets()
             continue;
         }
         
-    DEBUG_MSG("pselect");
         if( FD_ISSET(data_socket, &read_set) ) 
         {
             handleInboundPacket(tun->tunnelfd, data_socket);
@@ -184,7 +183,9 @@ int handleInboundPacket(int tunfd, int data_socket)
 
     // Copy temporary to host format
     unsigned int h_seq_no = ntohl(n_tun_hdr.seq);
-
+    uint16_t node_id = ntohs(n_tun_hdr.node_id);
+    uint16_t link_id = ntohs(n_tun_hdr.link_id);
+    DEBUG_MSG("Received node_id: %d, linkid: %d",node_id, link_id);
     if(addSeqNum(packet_buffer, h_seq_no) == NOT_ADDED) {
         return SUCCESS;
     }
@@ -198,7 +199,16 @@ int handleInboundPacket(int tunfd, int data_socket)
     // the flags field, the next two byte (0800 are the protocol field, in this
     // case IP): http://www.mjmwired.net/kernel/Documentation/networking/tuntap.txt
 
-    const struct iphdr *ip_hdr = (const struct iphdr *)(buffer + sizeof(struct tunhdr));
+    struct iphdr *ip_hdr = (struct iphdr *)(buffer + sizeof(struct tunhdr));
+    
+    struct flow_tuple *ft = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
+    struct tcphdr   *tcp_hdr = (struct tcphdr *)(buffer + sizeof(struct tunhdr) + (ip_hdr->ihl * 4));
+
+    // Policy and Flow table
+    fill_flow_tuple(ip_hdr, tcp_hdr, ft);
+    struct flow_entry *ftd = get_flow_entry(ft);
+
+
     unsigned short tun_info[2];
     tun_info[0] = 0; //flags
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
@@ -207,8 +217,6 @@ int handleInboundPacket(int tunfd, int data_socket)
 
 
     DEBUG_MSG("Writing data");
-    if( write(tunfd, buffer, 
-        (bufSize)) < 0) 
     if( write(tunfd, &buffer[sizeof(struct tunhdr)-TUNTAP_OFFSET], 
         (bufSize-sizeof(struct tunhdr)+TUNTAP_OFFSET)) < 0)
     {
@@ -240,14 +248,6 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         fill_flow_tuple(ip_hdr, tcp_hdr, ft);
 
         struct flow_entry *ftd = get_flow_entry(ft);
-        if(ftd == NULL) {
-            struct policy_entry *pd = malloc(sizeof(struct policy_entry));
-            getMatch(ft, pd, EGRESS);
-            update_flow_table(ft,pd->action, pd->type, pd->alg_name);
-            free(pd);
-            ftd = get_flow_entry(ft);
-        }
-
         free(ft);
 
         // Check for drop

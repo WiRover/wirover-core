@@ -10,6 +10,7 @@
 #include <time.h>
 
 #include "uthash.h"
+#include "interface.h"
 
 #define SUCCESS 0
 #define DUPLICATE_ENTRY 1
@@ -21,7 +22,7 @@ struct flow_entry {
     struct flow_tuple *id;
     time_t last_visit_time;
     UT_hash_handle hh;
-
+    struct interface *ife;
     int count;
     uint32_t action;
     int32_t type;
@@ -41,7 +42,7 @@ int fill_flow_tuple(struct iphdr*, struct tcphdr*, struct flow_tuple*);
 
 struct flow_entry *get_flow_entry(struct flow_tuple *);
 
-int update_flow_table(struct flow_tuple *entry, uint32_t action, int32_t type, char *alg_name);
+int update_flow_table(struct flow_tuple *tuple, struct interface *ife);
 
 int set_flow_table_timeout(int);
 
