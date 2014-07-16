@@ -82,10 +82,10 @@ static void __write_path_list(FILE *file)
     ipaddr_to_string(&private_ip, local_node, sizeof(local_node));
 
     char remote_node[INET6_ADDRSTRLEN] = "0.0.0.0";
-    get_controller_privip(remote_node, sizeof(remote_node));
+    //get_controller_privip(remote_node, sizeof(remote_node));
 
     char remote_addr[INET6_ADDRSTRLEN] = "0.0.0.0";
-    get_controller_ip(remote_addr, sizeof(remote_addr));
+    //get_controller_ip(remote_addr, sizeof(remote_addr));
 
     obtain_read_lock(&interface_list_lock);
     DL_FOREACH(interface_list, ife) {

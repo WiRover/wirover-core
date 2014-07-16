@@ -70,24 +70,16 @@ int send_notification(int max_tries)
 static int _send_notification(const char *ifname)
 {
     int sockfd;
-
-    char controller_ip[INET6_ADDRSTRLEN];
-    if(get_controller_ip(controller_ip, sizeof(controller_ip)) == FAILURE) {
-        DEBUG_MSG("There are no controllers!");
-        return FAILURE;
-    }
-
-    const unsigned short controller_port = get_controller_control_port();
+    struct sockaddr_storage cont_dest;
+    build_control_sockaddr(get_controller_ife(), &cont_dest);
 
     struct timeval timeout;
     timeout.tv_sec  = CCHAN_CONNECT_TIMEOUT_SEC;
     timeout.tv_usec = 0;
 
-    sockfd = tcp_active_open(controller_ip, controller_port, 
-            ifname, &timeout);
+    sockfd = tcp_active_open(&cont_dest, ifname, &timeout);
     if(sockfd == -1) {
-        DEBUG_MSG("Failed to open control channel with controller %s:%d",
-                  controller_ip, controller_port);
+        DEBUG_MSG("Failed to open control channel with controller");
         return FAILURE;
     }
 
@@ -189,23 +181,16 @@ uint16_t get_remote_bw_port()
 int send_shutdown_notification()
 {
     int sockfd;
-
-    char controller_ip[INET6_ADDRSTRLEN];
-    if(get_controller_ip(controller_ip, sizeof(controller_ip)) == FAILURE) {
-        DEBUG_MSG("There are no controllers!");
-        return FAILURE;
-    }
-
-    const unsigned short controller_port = get_controller_control_port();
+    struct sockaddr_storage cont_dest;
+    build_control_sockaddr(get_controller_ife(), &cont_dest);
 
     struct timeval timeout;
     timeout.tv_sec  = CCHAN_CONNECT_TIMEOUT_SEC;
     timeout.tv_usec = 0;
 
-    sockfd = tcp_active_open(controller_ip, controller_port, NULL, &timeout);
+    sockfd = tcp_active_open(&cont_dest, NULL, &timeout);
     if(sockfd == -1) {
-        DEBUG_MSG("Failed to open control channel with controller %s:%d",
-                  controller_ip, controller_port);
+        DEBUG_MSG("Failed to open control channel with controller");
         return FAILURE;
     }
 

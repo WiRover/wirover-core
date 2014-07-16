@@ -13,6 +13,7 @@
 #include "packetBuffer.h"
 #include "netlink.h"
 #include "rwlock.h"
+#include "rootchan.h"
 #include "selectInterface.h"
 #include "sockets.h"
 #include "tunnel.h"
@@ -32,25 +33,10 @@ static int                  running = 0;
 static pthread_t            data_thread;
 static int                  data_socket = -1;
 struct tunnel *tun;
-
-#ifdef GATEWAY
-static struct interface   *cont_ife;
-
-int set_cont_dst(struct interface *cont_dst_ife)
-{
-    cont_ife = cont_dst_ife;
-    return SUCCESS;
-}
-#endif
+static struct rwlock        datapath_lock = RWLOCK_INITIALIZER;
 
 int start_data_thread(struct tunnel *tun_in)
 {
-#ifdef GATEWAY
-    if(cont_ife == NULL){
-        DEBUG_MSG("Controller destination not set before data thread started");
-        return FAILURE;
-    }
-#endif
     tun = tun_in;
     if(running) {
         DEBUG_MSG("Data thread already running");
@@ -254,51 +240,23 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         }
         //Add a tunnel header to the packet
         if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
-            DEBUG_MSG("Encapping packet");
+            struct interface *src_ife;
+            struct interface *dst_ife;
+            int node_id;
 #ifdef CONTROLLER
 #endif
 #ifdef GATEWAY
-            struct interface *ife;
+            obtain_read_lock(&datapath_lock);
+            dst_ife = get_controller_ife();
+            node_id = get_unique_id();
+            release_read_lock(&datapath_lock);
+
             obtain_read_lock(&interface_list_lock);
-
-            ife = interface_list;
-            sendPacket(orig_packet, orig_size, 123, ife, cont_ife, 0);
+            src_ife = interface_list;
             release_read_lock(&interface_list_lock);
+
 #endif
-        }
-        // Select interface and send
-        int rtn = 0;
-
-
-        //ife = selectInterface(algo, port, size - offset, packet + offset);
-
-        /*if(strcmp(ftd->alg_name, "rr_conn") == 0) {
-        rtn = stripePacket(orig_packet, orig_size, RR_CONN);
-        }
-        else if(strcmp(ftd->alg_name, "rr_pkt") == 0) {
-        rtn = stripePacket(orig_packet, orig_size, RR_PKT);
-        }
-        else if(strcmp(ftd->alg_name, "wrr_conn") == 0) {
-        rtn = stripePacket(orig_packet, orig_size, WRR_CONN);
-        }
-        else if(strcmp(ftd->alg_name, "wrr_pkt") == 0) {
-        rtn = stripePacket(orig_packet, orig_size, WRR_PKT);
-        }
-        else if(strcmp(ftd->alg_name, "wrr_pktv1") == 0) {
-        rtn = stripePacket(orig_packet, orig_size, WRR_PKT_v1);
-        }
-        else if(strcmp(ftd->alg_name, "wdrr_pkt") == 0) {
-        rtn = stripePacket(orig_packet, orig_size, WDRR_PKT);
-        }
-        else if(strcmp(ftd->alg_name, "spf") == 0) {
-        rtn = stripePacket(orig_packet, orig_size, SPF);
-        }
-        else*/ {
-            //rtn = stripePacket(orig_packet, orig_size, getRoutingAlgorithm());
-        }
-
-        if(rtn < 0) {
-            ERROR_MSG("stripePacket() failed");
+            return sendPacket(TUNFLAG_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife, 0);
         }
     }
 

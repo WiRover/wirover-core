@@ -21,11 +21,11 @@
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
+#include "selectInterface.h"
 #include "timing.h"
 #include "tunnel.h"
 
-static int send_ping(struct interface* ife,
-              const struct sockaddr* dest_addr, socklen_t dest_len);
+static int send_ping(struct interface* ife);
 static void* ping_thread_func(void* arg);
 static int handle_incoming(int sockfd, int timeout);
 static int send_second_response(const struct interface *ife, 
@@ -78,15 +78,9 @@ int ping_all_interfaces()
 {
     int pings_sent = 0;
 
-    char controller_ip[INET6_ADDRSTRLEN];
-    if(get_controller_ip(controller_ip, sizeof(controller_ip)) < 0)
-        return FAILURE;
-
-    const unsigned short controller_port = get_controller_data_port();
-
     struct sockaddr_storage dest_addr;
     unsigned dest_len;
-    dest_len = build_sockaddr(controller_ip, controller_port, &dest_addr);
+    dest_len = build_data_sockaddr(get_controller_ife(), &dest_addr);
     if(dest_len < 0) {
         return FAILURE;
     }
@@ -97,7 +91,7 @@ int ping_all_interfaces()
 
     struct interface* curr_ife = interface_list;
     while(curr_ife) {
-        send_ping(curr_ife, (struct sockaddr*)&dest_addr, dest_len);
+        send_ping(curr_ife);
 
         assert(curr_ife != curr_ife->next);
         curr_ife = curr_ife->next;
@@ -118,23 +112,15 @@ int ping_all_interfaces()
  */
 int ping_interface(struct interface* ife)
 {
-    char controller_ip[INET6_ADDRSTRLEN];
-    if(get_controller_ip(controller_ip, sizeof(controller_ip)) < 0) {
-        DEBUG_MSG("get_controller_ip failed");
-        return FAILURE;
-    }
-
-    const unsigned short controller_port = get_controller_data_port();
-
     struct sockaddr_storage dest_addr;
     unsigned dest_len;
-    dest_len = build_sockaddr(controller_ip, controller_port, &dest_addr);
+    dest_len = build_data_sockaddr(get_controller_ife(), &dest_addr);
     if(dest_len < 0) {
         DEBUG_MSG("build_sockaddr failed");
         return FAILURE;
     }
 
-    if(send_ping(ife, (struct sockaddr*)&dest_addr, dest_len) == FAILURE) {
+    if(send_ping(ife) == FAILURE) {
         DEBUG_MSG("send_ping failed");
         return FAILURE;
     }
@@ -147,11 +133,9 @@ int ping_interface(struct interface* ife)
  *
  * Locking: Assumes the calling thread has a read lock on the interface list.
  */
-static int send_ping(struct interface* ife, 
-        const struct sockaddr* dest_addr, socklen_t dest_len)
+static int send_ping(struct interface* ife)
 {
     int sockfd;
-    int bytes;
 
     sockfd = udp_bind_open(get_data_port(), ife->name);
     if(sockfd == FAILURE) {
@@ -168,11 +152,7 @@ static int send_ping(struct interface* ife,
     memset(buffer, 0, MAX_PING_PACKET_SIZE);
     unsigned send_size = MIN_PING_PACKET_SIZE;
 
-    struct tunhdr *tunhdr = (struct tunhdr *)buffer;
-    tunhdr->flags = TUNFLAG_PING;
-
-    struct ping_packet *pkt = (struct ping_packet *)
-        (buffer + sizeof(struct tunhdr));
+    struct ping_packet *pkt = (struct ping_packet *)(buffer);
     pkt->seq_no = htonl(ife->next_ping_seq_no++);
     pkt->link_state = ife->state;
     pkt->src_id = htons(get_unique_id());
@@ -197,16 +177,17 @@ static int send_ping(struct interface* ife,
 
     fill_ping_digest(pkt, buffer + sizeof(struct tunhdr), 
             send_size - sizeof(struct tunhdr), private_key);
+    /*char *full_packet = (char *)malloc(get_mtu());
+    send_size = add_tunnel_header(TUNFLAG_PING, buffer, sizeof(struct ping_packet) + sizeof(struct gps_payload), full_packet, get_unique_id(), ife);
 
-    bytes = sendto(sockfd, buffer, send_size, 0, dest_addr, dest_len);
-    if(bytes < 0) {
+    int bytes = sendto(sockfd, buffer, send_size, 0, dest_addr, dest_len);*/
+    if(sendPacket(TUNFLAG_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife(), 0)) {
         /* We get an error ENETUNREACH if we try pinging out an interface which
          * does not have an IP address.  That case is not interesting, so we
          * suppress the error message. */
         if(errno != ENETUNREACH)
             ERROR_MSG("sending ping packet on %s failed", ife->name);
         free(buffer);
-        close(sockfd);
         return -1;
     }
 
@@ -221,7 +202,6 @@ static int send_ping(struct interface* ife,
     ife->next_ping_timeout = ife->last_ping_time + ife->ping_timeout;
 
     free(buffer);
-    close(sockfd);
     return 0;
 }
 

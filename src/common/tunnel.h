@@ -5,6 +5,7 @@
 #include <linux/if.h>
 #include <sys/socket.h>
 #include "tunnel.h"
+#include "interface.h"
 
 #define SEC_TO_USEC 1000000
 
@@ -52,6 +53,7 @@ void   dumpTunHdr(struct tunhdr *tun_hdr);
 void   dumpNetworkTunHdr(struct tunhdr *tun_hdr);
 int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu);
 struct tunnel *getTunnel();
+int add_tunnel_header(uint8_t flags, char *orig_packet, int size, char *dst_packet, uint16_t node_id, struct interface *src_ife);
 
 #endif //TUNNEL_H
 

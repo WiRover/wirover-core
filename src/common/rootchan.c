@@ -203,6 +203,13 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
         const int copy_size = lease->controllers * sizeof(struct controller_info);
 
         memcpy(lease->cinfo, response.cinfo, copy_size);
+        for(int i = 0; i < lease->controllers; i++){
+            struct interface *cont_ife = (struct interface *)malloc(sizeof(struct interface));
+            memset(cont_ife, 0, sizeof(struct interface));
+            ipaddr_to_ipv4(&lease->cinfo[i].pub_ip, &cont_ife->public_ip.s_addr);
+            cont_ife->data_port = lease->cinfo[i].data_port;
+            lease->cinfo[i].ife = cont_ife;
+        }
     }
     
     memcpy(&latest_lease, lease, sizeof(latest_lease));
@@ -234,8 +241,9 @@ static int _obtain_lease(const char *wiroot_ip, unsigned short wiroot_port,
     struct timeval timeout;
     timeout.tv_sec  = RCHAN_CONNECT_TIMEOUT_SEC;
     timeout.tv_usec = 0;
-
-    int sockfd = tcp_active_open(wiroot_ip, wiroot_port, interface, &timeout);
+    struct sockaddr_storage dest;
+    build_sockaddr(wiroot_ip, wiroot_port, &dest);
+    int sockfd = tcp_active_open(&dest, interface, &timeout);
     if(sockfd == -1) {
         DEBUG_MSG("failed to connect to wiroot server");
         goto err_out;
@@ -383,17 +391,6 @@ uint16_t get_unique_id()
 /*
  * Returns controller's data port in host byte order.
  */
-unsigned short get_controller_data_port()
-{
-    if(latest_lease.controllers > 0)
-        return ntohs(latest_lease.cinfo[0].data_port);
-    else
-        return 0;
-}
-
-/*
- * Returns controller's data port in host byte order.
- */
 unsigned short get_controller_control_port()
 {
     if(latest_lease.controllers > 0)
@@ -416,19 +413,12 @@ int get_controller_privip(char *dest, int dest_len)
     }
 }
 
-/*
- * GET CONTROLLER IP
- *
- * It is recommended that your buffer be at least INET6_ADDRSTRLEN bytes in
- * size.
- */
-int get_controller_ip(char* dest, int dest_len)
+struct interface *get_controller_ife()
 {
     if(latest_lease.controllers > 0) {
-        ipaddr_to_string(&latest_lease.cinfo[0].pub_ip, dest, dest_len);
-        return 0;
+        return latest_lease.cinfo[0].ife;
     } else {
-        return FAILURE;
+        return NULL;
     }
 }
 

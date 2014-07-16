@@ -34,6 +34,7 @@ struct interface {
     /* These are in network byte order. */
     struct in_addr    public_ip;
     uint16_t          data_port;
+    uint16_t          control_port;
 
     time_t  ping_interval;
     time_t  ping_timeout;

@@ -18,6 +18,7 @@
 
 #include "debug.h"
 #include "ipaddr.h"
+#include "interface.h"
 #include "sockets.h"
 #include "utlist.h"
 
@@ -102,38 +103,16 @@ const static struct addrinfo tcp_active_hints_fallback = {
 /*
  * TCP ACTIVE OPEN
  */
-int tcp_active_open(const char* remote_addr, unsigned short remote_port,
-        const char *device, struct timeval *timeout)
+int tcp_active_open(struct sockaddr_storage* dest, const char *device, struct timeval *timeout)
 {
     int sockfd;
     int rtn;
 
-    char port_string[16];
-    snprintf(port_string, sizeof(port_string), "%d", remote_port);
-
-    struct addrinfo* results = 0;
-    rtn = getaddrinfo(remote_addr, port_string, &tcp_active_hints, &results);
-    if(rtn != 0) {
-        DEBUG_ONCE("getaddrinfo failed - host: %s port: %hu device: %s reason: %s", 
-                remote_addr, remote_port, device, gai_strerror(rtn));
-
-        /* TODO: There seems to be a problem with the AI_ADDRCONFIG option on
-         * some systems.  This fallback code is in here to make sure the system
-         * will run anyway, but we should try to understand this problem
-         * better. */
-        rtn = getaddrinfo(remote_addr, port_string, &tcp_active_hints_fallback, &results);
-        if(rtn != 0) {
-            DEBUG_MSG("getaddrinfo fallback failed - host: %s port: %hu device: %s reason: %s", 
-                    remote_addr, remote_port, device, gai_strerror(rtn));
-            return -1;
-        }
-    }
-
     // If getaddrinfo completed successfully, these pointers should not be
     // null, so this assert should never be triggered
-    assert(results != 0 && results->ai_addr != 0);
+    assert(dest != NULL);
 
-    sockfd = socket(results->ai_family, results->ai_socktype, results->ai_protocol);
+    sockfd = socket(dest->ss_family, SOCK_STREAM, IPPROTO_TCP);
     if(sockfd < 0) {
         ERROR_MSG("failed creating socket");
         goto free_and_return;
@@ -152,7 +131,7 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
     if(timeout)
         set_nonblock(sockfd, NONBLOCKING);
     
-    rtn = connect(sockfd, results->ai_addr, results->ai_addrlen);
+    rtn = connect(sockfd, (struct sockaddr*)dest, sizeof(struct sockaddr));
     if(rtn == -1 && errno != EINPROGRESS) {
         ERROR_MSG("connect");
         goto close_and_return;
@@ -176,14 +155,11 @@ int tcp_active_open(const char* remote_addr, unsigned short remote_port,
 
         set_nonblock(sockfd, BLOCKING);
     }
-
-    freeaddrinfo(results);
     return sockfd;
 
 close_and_return:
     close(sockfd);
 free_and_return:
-    freeaddrinfo(results);
     return -1;
 }
 
@@ -475,9 +451,6 @@ const static struct addrinfo build_sockaddr_hints_fallback = {
     .ai_flags = AI_NUMERICSERV | AI_V4MAPPED,
 };
 
-/*
- * BUILD SOCKADDR
- */
 int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage* dest)
 {
     assert(ip && dest);
@@ -519,6 +492,30 @@ int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage*
     freeaddrinfo(results);
 
     return results->ai_addrlen;
+}
+
+int build_data_sockaddr(struct interface *dst_ife, struct sockaddr_storage* dest)
+{
+    if(dst_ife == NULL || dest == NULL) {
+        return FAILURE;
+    }
+    struct sockaddr_in* ipv4_dst = (struct sockaddr_in*)dest;
+    ipv4_dst->sin_family = AF_INET;
+    ipv4_dst->sin_port   = dst_ife->data_port;
+    ipv4_dst->sin_addr.s_addr = dst_ife->public_ip.s_addr;
+    return sizeof(struct sockaddr_in);
+}
+
+int build_control_sockaddr(struct interface *dst_ife, struct sockaddr_storage* dest)
+{
+    if(dst_ife == NULL || dest == NULL) {
+        return FAILURE;
+    }
+    struct sockaddr_in* ipv4_dst = (struct sockaddr_in*)dest;
+    ipv4_dst->sin_family = AF_INET;
+    ipv4_dst->sin_port   = dst_ife->control_port;
+    ipv4_dst->sin_addr.s_addr = dst_ife->public_ip.s_addr;
+    return sizeof(struct sockaddr_in);
 }
 
 /*

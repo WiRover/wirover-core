@@ -96,52 +96,38 @@ struct interface *selectInterface(int algo, unsigned short port, int size, char 
 //    free(new_packet);
 //    return SUCCESS;
 //}
-int sendPacket(char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife, uint32_t *pseq_num)
+
+int sendPacket(uint8_t flags, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife, uint32_t *pseq_num)
 {
     int rtn = 0;
+    if(src_ife == NULL)
+    {
+        DEBUG_MSG("Tried to send packet over null interface", src_ife->name);
+        return FAILURE;
+    }
     if ( src_ife->sockfd == 0 )
     {
-        DEBUG_MSG("Tried to send packet over null interface");
+        DEBUG_MSG("Tried to send packet over bad sockfd for interface %s", src_ife->name);
         return FAILURE;
     }
 
-    struct sockaddr_in *dst = (struct sockaddr_in*) malloc (sizeof(struct sockaddr_in));
+    struct sockaddr_storage *dst = (struct sockaddr_storage*) malloc (sizeof(struct sockaddr_storage));
     if(dst == NULL){
         DEBUG_MSG("Couldn't malloc destination address when sending packet");
         return FAILURE;
     }
-    memset(dst, 0, sizeof(struct sockaddr_in));
-    dst->sin_family = AF_INET;
-    dst->sin_port   = dst_ife->data_port;//htons((unsigned short)cont_port);
-    dst->sin_addr.s_addr = dst_ife->public_ip.s_addr;
-
-    // Getting a sequence number should be done as close to sending as possible
-    struct tunhdr tun_hdr;
-    memset(&tun_hdr, 0, sizeof(tun_hdr));
-
-    /*if(*pseq_num == -1) {
-        *pseq_num = getSeqNo();
-    }*/
-    tun_hdr.flags = TUNFLAG_DATA;
-    tun_hdr.seq = 0;//htonl(*pseq_num);
-    //tun_hdr.client_id = 0; // TODO: Add a client ID.
-    tun_hdr.node_id = htons(node_id);
-    tun_hdr.link_id = htons(src_ife->index);
-    //tun_hdr.local_seq_no = htons(src_ife->local_seq_no_out++);
-
-    //fillTunnelTimestamps(&tun_hdr, src_ife);
-
-    //memcpy(packet, &pktSeqNo, sizeof(pktSeqNo));
+    memset(dst, 0, sizeof(struct sockaddr_storage));
+    build_data_sockaddr(dst_ife, dst);
     char *new_packet = (char *)malloc(size + sizeof(struct tunhdr) - TUNTAP_OFFSET);
-    memcpy(new_packet, &tun_hdr, sizeof(struct tunhdr));
-    memcpy(&new_packet[sizeof(struct tunhdr)], &packet[TUNTAP_OFFSET], (size-TUNTAP_OFFSET));
-    int new_size = (size-TUNTAP_OFFSET) + sizeof(struct tunhdr);
+    int new_size = add_tunnel_header(flags, packet, size, new_packet, node_id, src_ife);
+
     if( (rtn = sendto(src_ife->sockfd, new_packet, new_size, 0, (struct sockaddr *)dst, sizeof(struct sockaddr))) < 0)
     {
-        ERROR_MSG("sendto failed (%d), fd %d,  dst: %s, new_size: %d", rtn, src_ife->sockfd, inet_ntoa(dst->sin_addr), new_size);
+        ERROR_MSG("sendto failed (%d), fd %d,  dst: %s, new_size: %d", rtn, src_ife->sockfd, inet_ntoa(((struct sockaddr_in*)dst)->sin_addr), new_size);
 
         return FAILURE;
     }
+    free(dst);
     free(new_packet);
     return SUCCESS;
 }

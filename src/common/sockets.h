@@ -2,7 +2,7 @@
 #define _SOCKETS_H_
 
 #include <sys/select.h>
-
+#include "interface.h"
 // For the set_nonblock function
 #define BLOCKING 0
 #define NONBLOCKING 1
@@ -22,8 +22,7 @@ struct timeval;
 
 //SOMAXCONN is a good value for backlog
 int tcp_passive_open(unsigned short local_port, int backlog);
-int tcp_active_open(const char* remote_addr, unsigned short remote_port,
-        const char *device, struct timeval *timeout);
+int tcp_active_open(struct sockaddr_storage* dest, const char *device, struct timeval *timeout);
 int udp_bind_open(unsigned short local_port, const char* device);
 
 int connect_timeout(int socket, struct sockaddr *addr, socklen_t addrlen, 
@@ -34,7 +33,9 @@ int recvfrom_timeout(int sockfd, void *buffer, size_t len, int flags,
         struct sockaddr *address, socklen_t *address_len, struct timeval *timeout);
 
 int set_nonblock(int sockfd, int enable);
-int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage* dest);
+int build_sockaddr(const char *host, unsigned short port, struct sockaddr_storage* dest);
+int build_data_sockaddr(struct interface *dst_ife, struct sockaddr_storage* dest);
+int build_control_sockaddr(struct interface *dst_ife, struct sockaddr_storage* dest);
 
 // Some generic TCP server functions
 void fdset_add_clients(const struct client* head, fd_set* set, int* max_fd);

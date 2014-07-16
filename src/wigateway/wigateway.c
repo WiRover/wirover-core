@@ -70,6 +70,7 @@ int main(int argc, char* argv[])
     const char* wiroot_address = get_wiroot_address();
     const unsigned short wiroot_port = get_wiroot_port();
     unsigned short data_port = get_data_port();
+
     if(!(wiroot_address && wiroot_port && data_port)) {
         exit(1);
     } 
@@ -170,14 +171,6 @@ int main(int argc, char* argv[])
 
                 if(start_ping_thread() == FAILURE) {
                     DEBUG_MSG("Failed to start ping thread");
-                    exit(1);
-                }
-                struct interface *cont_ife = (struct interface *)malloc(sizeof(struct interface));
-                //memcpy(cont_ife, 0, sizeof(struct interface));
-                cont_ife->public_ip.s_addr = pub_ip;
-                cont_ife->data_port = lease.cinfo[0].data_port;
-                if(set_cont_dst(cont_ife) == FAILURE){
-                    DEBUG_MSG("Failed to set controller destination");
                     exit(1);
                 }
                 if(start_data_thread(getTunnel()) == FAILURE) {

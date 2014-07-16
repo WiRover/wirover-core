@@ -222,3 +222,27 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
 
     return SUCCESS;
 } // End function tunnelCreate()
+
+int add_tunnel_header(uint8_t flags, char *orig_packet, int size, char *dst_packet, uint16_t node_id, struct interface *src_ife)
+{
+    // Getting a sequence number should be done as close to sending as possible
+    struct tunhdr tun_hdr;
+    memset(&tun_hdr, 0, sizeof(tun_hdr));
+
+    /*if(*pseq_num == -1) {
+    *pseq_num = getSeqNo();
+    }*/
+    tun_hdr.flags = flags;
+    tun_hdr.seq = 0;//htonl(*pseq_num);
+    //tun_hdr.client_id = 0; // TODO: Add a client ID.
+    tun_hdr.node_id = htons(node_id);
+    tun_hdr.link_id = htons(src_ife->index);
+    //tun_hdr.local_seq_no = htons(src_ife->local_seq_no_out++);
+
+    //fillTunnelTimestamps(&tun_hdr, src_ife);
+
+    //memcpy(packet, &pktSeqNo, sizeof(pktSeqNo));
+    memcpy(dst_packet, &tun_hdr, sizeof(struct tunhdr));
+    memcpy(&dst_packet[sizeof(struct tunhdr)], &orig_packet[TUNTAP_OFFSET], (size-TUNTAP_OFFSET));
+    return (size-TUNTAP_OFFSET) + sizeof(struct tunhdr);
+}

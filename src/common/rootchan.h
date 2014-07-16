@@ -9,6 +9,7 @@
 
 #include "ipaddr.h"
 #include "netlink.h"
+#include "interface.h"
 
 // Root server will inform gateway of at most 3 controllers
 #define MAX_CONTROLLERS     3
@@ -16,10 +17,11 @@
 #define RCHAN_CONNECT_TIMEOUT_SEC  5
 
 struct controller_info {
-    ipaddr_t    priv_ip;
-    ipaddr_t    pub_ip;
-    uint16_t    data_port;
-    uint16_t    control_port;
+    ipaddr_t          priv_ip;
+    ipaddr_t          pub_ip;
+    uint16_t          data_port;
+    uint16_t          control_port;
+    struct interface *ife;
 } __attribute__((__packed__));
 
 struct rchan_response {
@@ -104,10 +106,8 @@ uint16_t get_unique_id();
 void    get_private_ip(ipaddr_t* dest);
 const struct lease_info* get_lease_info();
 
-unsigned short get_controller_data_port();
-unsigned short get_controller_control_port();
 int get_controller_privip(char *dest, int dest_len);
-int get_controller_ip(char* dest, int dest_len);
+struct interface *get_controller_ife();
 
 #endif //_ROOTCHAN_H_
 
