@@ -40,7 +40,7 @@ struct flow_tuple {
     uint16_t sPort;
 };
 
-int fill_flow_tuple(struct iphdr*, struct tcphdr*, struct flow_tuple*);
+int fill_flow_tuple(struct iphdr*, struct tcphdr*, struct flow_tuple*, unsigned short reverse);
 
 struct flow_entry *get_flow_entry(struct flow_tuple *);
 
@@ -53,7 +53,7 @@ int record_data_to_file(char *, struct flow_tuple *, struct flow_entry *);
 
 int record_message_to_file(char *, char *);
 
-int print_keys();
+int print_flow_table();
 
 #endif //FLOW_TABLE_H
 

@@ -22,14 +22,16 @@ int flow_table_timeout = 10;
 time_t last_expiration_check = 0;
 
 
-int fill_flow_tuple(struct iphdr* ip_hdr, struct tcphdr* tcp_hdr, struct flow_tuple* ft) {
+int fill_flow_tuple(struct iphdr* ip_hdr, struct tcphdr* tcp_hdr, struct flow_tuple* ft, unsigned short reverse) {
     memset(ft, 0, sizeof(struct flow_tuple));
     ft->net_proto = ip_hdr->version;
-    ft->dAddr = ip_hdr->daddr;
-    ft->sAddr = ip_hdr->saddr;
+    ft->dAddr = reverse ? ip_hdr->saddr : ip_hdr->daddr;
+    ft->sAddr = reverse ? ip_hdr->daddr : ip_hdr->saddr;
     ft->proto = ip_hdr->protocol;
-    ft->dPort = tcp_hdr->dest;
-    ft->sPort = tcp_hdr->source;
+    if(ft->proto == 6 || ft->proto == 17){
+        ft->dPort = reverse ? tcp_hdr->source : tcp_hdr->dest;
+        ft->sPort = reverse ? tcp_hdr->dest : tcp_hdr->source;
+    }
 
     return 0;
 }
@@ -46,7 +48,6 @@ struct flow_entry *add_entry(struct flow_tuple* entry) {
         memset(fe, 0, sizeof(struct flow_entry));
         fe->id = newKey;
         fe->last_visit_time = time(NULL);
-
         HASH_ADD_KEYPTR(hh, flow_table, newKey, sizeof(struct flow_tuple), fe);
         return fe;
     }
@@ -115,15 +116,16 @@ int set_flow_table_timeout(int value) {
 
 
 //All methods below here are for debugging purposes
-int print_keys() {
+int print_flow_table() {
     struct flow_entry *current_key, *tmp;
-
+    char src_ip[INET6_ADDRSTRLEN];
+    char dst_ip[INET6_ADDRSTRLEN];
     HASH_ITER(hh, flow_table, current_key, tmp) {
-            DEBUG_MSG(
-              "FROM: %" PRIu32 " TO: %" PRIu32 " PORTFROM: %" PRIu16 " PORTTO: %" PRIu16 ", NETPROTO: %" PRIu8 ", PROTO: %" PRIu8 ", ACTION: %" PRIu32 "\n",
-              current_key->id->sAddr, current_key->id->dAddr, current_key->id->sPort,
-              current_key->id->dPort, current_key->id->net_proto, current_key->id->proto,
-              current_key->action
+            inet_ntop(AF_INET, &current_key->id->sAddr,src_ip, INET6_ADDRSTRLEN);
+            inet_ntop(AF_INET, &current_key->id->dAddr,dst_ip, INET6_ADDRSTRLEN);
+            DEBUG_MSG("From: %s:%d To: %s:%d Proto: %d Action: %d node_id: %d link_id: %d hits: %d",
+              src_ip, current_key->id->sPort, dst_ip, current_key->id->dPort,
+              current_key->id->proto, current_key->action, current_key->node_id, current_key->link_id, current_key->count
             );
     }
 
