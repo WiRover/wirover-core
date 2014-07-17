@@ -33,19 +33,12 @@ static void mark_inactive_interfaces(int ping_timeout);
 
 static int          running = 0;
 static pthread_t    ping_thread;
-static int          ping_socket = -1;
 
 int start_ping_thread()
 {
     if(running) {
         DEBUG_MSG("Ping thread already running");
         return 0;
-    }
- 
-    ping_socket = udp_bind_open(get_data_port(), 0);
-    if(ping_socket == FAILURE) {
-        DEBUG_MSG("Ping thread cannot start due to failure");
-        return FAILURE;
     }
 
     pthread_attr_t attr;
@@ -57,8 +50,6 @@ int start_ping_thread()
     int result = pthread_create(&ping_thread, &attr, ping_thread_func, 0);
     if(result != 0) {
         ERROR_MSG("Creating thread failed");
-        close(ping_socket);
-        ping_socket = -1;
         return FAILURE;
     }
 
@@ -134,13 +125,7 @@ int ping_interface(struct interface* ife)
  */
 static int send_ping(struct interface* ife)
 {
-    int sockfd;
-
-    sockfd = udp_bind_open(get_data_port(), ife->name);
-    if(sockfd == FAILURE) {
-        DEBUG_MSG("udp_bind_open failed");
-        return FAILURE;
-    }
+    int sockfd = ife->sockfd;
 
     char *buffer = malloc(MAX_PING_PACKET_SIZE);
     if(!buffer) {
@@ -179,8 +164,9 @@ static int send_ping(struct interface* ife)
     send_size = add_tunnel_header(TUNFLAG_PING, buffer, sizeof(struct ping_packet) + sizeof(struct gps_payload), full_packet, get_unique_id(), ife);
     
     int bytes = sendto(sockfd, buffer, send_size, 0, dest_addr, dest_len);*/
-
-    if(sendPacket(TUNFLAG_PING, buffer, send_size, get_unique_id(), ife->index, ife->sockfd, get_controller_ife(), 0)) {
+    struct sockaddr_storage dst;
+    build_data_sockaddr(get_controller_ife(), &dst);
+    if(sendPacket(TUNFLAG_PING, buffer, send_size, get_unique_id(), ife->index, ife->sockfd, &dst, 0)) {
         /* We get an error ENETUNREACH if we try pinging out an interface which
          * does not have an IP address.  That case is not interesting, so we
          * suppress the error message. */
@@ -219,9 +205,6 @@ void* ping_thread_func(void* arg)
 {   
 	const unsigned int ping_interval = get_ping_interval();
 	const unsigned int ping_timeout  = get_ping_timeout();
-
-	// We never want reads to hold up the thread.
-	set_nonblock(ping_socket, NONBLOCKING);
 
 	// Initialize this so that the first ping will be sent immediately.
 	struct timeval last_ping_time = {
@@ -274,9 +257,6 @@ void* ping_thread_func(void* arg)
 			next_timeout = ping_spacing - time_diff;
 		}
 	}
-	
-	close(ping_socket);
-	ping_socket = -1;
 
 	running = 0;
 	return 0;
@@ -287,10 +267,8 @@ void* ping_thread_func(void* arg)
  *
  * Locking: Assumes the calling thread does not have a lock on the interface list.
  */
-int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv_time, char *buffer, int size)
+int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv_time, int sockfd, char *buffer, int size)
 {
-    DEBUG_MSG("Handling incomming ping");
-
     if(size < MIN_PING_PACKET_SIZE) {
         DEBUG_MSG("Incoming packet was too small (%d bytes)", size);
     }

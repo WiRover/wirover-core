@@ -208,6 +208,7 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
             memset(cont_ife, 0, sizeof(struct interface));
             ipaddr_to_ipv4(&lease->cinfo[i].pub_ip, &cont_ife->public_ip.s_addr);
             cont_ife->data_port = lease->cinfo[i].data_port;
+            cont_ife->control_port = lease->cinfo[i].control_port;
             lease->cinfo[i].ife = cont_ife;
         }
     }
