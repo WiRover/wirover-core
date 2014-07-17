@@ -97,12 +97,12 @@ struct interface *selectInterface(int algo, unsigned short port, int size, char 
 //    return SUCCESS;
 //}
 
-int sendPacket(uint8_t flags, char *packet, int size, uint16_t node_id, uint16_t link_id, int sockfd, struct interface *dst_ife, uint32_t *pseq_num)
+int sendPacket(uint8_t flags, char *packet, int size, uint16_t node_id, uint16_t link_id, int sockfd, struct sockaddr_storage *dst, uint32_t *pseq_num)
 {
     int rtn = 0;
-    if(dst_ife == NULL)
+    if(dst == NULL)
     {
-        DEBUG_MSG("Tried to send packet to null interface");
+        DEBUG_MSG("Tried to send packet to null address");
         return FAILURE;
     }
     if ( sockfd == 0 )
@@ -110,14 +110,6 @@ int sendPacket(uint8_t flags, char *packet, int size, uint16_t node_id, uint16_t
         DEBUG_MSG("Tried to send packet over bad sockfd for interface %d", link_id);
         return FAILURE;
     }
-
-    struct sockaddr_storage *dst = (struct sockaddr_storage*) malloc (sizeof(struct sockaddr_storage));
-    if(dst == NULL){
-        DEBUG_MSG("Couldn't malloc destination address when sending packet");
-        return FAILURE;
-    }
-    memset(dst, 0, sizeof(struct sockaddr_storage));
-    build_data_sockaddr(dst_ife, dst);
     char *new_packet = (char *)malloc(size + sizeof(struct tunhdr));
     int new_size = add_tunnel_header(flags, packet, size, new_packet, node_id, link_id);
 
@@ -127,7 +119,6 @@ int sendPacket(uint8_t flags, char *packet, int size, uint16_t node_id, uint16_t
 
         return FAILURE;
     }
-    free(dst);
     free(new_packet);
     return SUCCESS;
 }

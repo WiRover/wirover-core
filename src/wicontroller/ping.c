@@ -11,6 +11,7 @@
 #include <sys/ioctl.h>
 #include <netdb.h>
 #include <endian.h>
+#include <arpa/inet.h>
 
 #include "config.h"
 #include "configuration.h"
@@ -22,6 +23,7 @@
 #include "ping.h"
 #include "rootchan.h"
 #include "rwlock.h"
+#include "selectInterface.h"
 #include "sockets.h"
 #include "tunnel.h"
 #include "uthash.h"
@@ -31,7 +33,7 @@ static void* ping_thread_func(void* arg);
 static int ping_request_valid(char *buffer, int len);
 static int send_response(int sockfd, const struct gateway *gw,
         unsigned char type, const char *buffer, 
-        int len, const struct sockaddr *to, socklen_t to_len);
+        int len, struct sockaddr_storage *to, socklen_t to_len);
 static void process_ping_request(char *buffer, int len, 
         const struct sockaddr *from, socklen_t from_len);
 static void process_ping_response(char *buffer, int len, 
@@ -75,9 +77,6 @@ int start_ping_thread()
 
 void* ping_thread_func(void* arg)
 {
-    const unsigned short data_port = get_data_port();
-    int sockfd;
-
     int link_timeout = get_link_timeout();
     int node_timeout = DEFAULT_NODE_TIMEOUT;
 
@@ -90,55 +89,29 @@ void* ping_thread_func(void* arg)
         }
     }
 
-    sockfd = udp_bind_open(data_port, "tun0");
-    if(sockfd == FAILURE) {
-        DEBUG_MSG("Ping thread cannot continue due to failure");
-        return 0;
-    }
-
-    // We never want reads to hold up the thread.
-    set_nonblock(sockfd, NONBLOCKING);
-
     /*int timeout_sec = (link_timeout < node_timeout) ? 
         link_timeout : node_timeout;*/
 
     while(1) {
-        //struct timeval timeout;
-        //timeout.tv_sec = timeout_sec;
-        //timeout.tv_usec = 0;
-
-        //fd_set read_set;
-        //FD_ZERO(&read_set);
-        //FD_SET(sockfd, &read_set);
-
-        //int result = select(sockfd+1, &read_set, 0, 0, &timeout);
-        //if(result > 0 && FD_ISSET(sockfd, &read_set)) {
-        //    // Most likely we have an incoming ping request.
-        //    handle_incoming(sockfd);
-        //} else if(result < 0) {
-        //    ERROR_MSG("select failed for ping socket (%d)", sockfd);
-        //}
-
         remove_stale_links(link_timeout, node_timeout);
     }
-
-    close(sockfd);
     running = 0;
     return 0;
 }
 
-int handle_incoming_ping(char *buffer, int bytes_recvd)
+int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv_time, int sockfd, char *buffer, int bytes_recvd)
 {
-    struct sockaddr_storage from;
-    socklen_t from_len = sizeof(from);
-    struct timeval recv_time;
-    
+    int from_len = sizeof(from_addr);
     int valid = ping_request_valid(buffer, bytes_recvd);
+    if(sockfd <= 0) {
+        DEBUG_MSG("Tried to handle incoming ping on bad sockfd");
+        return FAILURE;
+    }
     if(valid != PING_ERR_OK) {
         char src_addr[INET6_ADDRSTRLEN];
-        sockaddr_ntop((struct sockaddr *)&from, src_addr, sizeof(src_addr));
+        inet_ntop(AF_INET, &((struct sockaddr_in *)from_addr)->sin_addr, src_addr, sizeof(src_addr));
 
-        unsigned short src_port = sockaddr_port((struct sockaddr *)&from);
+        unsigned short src_port = sockaddr_port((struct sockaddr *)from_addr);
 
         DEBUG_MSG("Packet from %s:%hu produced error: %s", src_addr, src_port, 
                 ping_err_str(valid));
@@ -148,11 +121,11 @@ int handle_incoming_ping(char *buffer, int bytes_recvd)
             error_responses = 0;
 
         if(error_responses < ERROR_RESPONSE_LIMIT) {
-            /*if(send_response(sockfd, 0, PING_RESPONSE_ERROR, buffer, 
-                        bytes_recvd, (struct sockaddr *)&from, from_len) < 0) {
+            DEBUG_MSG("Sending error response");
+            if(send_response(sockfd, 0, PING_RESPONSE_ERROR, buffer, 
+                        bytes_recvd, from_addr, from_len) < 0) {
                 ERROR_MSG("Failed to send error response");
-            }*/
-
+            }
             error_responses++;
             last_error_response = now;
         }
@@ -175,19 +148,12 @@ int handle_incoming_ping(char *buffer, int bytes_recvd)
             }*/
 
             process_ping_request(buffer, bytes_recvd, 
-                    (struct sockaddr *)&from, from_len);
+                    (struct sockaddr *)&from_addr, from_len);
 
             break;
-        case PING_SECOND_RESPONSE:
-            // The receive timestamp recorded by the kernel will be more accurate
-            // than if we call gettimeofday() at this point.
-            /*if(ioctl(sockfd, SIOCGSTAMP, &recv_time) == -1) {
-                DEBUG_MSG("ioctl SIOCGSTAMP failed");
-                gettimeofday(&recv_time, 0);
-            }*/
-                    
+        case PING_SECOND_RESPONSE:                    
             process_ping_response(buffer, bytes_recvd,
-                    (struct sockaddr *)&from, from_len, &recv_time);
+                    (struct sockaddr *)&from_addr, from_len, &recv_time);
 
             break;
     }
@@ -263,7 +229,7 @@ static int ping_request_valid(char *buffer, int len)
  */
 static int send_response(int sockfd, const struct gateway *gw,
         unsigned char type, const char *buffer, 
-        int len, const struct sockaddr *to, socklen_t to_len)
+        int len, struct sockaddr_storage *to, socklen_t to_len)
 {
     char response_buffer[MIN_PING_PACKET_SIZE];
 
@@ -274,25 +240,19 @@ static int send_response(int sockfd, const struct gateway *gw,
         memcpy(response_buffer, buffer, sizeof(response_buffer));
     }
 
-    struct tunhdr *tunhdr = (struct tunhdr *)response_buffer;
-    
-    tunhdr->flags = TUNFLAG_PING;
-
-    struct ping_packet *ping = (struct ping_packet *)
-        (response_buffer + sizeof(struct tunhdr));
+    struct ping_packet *ping = (struct ping_packet *)(response_buffer);
 
     ping->type = type;
     ping->src_id = htons(get_unique_id());
     ping->receiver_ts = htonl(timeval_to_usec(0));
     
     if(gw) {
-        fill_ping_digest(ping, response_buffer + sizeof(struct tunhdr),
-                MIN_PING_PACKET_SIZE - sizeof(struct tunhdr), gw->private_key);
+        fill_ping_digest(ping, response_buffer, MIN_PING_PACKET_SIZE, gw->private_key);
     } else {
         memset(ping->digest, 0, sizeof(ping->digest));
     }
-
-    return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
+    return sendPacket(TUNFLAG_PING, response_buffer, MIN_PING_PACKET_SIZE, 0, 0, sockfd, to, 0);
+    //return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
 }
 
 /*

@@ -87,21 +87,21 @@ int handlePackets()
         FD_SET(data_socket, &read_set);
         FD_SET(tun->tunnelfd, &read_set);
 #ifdef GATEWAY        
-	    obtain_read_lock(&interface_list_lock);
-	    struct interface* curr_ife = interface_list;
+        obtain_read_lock(&interface_list_lock);
+        struct interface* curr_ife = interface_list;
         while (curr_ife) {
             if(curr_ife->sockfd > 0){
                 FD_SET(curr_ife->sockfd, &read_set);
             }
             curr_ife = curr_ife->next;
         }
-	    release_read_lock(&interface_list_lock);
+        release_read_lock(&interface_list_lock);
 #endif
         // Pselect should return
         // when SIGINT, or SIGTERM is delivered, but block SIGALRM
         sigemptyset(&orig_set);
         sigaddset(&orig_set, SIGALRM);
-        
+
         int rtn = pselect(FD_SETSIZE, &read_set, NULL, NULL, NULL, &orig_set);
         // Make sure select didn't fail
         if( rtn < 0 && errno == EINTR) 
@@ -109,14 +109,14 @@ int handlePackets()
             DEBUG_MSG("select() failed");
             continue;
         }
-        
+
         if( FD_ISSET(data_socket, &read_set) ) 
         {
             handleInboundPacket(tun->tunnelfd, data_socket);
         }
 #ifdef GATEWAY        
         obtain_read_lock(&interface_list_lock);
-	    curr_ife = interface_list;
+        curr_ife = interface_list;
         while (curr_ife) {
             if( FD_ISSET(curr_ife->sockfd, &read_set) ) 
             {
@@ -124,7 +124,7 @@ int handlePackets()
             }
             curr_ife = curr_ife->next;
         }
-	    release_read_lock(&interface_list_lock);
+        release_read_lock(&interface_list_lock);
 #endif
         if( FD_ISSET(tun->tunnelfd, &read_set) ) 
         {
@@ -153,6 +153,8 @@ int handleInboundPacket(int tunfd, int data_socket)
         return FAILURE;
     }
 
+    
+
     struct timeval arrival_time;
     if(ioctl(data_socket, SIOCGSTAMP, &arrival_time) == -1) {
         ERROR_MSG("ioctl SIOCGSTAMP failed");
@@ -170,7 +172,7 @@ int handleInboundPacket(int tunfd, int data_socket)
     //DEBUG_MSG("Tunflags %x, ping flag %x anded %x", n_tun_hdr.flags, TUNFLAG_PING);
     if((n_tun_hdr.flags & TUNFLAG_PING) != 0){
         DEBUG_MSG("Ping from node_id: %d, linkid: %d",node_id, link_id);
-        handle_incoming_ping(&from, arrival_time, &buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
+        handle_incoming_ping(&from, arrival_time, data_socket, &buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
         return SUCCESS;
     }
 
@@ -189,7 +191,7 @@ int handleInboundPacket(int tunfd, int data_socket)
     // case IP): http://www.mjmwired.net/kernel/Documentation/networking/tuntap.txt
 
     struct iphdr *ip_hdr = (struct iphdr *)(buffer + sizeof(struct tunhdr));
-    
+
     struct flow_tuple *ft = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
     struct tcphdr   *tcp_hdr = (struct tcphdr *)(buffer + sizeof(struct tunhdr) + (ip_hdr->ihl * 4));
 
@@ -278,7 +280,9 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
             release_read_lock(&interface_list_lock);
 
 #endif
-            return sendPacket(TUNFLAG_DATA, &orig_packet[TUNTAP_OFFSET], orig_size - TUNTAP_OFFSET, node_id, link_id, sockfd, dst_ife, 0);
+            struct sockaddr_storage dst;
+            build_data_sockaddr(dst_ife, &dst);
+            return sendPacket(TUNFLAG_DATA, &orig_packet[TUNTAP_OFFSET], orig_size - TUNTAP_OFFSET, node_id, link_id, sockfd, &dst, 0);
         }
     }
 
