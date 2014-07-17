@@ -26,6 +26,7 @@ add_executable(wicontroller
     ${COMMON}/format.c
     ${COMMON}/pathperf.c
 	${COMMON}/packetBuffer.c
+	${COMMON}/util.c
 	${POLICY}/policyTable.c
 )
 

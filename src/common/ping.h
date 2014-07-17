@@ -64,10 +64,8 @@ struct passive_payload {
     uint32_t packets_rx;
 } __attribute__((__packed__));
 
-#define MIN_PING_PACKET_SIZE (sizeof(struct tunhdr) + \
-        sizeof(struct ping_packet))
-#define MAX_PING_PACKET_SIZE (sizeof(struct tunhdr) + \
-        sizeof(struct ping_packet) + \
+#define MIN_PING_PACKET_SIZE sizeof(struct ping_packet)
+#define MAX_PING_PACKET_SIZE (sizeof(struct ping_packet) + \
         sizeof(struct gps_payload) + \
         sizeof(struct ping_packet))
 
@@ -82,6 +80,9 @@ int fill_passive_payload(const char *ifname, struct passive_payload *dest);
 struct interface;
 int ping_all_interfaces();
 int ping_interface(struct interface *ife);
+#endif
+#ifdef CONTROLLER
+int handle_incoming_ping(char *buffer, int size);
 #endif
 
 /*

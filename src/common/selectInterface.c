@@ -97,17 +97,17 @@ struct interface *selectInterface(int algo, unsigned short port, int size, char 
 //    return SUCCESS;
 //}
 
-int sendPacket(uint8_t flags, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife, uint32_t *pseq_num)
+int sendPacket(uint8_t flags, char *packet, int size, uint16_t node_id, uint16_t link_id, int sockfd, struct interface *dst_ife, uint32_t *pseq_num)
 {
     int rtn = 0;
-    if(src_ife == NULL)
+    if(dst_ife == NULL)
     {
-        DEBUG_MSG("Tried to send packet over null interface", src_ife->name);
+        DEBUG_MSG("Tried to send packet to null interface");
         return FAILURE;
     }
-    if ( src_ife->sockfd == 0 )
+    if ( sockfd == 0 )
     {
-        DEBUG_MSG("Tried to send packet over bad sockfd for interface %s", src_ife->name);
+        DEBUG_MSG("Tried to send packet over bad sockfd for interface %d", link_id);
         return FAILURE;
     }
 
@@ -119,11 +119,11 @@ int sendPacket(uint8_t flags, char *packet, int size, uint16_t node_id, struct i
     memset(dst, 0, sizeof(struct sockaddr_storage));
     build_data_sockaddr(dst_ife, dst);
     char *new_packet = (char *)malloc(size + sizeof(struct tunhdr) - TUNTAP_OFFSET);
-    int new_size = add_tunnel_header(flags, packet, size, new_packet, node_id, src_ife);
+    int new_size = add_tunnel_header(flags, packet, size, new_packet, node_id, link_id);
 
-    if( (rtn = sendto(src_ife->sockfd, new_packet, new_size, 0, (struct sockaddr *)dst, sizeof(struct sockaddr))) < 0)
+    if( (rtn = sendto(sockfd, new_packet, new_size, 0, (struct sockaddr *)dst, sizeof(struct sockaddr))) < 0)
     {
-        ERROR_MSG("sendto failed (%d), fd %d,  dst: %s, new_size: %d", rtn, src_ife->sockfd, inet_ntoa(((struct sockaddr_in*)dst)->sin_addr), new_size);
+        ERROR_MSG("sendto failed (%d), fd %d,  dst: %s, new_size: %d", rtn, sockfd, inet_ntoa(((struct sockaddr_in*)dst)->sin_addr), new_size);
 
         return FAILURE;
     }

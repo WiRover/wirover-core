@@ -28,6 +28,7 @@
 #include "debug.h"
 #include "interface.h"
 #include "tunnel.h"
+#include "util.h"
 
 static struct tunnel *tun = NULL;
     
@@ -68,7 +69,7 @@ struct tunnel *getTunnel()
  *      Failure: -1
  *
  */
-static int tunnelAlloc(struct tunnel *tun)
+static int tunnelAlloc(struct tunnel *tun, uint32_t netmask)
 {
     struct sockaddr_in *addr = NULL;
     struct ifreq ifr;
@@ -88,6 +89,8 @@ static int tunnelAlloc(struct tunnel *tun)
     *        IFF_NO_PI - Do not provide packet information  
     */ 
     ifr.ifr_flags = IFF_TUN; 
+
+
 
     strncpy(ifr.ifr_name, "tun%d", IFNAMSIZ);
 
@@ -113,10 +116,21 @@ static int tunnelAlloc(struct tunnel *tun)
     //addr->sin_addr.s_addr = inet_addr("192.168.1.2");
     //setTunLocalIP(tun->localIP);
 
+    
+
     strncpy(ifr.ifr_name, tun->name, IFNAMSIZ);
     if( (err = ioctl(sock, SIOCSIFADDR, &ifr)) < 0) 
     {
         ERROR_MSG("ioctl(SIOCSIFADDR) set IP failed");
+        goto failure;
+    }
+
+    ifr.ifr_netmask.sa_family = AF_INET;
+    struct in_addr *netmask_dst = &((struct sockaddr_in *)&ifr.ifr_netmask)->sin_addr;
+    netmask_dst->s_addr = netmask;
+    if( (err = ioctl(sock, SIOCSIFNETMASK, &ifr)) < 0) 
+    {
+        ERROR_MSG("ioctl(SIOCSIFNETMASK) set netmask failed");
         goto failure;
     }
 
@@ -129,12 +143,12 @@ static int tunnelAlloc(struct tunnel *tun)
     }
     
     // Set up SO_DONTROUTE for tunnel socket
-    if(setsockopt(sock, SOL_SOCKET, SO_DONTROUTE, tun->name, IFNAMSIZ) < 0)
+    /*if(setsockopt(sock, SOL_SOCKET, SO_DONTROUTE, tun->name, IFNAMSIZ) < 0)
     {
         ERROR_MSG("setsockopt(SO_DONTROUTE) on tunnel device failed");
         close(sock);
         return FAILURE;
-    }
+    }*/
 
     close(sock);
     return fd;
@@ -208,7 +222,7 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
 
     //tun = (struct tunnel *)malloc(sizeof(struct tunnel));
 
-    if((tun->tunnelfd = tunnelAlloc(tun)) < 0) 
+    if((tun->tunnelfd = tunnelAlloc(tun, netmask)) < 0) 
     {
         ERROR_MSG("tunnelAlloc failed");
         return FAILURE;
@@ -218,12 +232,17 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
     {
         ERROR_MSG("ioctl(TUNSETNOCSUM) failed");
         return FAILURE;
-    } 
+    }
 
+    if(add_route(ip, 0, netmask, tun->name) < 0)
+    {
+        ERROR_MSG("Could not add route for tunnel traffic");
+        return FAILURE;
+    }
     return SUCCESS;
 } // End function tunnelCreate()
 
-int add_tunnel_header(uint8_t flags, char *orig_packet, int size, char *dst_packet, uint16_t node_id, struct interface *src_ife)
+int add_tunnel_header(uint8_t flags, char *orig_packet, int size, char *dst_packet, uint16_t node_id, uint16_t link_id)
 {
     // Getting a sequence number should be done as close to sending as possible
     struct tunhdr tun_hdr;
@@ -236,7 +255,7 @@ int add_tunnel_header(uint8_t flags, char *orig_packet, int size, char *dst_pack
     tun_hdr.seq = 0;//htonl(*pseq_num);
     //tun_hdr.client_id = 0; // TODO: Add a client ID.
     tun_hdr.node_id = htons(node_id);
-    tun_hdr.link_id = htons(src_ife->index);
+    tun_hdr.link_id = htons(link_id);
     //tun_hdr.local_seq_no = htons(src_ife->local_seq_no_out++);
 
     //fillTunnelTimestamps(&tun_hdr, src_ife);

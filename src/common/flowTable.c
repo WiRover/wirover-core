@@ -11,6 +11,7 @@
 
 #include "flowTable.h"
 #include "uthash.h"
+#include "tunnel.h"
 #include "policyTable.h"
 
 #define TIME_BUFFER_SIZE 1024
@@ -87,10 +88,11 @@ void expiration_time_check() {
 }
 
 //Updates an entry and expires old entries in the flow table
-int update_flow_table(struct flow_tuple *tuple, struct interface *ife) {
-    struct flow_entry *ftd = get_flow_entry(tuple);
+int update_flow_entry(struct flow_entry *fe, uint16_t node_id, uint16_t link_id) {
 
-    ftd->count++;
+    fe->count++;
+    fe->node_id = node_id;
+    fe->link_id = link_id;
 
     if(last_expiration_check == 0) {
         last_expiration_check = time(NULL);

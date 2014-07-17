@@ -17,6 +17,10 @@
 #include "selectInterface.h"
 #include "sockets.h"
 #include "tunnel.h"
+#ifdef CONTROLLER
+#include "gateway.h"
+#include "ping.h"
+#endif
 
 #ifndef SIOCGSTAMP
 # define SIOCGSTAMP 0x8906
@@ -33,7 +37,6 @@ static int                  running = 0;
 static pthread_t            data_thread;
 static int                  data_socket = -1;
 struct tunnel *tun;
-static struct rwlock        datapath_lock = RWLOCK_INITIALIZER;
 
 int start_data_thread(struct tunnel *tun_in)
 {
@@ -163,6 +166,11 @@ int handleInboundPacket(int tunfd, int data_socket)
     unsigned int h_seq_no = ntohl(n_tun_hdr.seq);
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
+    //DEBUG_MSG("Tunflags %x, ping flag %x anded %x", n_tun_hdr.flags, TUNFLAG_PING);
+    if((n_tun_hdr.flags & TUNFLAG_PING) != 0){
+        DEBUG_MSG("Ping from node_id: %d, linkid: %d",node_id, link_id);
+        handle_incoming_ping(&buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
+    }
     DEBUG_MSG("Received node_id: %d, linkid: %d",node_id, link_id);
     if(addSeqNum(packet_buffer, h_seq_no) == NOT_ADDED) {
         return SUCCESS;
@@ -190,7 +198,6 @@ int handleInboundPacket(int tunfd, int data_socket)
     unsigned short tun_info[2];
     tun_info[0] = 0; //flags
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
-
     memcpy(&buffer[sizeof(struct tunhdr) - TUNTAP_OFFSET], tun_info, TUNTAP_OFFSET);
 
 
@@ -240,23 +247,35 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         }
         //Add a tunnel header to the packet
         if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
-            struct interface *src_ife;
-            struct interface *dst_ife;
             int node_id;
+            int link_id;
+            int sockfd;
+            struct interface *dst_ife;
 #ifdef CONTROLLER
+            link_id = ftd->link_id;
+            node_id = ftd->node_id;
+            struct gateway *gw;
+            gw = lookup_gateway_by_id(node_id);
+            if(gw == NULL) {
+                DEBUG_MSG("Dropping packet destined for unknown gateway");
+                return SUCCESS;
+            }
+            find_interface_by_index(gw->head_interface, link_id);
+            DEBUG_MSG("Oubtound packet for link %d IP: %s", link_id);
 #endif
 #ifdef GATEWAY
-            obtain_read_lock(&datapath_lock);
             dst_ife = get_controller_ife();
             node_id = get_unique_id();
-            release_read_lock(&datapath_lock);
 
             obtain_read_lock(&interface_list_lock);
             src_ife = interface_list;
+            link_id = src_ife->index;
+            sockfd = src_ife->sockfd;
+            udpate_flow_table(ftd, node_id, link_id);
             release_read_lock(&interface_list_lock);
 
 #endif
-            return sendPacket(TUNFLAG_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife, 0);
+            return sendPacket(TUNFLAG_DATA, orig_packet, orig_size, node_id, link_id, sockfd, dst_ife, 0);
         }
     }
 

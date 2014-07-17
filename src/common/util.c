@@ -34,11 +34,16 @@ int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device)
     netmask_dst->s_addr = netmask;
 
     if(gateway) {
+        DEBUG_MSG("Using gateway");
         rt.rt_flags |= RTF_GATEWAY;
 
         rt.rt_gateway.sa_family = AF_INET;
         struct in_addr *gw_dst = &((struct sockaddr_in *)&rt.rt_gateway)->sin_addr;
         gw_dst->s_addr = gateway;
+    }
+    else{
+        DEBUG_MSG("Adding host route");
+        rt.rt_flags |= RTF_HOST;
     }
 
     if(device) {

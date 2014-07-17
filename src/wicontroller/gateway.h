@@ -7,6 +7,7 @@
 
 #include "ipaddr.h"
 #include "uthash.h"
+#include "config.h"
 
 struct interface;
 

@@ -11,6 +11,7 @@
 
 #include "uthash.h"
 #include "interface.h"
+#include "tunnel.h"
 
 #define SUCCESS 0
 #define DUPLICATE_ENTRY 1
@@ -22,7 +23,8 @@ struct flow_entry {
     struct flow_tuple *id;
     time_t last_visit_time;
     UT_hash_handle hh;
-    struct interface *ife;
+    uint16_t node_id;
+    uint16_t link_id;
     int count;
     uint32_t action;
     int32_t type;
@@ -42,7 +44,7 @@ int fill_flow_tuple(struct iphdr*, struct tcphdr*, struct flow_tuple*);
 
 struct flow_entry *get_flow_entry(struct flow_tuple *);
 
-int update_flow_table(struct flow_tuple *tuple, struct interface *ife);
+int update_flow_entry(struct flow_entry *fe, uint16_t node_id, uint16_t link_id);
 
 int set_flow_table_timeout(int);
 

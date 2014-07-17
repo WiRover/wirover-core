@@ -28,7 +28,6 @@
 #include "utlist.h"
 
 static void* ping_thread_func(void* arg);
-static int handle_incoming(int sockfd);
 static int ping_request_valid(char *buffer, int len);
 static int send_response(int sockfd, const struct gateway *gw,
         unsigned char type, const char *buffer, 
@@ -100,25 +99,25 @@ void* ping_thread_func(void* arg)
     // We never want reads to hold up the thread.
     set_nonblock(sockfd, NONBLOCKING);
 
-    int timeout_sec = (link_timeout < node_timeout) ? 
-        link_timeout : node_timeout;
+    /*int timeout_sec = (link_timeout < node_timeout) ? 
+        link_timeout : node_timeout;*/
 
     while(1) {
-        struct timeval timeout;
-        timeout.tv_sec = timeout_sec;
-        timeout.tv_usec = 0;
+        //struct timeval timeout;
+        //timeout.tv_sec = timeout_sec;
+        //timeout.tv_usec = 0;
 
-        fd_set read_set;
-        FD_ZERO(&read_set);
-        FD_SET(sockfd, &read_set);
+        //fd_set read_set;
+        //FD_ZERO(&read_set);
+        //FD_SET(sockfd, &read_set);
 
-        int result = select(sockfd+1, &read_set, 0, 0, &timeout);
-        if(result > 0 && FD_ISSET(sockfd, &read_set)) {
-            // Most likely we have an incoming ping request.
-            handle_incoming(sockfd);
-        } else if(result < 0) {
-            ERROR_MSG("select failed for ping socket (%d)", sockfd);
-        }
+        //int result = select(sockfd+1, &read_set, 0, 0, &timeout);
+        //if(result > 0 && FD_ISSET(sockfd, &read_set)) {
+        //    // Most likely we have an incoming ping request.
+        //    handle_incoming(sockfd);
+        //} else if(result < 0) {
+        //    ERROR_MSG("select failed for ping socket (%d)", sockfd);
+        //}
 
         remove_stale_links(link_timeout, node_timeout);
     }
@@ -128,19 +127,11 @@ void* ping_thread_func(void* arg)
     return 0;
 }
 
-static int handle_incoming(int sockfd)
+int handle_incoming_ping(char *buffer, int bytes_recvd)
 {
     struct sockaddr_storage from;
     socklen_t from_len = sizeof(from);
-    char buffer[MAX_PING_PACKET_SIZE];
     struct timeval recv_time;
-
-    int bytes_recvd = recvfrom(sockfd, buffer, sizeof(buffer), 0,
-            (struct sockaddr*)&from, &from_len);
-    if(bytes_recvd < 0) {
-        ERROR_MSG("recvfrom failed (socket %d)", sockfd);
-        return -1;
-    }
     
     int valid = ping_request_valid(buffer, bytes_recvd);
     if(valid != PING_ERR_OK) {
@@ -157,10 +148,10 @@ static int handle_incoming(int sockfd)
             error_responses = 0;
 
         if(error_responses < ERROR_RESPONSE_LIMIT) {
-            if(send_response(sockfd, 0, PING_RESPONSE_ERROR, buffer, 
+            /*if(send_response(sockfd, 0, PING_RESPONSE_ERROR, buffer, 
                         bytes_recvd, (struct sockaddr *)&from, from_len) < 0) {
                 ERROR_MSG("Failed to send error response");
-            }
+            }*/
 
             error_responses++;
             last_error_response = now;
@@ -169,8 +160,7 @@ static int handle_incoming(int sockfd)
         return 0;
     }
 
-    const struct ping_packet *ping = (struct ping_packet *)
-        (buffer + sizeof(struct tunhdr));
+    const struct ping_packet *ping = (struct ping_packet *)(buffer);
     unsigned short node_id = ntohs(ping->src_id);
     struct gateway *gw = 0;
     if(node_id != 0)
@@ -178,11 +168,11 @@ static int handle_incoming(int sockfd)
 
     switch(PING_TYPE(ping->type)) {
         case PING_REQUEST:
-            if(send_response(sockfd, gw, PING_RESPONSE, buffer, bytes_recvd, 
+            /*if(send_response(sockfd, gw, PING_RESPONSE, buffer, bytes_recvd, 
                         (struct sockaddr *)&from, from_len) < 0) {
                 ERROR_MSG("Failed to send ping response");
                 return 0;
-            }
+            }*/
 
             process_ping_request(buffer, bytes_recvd, 
                     (struct sockaddr *)&from, from_len);
@@ -191,10 +181,10 @@ static int handle_incoming(int sockfd)
         case PING_SECOND_RESPONSE:
             // The receive timestamp recorded by the kernel will be more accurate
             // than if we call gettimeofday() at this point.
-            if(ioctl(sockfd, SIOCGSTAMP, &recv_time) == -1) {
+            /*if(ioctl(sockfd, SIOCGSTAMP, &recv_time) == -1) {
                 DEBUG_MSG("ioctl SIOCGSTAMP failed");
                 gettimeofday(&recv_time, 0);
-            }
+            }*/
                     
             process_ping_response(buffer, bytes_recvd,
                     (struct sockaddr *)&from, from_len, &recv_time);
@@ -223,13 +213,8 @@ static int ping_request_valid(char *buffer, int len)
     if(len < MIN_PING_PACKET_SIZE)
         return PING_ERR_TOO_SHORT;
 
-    const struct tunhdr *tunhdr = (struct tunhdr *)buffer;
-    if(!(tunhdr->flags & TUNFLAG_PING))
-        return PING_ERR_NOT_PING;
-
-    struct ping_packet *ping = (struct ping_packet *)
-        (buffer + sizeof(struct tunhdr));
-
+    struct ping_packet *ping = (struct ping_packet *)(buffer);
+    DEBUG_MSG("Ping type %x, buffer location %x", ping->type, buffer[-4]);
     switch(PING_TYPE(ping->type)) {
         case PING_REQUEST:
         case PING_SECOND_RESPONSE:
@@ -247,8 +232,8 @@ static int ping_request_valid(char *buffer, int len)
     struct gateway *gw = lookup_gateway_by_id(node_id);
 
     if(gw) {
-        if(verify_ping_sender(ping, buffer + sizeof(struct tunhdr), 
-                    len - sizeof(struct tunhdr), gw->private_key) == 0) {
+        if(verify_ping_sender(ping, buffer, 
+                    len, gw->private_key) == 0) {
             unsigned link_id = ntohl(ping->link_id);
 
             struct interface *ife = 
