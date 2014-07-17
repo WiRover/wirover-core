@@ -141,11 +141,11 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
 
     switch(PING_TYPE(ping->type)) {
         case PING_REQUEST:
-            /*if(send_response(sockfd, gw, PING_RESPONSE, buffer, bytes_recvd, 
-                        (struct sockaddr *)&from, from_len) < 0) {
+            if(send_response(sockfd, gw, PING_RESPONSE, buffer, bytes_recvd, 
+                        from_addr, from_len) < 0) {
                 ERROR_MSG("Failed to send ping response");
                 return 0;
-            }*/
+            }
 
             process_ping_request(buffer, bytes_recvd, 
                     (struct sockaddr *)&from_addr, from_len);

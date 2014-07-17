@@ -196,8 +196,12 @@ int handleInboundPacket(int tunfd, int data_socket)
     struct tcphdr   *tcp_hdr = (struct tcphdr *)(buffer + sizeof(struct tunhdr) + (ip_hdr->ihl * 4));
 
     // Policy and Flow table
-    fill_flow_tuple(ip_hdr, tcp_hdr, ft);
+    fill_flow_tuple(ip_hdr, tcp_hdr, ft, 1);
     struct flow_entry *ftd = get_flow_entry(ft);
+
+#ifdef CONTROLLER
+    update_flow_entry(ftd, node_id, link_id);
+#endif
 
 
     unsigned short tun_info[2];
@@ -235,7 +239,7 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         struct tcphdr   *tcp_hdr = (struct tcphdr *)(orig_packet + TUNTAP_OFFSET + (ip_hdr->ihl * 4));
 
         // Policy and Flow table
-        fill_flow_tuple(ip_hdr, tcp_hdr, ft);
+        fill_flow_tuple(ip_hdr, tcp_hdr, ft, 0);
 
         struct flow_entry *ftd = get_flow_entry(ft);
         free(ft);
@@ -263,10 +267,12 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
             gw = lookup_gateway_by_id(node_id);
             if(gw == NULL) {
                 DEBUG_MSG("Dropping packet destined for unknown gateway");
+                print_flow_table();
                 return SUCCESS;
             }
-            find_interface_by_index(gw->head_interface, link_id);
-            DEBUG_MSG("Oubtound packet for link %d IP: %s", link_id);
+            DEBUG_MSG("Oubtound packet for link %d", link_id);
+            dst_ife = find_interface_by_index(gw->head_interface, link_id);
+            sockfd = data_socket;
 #endif
 #ifdef GATEWAY
             dst_ife = get_controller_ife();
