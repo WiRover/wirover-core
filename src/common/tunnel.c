@@ -69,7 +69,7 @@ struct tunnel *getTunnel()
  *      Failure: -1
  *
  */
-static int tunnelAlloc(struct tunnel *tun, uint32_t netmask)
+static int tunnelAlloc(struct tunnel *tun, uint32_t netmask, int mtu)
 {
     struct sockaddr_in *addr = NULL;
     struct ifreq ifr;
@@ -109,14 +109,23 @@ static int tunnelAlloc(struct tunnel *tun, uint32_t netmask)
     }
 
     memset(&ifr, 0, sizeof(struct ifreq));
+
+    ifr.ifr_addr.sa_family = AF_INET;
+    strncpy(ifr.ifr_name, tun->name, sizeof(ifr.ifr_name));
+    ifr.ifr_mtu = mtu; 
+    
+    if( (err = ioctl(sock, SIOCSIFMTU, &ifr)) < 0) 
+    {
+        ERROR_MSG("ioctl(SIOCSIFADDR) set MTU failed");
+        goto failure;
+    }
+
     addr = (struct sockaddr_in *)&(ifr.ifr_addr);
     memset(addr, 0, sizeof(struct sockaddr_in));
     addr->sin_family = AF_INET;
     addr->sin_addr.s_addr = tun->n_private_ip;
     //addr->sin_addr.s_addr = inet_addr("192.168.1.2");
     //setTunLocalIP(tun->localIP);
-
-    
 
     strncpy(ifr.ifr_name, tun->name, IFNAMSIZ);
     if( (err = ioctl(sock, SIOCSIFADDR, &ifr)) < 0) 
@@ -222,7 +231,7 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
 
     //tun = (struct tunnel *)malloc(sizeof(struct tunnel));
 
-    if((tun->tunnelfd = tunnelAlloc(tun, netmask)) < 0) 
+    if((tun->tunnelfd = tunnelAlloc(tun, netmask, mtu)) < 0) 
     {
         ERROR_MSG("tunnelAlloc failed");
         return FAILURE;

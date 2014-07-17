@@ -37,9 +37,14 @@ static int                  running = 0;
 static pthread_t            data_thread;
 static int                  data_socket = -1;
 struct tunnel *tun;
+static unsigned int         tunnel_mtu = 0;
+static unsigned int         outbound_mtu = 0;
 
 int start_data_thread(struct tunnel *tun_in)
 {
+    //The mtu in the config file accounts for the tunhdr, but we have that extra space in here
+    tunnel_mtu = get_mtu();
+    outbound_mtu =  1500;
     tun = tun_in;
     if(running) {
         DEBUG_MSG("Data thread already running");
@@ -140,7 +145,7 @@ int handleInboundPacket(int tunfd, int data_socket)
 {
     struct  tunhdr n_tun_hdr;
     int     bufSize;
-    char    buffer[get_mtu()];
+    char    buffer[outbound_mtu];
 
     struct sockaddr_storage     from;
     unsigned    fromlen = sizeof(from);
@@ -223,9 +228,9 @@ int handleInboundPacket(int tunfd, int data_socket)
 int handleOutboundPacket(int tunfd, struct tunnel * tun) 
 {
     int orig_size;
-    char orig_packet[get_mtu()];
+    char orig_packet[tunnel_mtu];
 
-    if( (orig_size = read(tunfd, orig_packet, get_mtu())) < 0) 
+    if( (orig_size = read(tunfd, orig_packet, sizeof(orig_packet))) < 0) 
     {
         ERROR_MSG("read packet failed");
     } 
