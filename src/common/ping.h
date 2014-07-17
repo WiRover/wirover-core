@@ -81,9 +81,9 @@ struct interface;
 int ping_all_interfaces();
 int ping_interface(struct interface *ife);
 #endif
-#ifdef CONTROLLER
-int handle_incoming_ping(char *buffer, int size);
-#endif
+//This is defined differently for both the gateway and controller
+//It's called from the datapath when a packet comes in with the TUNFLAG_PING flag set
+int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv_time, char *buffer, int size);
 
 /*
  * Returns a 32-bit timestamp in microseconds.  This will wrap around once

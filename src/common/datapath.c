@@ -17,9 +17,9 @@
 #include "selectInterface.h"
 #include "sockets.h"
 #include "tunnel.h"
+#include "ping.h"
 #ifdef CONTROLLER
 #include "gateway.h"
-#include "ping.h"
 #endif
 
 #ifndef SIOCGSTAMP
@@ -138,6 +138,7 @@ int handlePackets()
 
 int handleInboundPacket(int tunfd, int data_socket) 
 {
+    DEBUG_MSG("Inbound packet");
     struct  tunhdr n_tun_hdr;
     int     bufSize;
     char    buffer[get_mtu()];
@@ -167,13 +168,12 @@ int handleInboundPacket(int tunfd, int data_socket)
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
     //DEBUG_MSG("Tunflags %x, ping flag %x anded %x", n_tun_hdr.flags, TUNFLAG_PING);
-#ifdef CONTROLLER
     if((n_tun_hdr.flags & TUNFLAG_PING) != 0){
         DEBUG_MSG("Ping from node_id: %d, linkid: %d",node_id, link_id);
-        handle_incoming_ping(&buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
+        handle_incoming_ping(&from, arrival_time, &buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
         return SUCCESS;
     }
-#endif
+
     DEBUG_MSG("Received node_id: %d, linkid: %d",node_id, link_id);
     if(addSeqNum(packet_buffer, h_seq_no) == NOT_ADDED) {
         return SUCCESS;

@@ -27,7 +27,6 @@
 
 static int send_ping(struct interface* ife);
 static void* ping_thread_func(void* arg);
-static int handle_incoming(int sockfd, int timeout);
 static int send_second_response(const struct interface *ife, 
         const char *buffer, int len, const struct sockaddr *to, socklen_t to_len);
 static void mark_inactive_interfaces(int ping_timeout);
@@ -274,20 +273,6 @@ void* ping_thread_func(void* arg)
 			// the next ping.
 			next_timeout = ping_spacing - time_diff;
 		}
-
-		fd_set read_set;
-		FD_ZERO(&read_set);
-		FD_SET(ping_socket, &read_set);
-
-		struct timeval timeout;
-		set_timeval_usec(next_timeout, &timeout);
-
-		int result = select(ping_socket+1, &read_set, 0, 0, &timeout);
-		if(result > 0 && FD_ISSET(ping_socket, &read_set)) {
-			handle_incoming(ping_socket, ping_interval);
-		} else if(result < 0) {
-			ERROR_MSG("select failed for ping socket (%d)", ping_socket);
-		}
 	}
 	
 	close(ping_socket);
@@ -302,33 +287,15 @@ void* ping_thread_func(void* arg)
  *
  * Locking: Assumes the calling thread does not have a lock on the interface list.
  */
-static int handle_incoming(int sockfd, int timeout)
+int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv_time, char *buffer, int size)
 {
     DEBUG_MSG("Handling incomming ping");
-    int bytes;
-    struct sockaddr_storage addr;
-    socklen_t addr_len = sizeof(addr);
-    char buffer[MAX_PING_PACKET_SIZE];
 
-    bytes = recvfrom(sockfd, buffer, sizeof(buffer), 0,
-            (struct sockaddr*)&addr, &addr_len);
-    if(bytes < 0) {
-        ERROR_MSG("recvfrom failed");
-        return -1;
-    } else if(bytes < MIN_PING_PACKET_SIZE) {
-        DEBUG_MSG("Incoming packet was too small (%d bytes)", bytes);
+    if(size < MIN_PING_PACKET_SIZE) {
+        DEBUG_MSG("Incoming packet was too small (%d bytes)", size);
     }
 
-    // The receive timestamp recorded by the kernel will be more accurate
-    // than if we call gettimeofday() at this point.
-    struct timeval recv_time;
-    if(ioctl(sockfd, SIOCGSTAMP, &recv_time) == -1) {
-        DEBUG_MSG("ioctl SIOCGSTAMP failed");
-        gettimeofday(&recv_time, 0);
-    }
-
-    struct ping_packet *pkt = (struct ping_packet *)
-            (buffer + sizeof(struct tunhdr));
+    struct ping_packet *pkt = (struct ping_packet *)(buffer);
 
     int notif_needed = 0;
 
@@ -353,8 +320,7 @@ static int handle_incoming(int sockfd, int timeout)
 
     if(iszero(pkt->digest, sizeof(pkt->digest))) {
         send_response = 0;
-    } else if(verify_ping_sender(pkt, buffer + sizeof(struct tunhdr), 
-                bytes - sizeof(struct tunhdr), private_key) != 0) {
+    } else if(verify_ping_sender(pkt, buffer, size, private_key) != 0) {
         DEBUG_MSG("SHA hash mismatch, ping packet discarded");
         return -1;
     }
@@ -368,8 +334,8 @@ static int handle_incoming(int sockfd, int timeout)
     }
     
     if(send_response) {
-        if(send_second_response(ife, buffer, bytes, 
-                    (struct sockaddr *)&addr, addr_len) < 0) {
+        if(send_second_response(ife, buffer, size, 
+                    (struct sockaddr *)&from_addr, sizeof(struct sockaddr)) < 0) {
             ERROR_MSG("send_second_response failed");
         }
     }
@@ -378,8 +344,8 @@ static int handle_incoming(int sockfd, int timeout)
     uint32_t recv_ts = timeval_to_usec(&recv_time);
     long diff = (long)recv_ts - (long)send_ts;
 
-    // If the ping response is older than timeout seconds, we just ignore it.
-    if(diff < (timeout * USEC_PER_SEC)) {
+    // If the ping response is older than the ping interval we ignore it.
+    if(diff < (get_ping_interval() * USEC_PER_SEC)) {
         ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
         if(ife->state == INIT_INACTIVE || ife->state == INACTIVE) {
             change_interface_state(ife, ACTIVE);
