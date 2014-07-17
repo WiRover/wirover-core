@@ -262,6 +262,6 @@ int add_tunnel_header(uint8_t flags, char *orig_packet, int size, char *dst_pack
 
     //memcpy(packet, &pktSeqNo, sizeof(pktSeqNo));
     memcpy(dst_packet, &tun_hdr, sizeof(struct tunhdr));
-    memcpy(&dst_packet[sizeof(struct tunhdr)], &orig_packet[TUNTAP_OFFSET], (size-TUNTAP_OFFSET));
-    return (size-TUNTAP_OFFSET) + sizeof(struct tunhdr);
+    memcpy(&dst_packet[sizeof(struct tunhdr)], orig_packet, size);
+    return (size) + sizeof(struct tunhdr);
 }

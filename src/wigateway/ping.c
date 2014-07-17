@@ -175,13 +175,13 @@ static int send_ping(struct interface* ife)
     pkt->sender_ts = htonl(timeval_to_usec(0));
     pkt->receiver_ts = 0;
 
-    fill_ping_digest(pkt, buffer + sizeof(struct tunhdr), 
-            send_size - sizeof(struct tunhdr), private_key);
+    fill_ping_digest(pkt, buffer, send_size, private_key);
     /*char *full_packet = (char *)malloc(get_mtu());
     send_size = add_tunnel_header(TUNFLAG_PING, buffer, sizeof(struct ping_packet) + sizeof(struct gps_payload), full_packet, get_unique_id(), ife);
-
+    
     int bytes = sendto(sockfd, buffer, send_size, 0, dest_addr, dest_len);*/
-    if(sendPacket(TUNFLAG_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife(), 0)) {
+
+    if(sendPacket(TUNFLAG_PING, buffer, send_size, get_unique_id(), ife->index, ife->sockfd, get_controller_ife(), 0)) {
         /* We get an error ENETUNREACH if we try pinging out an interface which
          * does not have an IP address.  That case is not interesting, so we
          * suppress the error message. */

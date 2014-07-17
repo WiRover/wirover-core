@@ -167,10 +167,13 @@ int handleInboundPacket(int tunfd, int data_socket)
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
     //DEBUG_MSG("Tunflags %x, ping flag %x anded %x", n_tun_hdr.flags, TUNFLAG_PING);
+#ifdef CONTROLLER
     if((n_tun_hdr.flags & TUNFLAG_PING) != 0){
         DEBUG_MSG("Ping from node_id: %d, linkid: %d",node_id, link_id);
         handle_incoming_ping(&buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
+        return SUCCESS;
     }
+#endif
     DEBUG_MSG("Received node_id: %d, linkid: %d",node_id, link_id);
     if(addSeqNum(packet_buffer, h_seq_no) == NOT_ADDED) {
         return SUCCESS;
@@ -268,14 +271,14 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
             node_id = get_unique_id();
 
             obtain_read_lock(&interface_list_lock);
-            src_ife = interface_list;
+            struct interface *src_ife = interface_list;
             link_id = src_ife->index;
             sockfd = src_ife->sockfd;
-            udpate_flow_table(ftd, node_id, link_id);
+            update_flow_entry(ftd, node_id, link_id);
             release_read_lock(&interface_list_lock);
 
 #endif
-            return sendPacket(TUNFLAG_DATA, orig_packet, orig_size, node_id, link_id, sockfd, dst_ife, 0);
+            return sendPacket(TUNFLAG_DATA, &orig_packet[TUNTAP_OFFSET], orig_size - TUNTAP_OFFSET, node_id, link_id, sockfd, dst_ife, 0);
         }
     }
 

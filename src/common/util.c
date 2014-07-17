@@ -41,7 +41,7 @@ int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device)
         struct in_addr *gw_dst = &((struct sockaddr_in *)&rt.rt_gateway)->sin_addr;
         gw_dst->s_addr = gateway;
     }
-    else{
+    else if(dest){
         DEBUG_MSG("Adding host route");
         rt.rt_flags |= RTF_HOST;
     }

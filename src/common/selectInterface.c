@@ -118,7 +118,7 @@ int sendPacket(uint8_t flags, char *packet, int size, uint16_t node_id, uint16_t
     }
     memset(dst, 0, sizeof(struct sockaddr_storage));
     build_data_sockaddr(dst_ife, dst);
-    char *new_packet = (char *)malloc(size + sizeof(struct tunhdr) - TUNTAP_OFFSET);
+    char *new_packet = (char *)malloc(size + sizeof(struct tunhdr));
     int new_size = add_tunnel_header(flags, packet, size, new_packet, node_id, link_id);
 
     if( (rtn = sendto(sockfd, new_packet, new_size, 0, (struct sockaddr *)dst, sizeof(struct sockaddr))) < 0)
