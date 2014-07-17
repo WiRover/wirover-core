@@ -28,7 +28,7 @@
 static int send_ping(struct interface* ife);
 static void* ping_thread_func(void* arg);
 static int send_second_response(const struct interface *ife, 
-        const char *buffer, int len, const struct sockaddr *to, socklen_t to_len);
+        const char *buffer, int len, struct sockaddr_storage *to, socklen_t to_len);
 static void mark_inactive_interfaces(int ping_timeout);
 
 static int          running = 0;
@@ -125,8 +125,6 @@ int ping_interface(struct interface* ife)
  */
 static int send_ping(struct interface* ife)
 {
-    int sockfd = ife->sockfd;
-
     char *buffer = malloc(MAX_PING_PACKET_SIZE);
     if(!buffer) {
         DEBUG_MSG("out of memory");
@@ -256,6 +254,8 @@ void* ping_thread_func(void* arg)
 			// the next ping.
 			next_timeout = ping_spacing - time_diff;
 		}
+        //TODO: This is implicitly defined because I can't use -D_BSD_SOURCE for that linux/if vs net/if issue
+        usleep(next_timeout);
 	}
 
 	running = 0;
@@ -310,10 +310,9 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
         DEBUG_MSG("Ping response for unknown interface %u", link_id);
         return 0;
     }
-    
     if(send_response) {
         if(send_second_response(ife, buffer, size, 
-                    (struct sockaddr *)&from_addr, sizeof(struct sockaddr)) < 0) {
+                    from_addr, sizeof(struct sockaddr)) < 0) {
             ERROR_MSG("send_second_response failed");
         }
     }
@@ -366,14 +365,9 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
  * Assumes the buffer is at least MIN_PING_PACKET_SIZE in length.
  */
 static int send_second_response(const struct interface *ife, 
-        const char *buffer, int len, const struct sockaddr *to, socklen_t to_len)
+        const char *buffer, int len, struct sockaddr_storage *to, socklen_t to_len)
 {
     assert(len >= MIN_PING_PACKET_SIZE);
-    DEBUG_MSG("Sending response");
-    int sockfd = udp_bind_open(get_data_port(), ife->name);
-    if(sockfd < 0) {
-        return -1;
-    }
 
     int send_size = MIN_PING_PACKET_SIZE + sizeof(struct passive_payload);
     char *response = malloc(send_size);
@@ -384,8 +378,7 @@ static int send_second_response(const struct interface *ife,
 
     memcpy(response, buffer, MIN_PING_PACKET_SIZE);
 
-    struct ping_packet *ping = (struct ping_packet *)
-            (response + sizeof(struct tunhdr));
+    struct ping_packet *ping = (struct ping_packet *)(response);
 
     ping->type = PING_SECOND_RESPONSE | PING_PASSIVE_PAYLOAD;
     ping->src_id = htons(get_unique_id());
@@ -398,20 +391,16 @@ static int send_second_response(const struct interface *ife,
         send_size = MIN_PING_PACKET_SIZE;
     }
     
-    fill_ping_digest(ping, response + sizeof(struct tunhdr), 
-            send_size - sizeof(struct tunhdr), private_key);
-    
-    int result = sendto(sockfd, response, send_size, 0, to, to_len);
+    fill_ping_digest(ping, response, send_size, private_key);
+    int result = sendPacket(TUNFLAG_PING, response, send_size, get_unique_id(), ife->index, ife->sockfd, to, 0);
+    //int result = sendto(sockfd, response, send_size, 0, to, to_len);
 
     free(response);
 
     if(result < 0) {
         ERROR_MSG("sendto failed");
-        close(sockfd);
         return -1;
     }
-
-    close(sockfd);
     return 0;
 }
 
