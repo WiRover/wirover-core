@@ -228,7 +228,8 @@ int handleInboundPacket(int tunfd, int data_socket)
 int handleOutboundPacket(int tunfd, struct tunnel * tun) 
 {
     int orig_size;
-    char orig_packet[tunnel_mtu];
+    //Leave room for the TUNTAP header
+    char orig_packet[tunnel_mtu + TUNTAP_OFFSET];
 
     if( (orig_size = read(tunfd, orig_packet, sizeof(orig_packet))) < 0) 
     {
@@ -291,6 +292,7 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
 #endif
             struct sockaddr_storage dst;
             build_data_sockaddr(dst_ife, &dst);
+            DEBUG_MSG("Size of packet being sent %d", orig_size - TUNTAP_OFFSET);
             return sendPacket(TUNFLAG_DATA, &orig_packet[TUNTAP_OFFSET], orig_size - TUNTAP_OFFSET, node_id, link_id, sockfd, &dst, 0);
         }
     }
