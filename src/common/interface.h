@@ -22,45 +22,48 @@ enum if_state {
 #define IFFLAG_SOURCE_VERIFIED 0x00000001
 
 struct interface {
-    int               index; //interface index assigned by kernel
-    char              name[IFNAMSIZ];
-    char              network[NETWORK_NAME_LENGTH];
-    enum if_state     state;
-    int               priority;
-	int               num_ping_failures;
+    int                 index; //interface index assigned by kernel
+    char                name[IFNAMSIZ];
+    char                network[NETWORK_NAME_LENGTH];
+    enum if_state       state;
+    int                 priority;
+	int                 num_ping_failures;
+    int                 tx_seq;
+    int                 rx_seq;
+    time_t              rx_time;
 
-    int     flags;
+    int                 flags;
 
     /* These are in network byte order. */
-    struct in_addr    public_ip;
-    uint16_t          data_port;
-    uint16_t          control_port;
+    struct in_addr      public_ip;
+    uint16_t            data_port;
+    uint16_t            control_port;
 
-    time_t  ping_interval;
-    time_t  ping_timeout;
+    time_t              ping_interval;
+    time_t              ping_timeout;
 
-    time_t  last_ping_time;
-    time_t  last_ping_success;
-    int     pings_outstanding;
+    time_t              last_ping_time;
+    time_t              last_ping_success;
+    int                 pings_outstanding;
 
-    time_t  next_ping_time;
-    time_t  next_ping_timeout;
+    time_t              next_ping_time;
+    time_t              next_ping_timeout;
 
-    uint32_t    next_ping_seq_no;
-    uint32_t    last_ping_seq_no;
+    uint32_t            next_ping_seq_no;
+    uint32_t            last_ping_seq_no;
 
     unsigned int        packets;
     unsigned int        packets_lost;
     unsigned int        out_of_order_packets;
 
-    double avg_rtt;
-    double avg_downlink_bw;
-    double avg_uplink_bw;
-    int               sockfd;
+    double              avg_rtt;
+    double              avg_downlink_bw;
+    double              avg_uplink_bw;
+    int                 sockfd;
 
 
     // default gateway for routing if needed
-    struct in_addr    gateway_ip;
+    struct in_addr      gateway_ip;
 
 #ifdef CONTROLLER
     struct timeval last_passive;

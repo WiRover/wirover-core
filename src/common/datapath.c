@@ -29,7 +29,7 @@
 
 static struct buffer_storage *packet_buffer[PACKET_BUFFER_SIZE];
 
-int handleInboundPacket(int tunfd, int data_socket);
+int handleInboundPacket(int tunfd, struct interface *ife);
 int handleOutboundPacket(int tunfd, struct tunnel *tun);
 int handlePackets();
 
@@ -89,7 +89,9 @@ int handlePackets()
     while( 1 )
     {
         FD_ZERO(&read_set);
+#ifdef CONTROLLER
         FD_SET(data_socket, &read_set);
+#endif
         FD_SET(tun->tunnelfd, &read_set);
 #ifdef GATEWAY        
         obtain_read_lock(&interface_list_lock);
@@ -114,18 +116,19 @@ int handlePackets()
             DEBUG_MSG("select() failed");
             continue;
         }
-
+#ifdef CONTROLLER
         if( FD_ISSET(data_socket, &read_set) ) 
         {
             handleInboundPacket(tun->tunnelfd, data_socket);
         }
+#endif
 #ifdef GATEWAY        
         obtain_read_lock(&interface_list_lock);
         curr_ife = interface_list;
         while (curr_ife) {
             if( FD_ISSET(curr_ife->sockfd, &read_set) ) 
             {
-                handleInboundPacket(tun->tunnelfd, curr_ife->sockfd);
+                handleInboundPacket(tun->tunnelfd, curr_ife);
             }
             curr_ife = curr_ife->next;
         }
@@ -141,7 +144,7 @@ int handlePackets()
     return SUCCESS;
 } // End function int handlePackets()
 
-int handleInboundPacket(int tunfd, int data_socket) 
+int handleInboundPacket(int tunfd, struct interface *ife) 
 {
     struct  tunhdr n_tun_hdr;
     int     bufSize;
@@ -150,7 +153,7 @@ int handleInboundPacket(int tunfd, int data_socket)
     struct sockaddr_storage     from;
     unsigned    fromlen = sizeof(from);
 
-    bufSize = recvfrom(data_socket, buffer, sizeof(buffer), 0, 
+    bufSize = recvfrom(ife->sockfd, buffer, sizeof(buffer), 0, 
         (struct sockaddr *)&from, &fromlen);
     if(bufSize < 0) {
         ERROR_MSG("recvfrom() failed");
@@ -160,10 +163,11 @@ int handleInboundPacket(int tunfd, int data_socket)
     
 
     struct timeval arrival_time;
-    if(ioctl(data_socket, SIOCGSTAMP, &arrival_time) == -1) {
+    if(ioctl(ife->sockfd, SIOCGSTAMP, &arrival_time) == -1) {
         ERROR_MSG("ioctl SIOCGSTAMP failed");
         gettimeofday(&arrival_time, 0);
     }
+    ife->rx_time = arrival_time.tv_sec * USEC_PER_SEC + arrival_time.tv_usec;
 
     // Get the tunhdr (should be the first n bytes in the packet)
     // store network format in temporary struct
@@ -173,9 +177,9 @@ int handleInboundPacket(int tunfd, int data_socket)
     unsigned int h_seq_no = ntohl(n_tun_hdr.seq);
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
-    //DEBUG_MSG("Tunflags %x, ping flag %x anded %x", n_tun_hdr.flags, TUNFLAG_PING);
+
     if((n_tun_hdr.flags & TUNFLAG_PING) != 0){
-        handle_incoming_ping(&from, arrival_time, data_socket, &buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
+        handle_incoming_ping(&from, arrival_time, ife->sockfd, &buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
         return SUCCESS;
     }
 
@@ -229,18 +233,21 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
 {
     int orig_size;
     //Leave room for the TUNTAP header
-    char orig_packet[tunnel_mtu + TUNTAP_OFFSET];
-
-    if( (orig_size = read(tunfd, orig_packet, sizeof(orig_packet))) < 0) 
+    char *orig_packet;
+    char buffer[tunnel_mtu + TUNTAP_OFFSET];
+    if( (orig_size = read(tunfd, buffer, sizeof(buffer))) < 0) 
     {
         ERROR_MSG("read packet failed");
     } 
     else 
     {
+        //Ignore the tuntap header
+        orig_packet = &buffer[TUNTAP_OFFSET];
+        orig_size -= TUNTAP_OFFSET;
 
         struct flow_tuple *ft = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
-        struct iphdr    *ip_hdr = (struct iphdr *)(orig_packet + TUNTAP_OFFSET);
-        struct tcphdr   *tcp_hdr = (struct tcphdr *)(orig_packet + TUNTAP_OFFSET + (ip_hdr->ihl * 4));
+        struct iphdr    *ip_hdr = (struct iphdr *)(orig_packet);
+        struct tcphdr   *tcp_hdr = (struct tcphdr *)(orig_packet + (ip_hdr->ihl * 4));
 
         // Policy and Flow table
         fill_flow_tuple(ip_hdr, tcp_hdr, ft, 0);
@@ -261,9 +268,8 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         //Add a tunnel header to the packet
         if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
             int node_id;
-            int link_id;
-            int sockfd;
             struct interface *dst_ife;
+            struct interface *src_ife;
 #ifdef CONTROLLER
             link_id = ftd->link_id;
             node_id = ftd->node_id;
@@ -271,10 +277,8 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
             gw = lookup_gateway_by_id(node_id);
             if(gw == NULL) {
                 DEBUG_MSG("Dropping packet destined for unknown gateway");
-                print_flow_table();
                 return SUCCESS;
             }
-            DEBUG_MSG("Oubtound packet for link %d", link_id);
             dst_ife = find_interface_by_index(gw->head_interface, link_id);
             sockfd = data_socket;
 #endif
@@ -283,17 +287,13 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
             node_id = get_unique_id();
 
             obtain_read_lock(&interface_list_lock);
-            struct interface *src_ife = interface_list;
-            link_id = src_ife->index;
-            sockfd = src_ife->sockfd;
-            update_flow_entry(ftd, node_id, link_id);
+            src_ife = interface_list;
+            update_flow_entry(ftd, node_id, src_ife->index);
             release_read_lock(&interface_list_lock);
 
 #endif
-            struct sockaddr_storage dst;
-            build_data_sockaddr(dst_ife, &dst);
-            DEBUG_MSG("Size of packet being sent %d", orig_size - TUNTAP_OFFSET);
-            return sendPacket(TUNFLAG_DATA, &orig_packet[TUNTAP_OFFSET], orig_size - TUNTAP_OFFSET, node_id, link_id, sockfd, &dst, 0);
+
+            return sendPacket(TUNFLAG_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
         }
     }
 

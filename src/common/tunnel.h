@@ -18,20 +18,18 @@
 #define TUNFLAG_PING  0x10
 
 struct tunhdr {
-    __u8    flags;
-    __u8    version;
-    __u8    header_len;
-    __u8    __pad0;
+    __u8        flags;
+    __u8        version;
+    __be16      header_len;
 
-    __be32  seq;
-    __be32  path_ack;
+    __be32      seq;
+    uint16_t    link_id;
+    uint16_t    node_id;
+    __be32      path_ack;
 
-    __be32  send_ts;
-    __be32  recv_ts;
+    __be32      send_ts;
+    __be32      recv_ts;
 
-    uint16_t   link_id;
-    uint16_t   node_id;
-    uint16_t   __pad1;
 } __attribute__((__packed__));
 
 struct tunnel {
@@ -53,7 +51,7 @@ void   dumpTunHdr(struct tunhdr *tun_hdr);
 void   dumpNetworkTunHdr(struct tunhdr *tun_hdr);
 int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu);
 struct tunnel *getTunnel();
-int add_tunnel_header(uint8_t flags, char *orig_packet, int size, char *dst_packet, uint16_t node_id, uint16_t);
+int add_tunnel_header(uint8_t flags, char *orig_packet, int size, char *dst_packet, uint16_t node_id, struct interface *src_ife);
 
 #endif //TUNNEL_H
 

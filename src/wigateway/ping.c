@@ -27,8 +27,8 @@
 
 static int send_ping(struct interface* ife);
 static void* ping_thread_func(void* arg);
-static int send_second_response(const struct interface *ife, 
-        const char *buffer, int len, struct sockaddr_storage *to, socklen_t to_len);
+static int send_second_response(struct interface *ife, 
+        const char *buffer, int len, struct interface *dst_ife);
 static void mark_inactive_interfaces(int ping_timeout);
 
 static int          running = 0;
@@ -158,13 +158,8 @@ static int send_ping(struct interface* ife)
     pkt->receiver_ts = 0;
 
     fill_ping_digest(pkt, buffer, send_size, private_key);
-    /*char *full_packet = (char *)malloc(get_mtu());
-    send_size = add_tunnel_header(TUNFLAG_PING, buffer, sizeof(struct ping_packet) + sizeof(struct gps_payload), full_packet, get_unique_id(), ife);
-    
-    int bytes = sendto(sockfd, buffer, send_size, 0, dest_addr, dest_len);*/
-    struct sockaddr_storage dst;
-    build_data_sockaddr(get_controller_ife(), &dst);
-    if(sendPacket(TUNFLAG_PING, buffer, send_size, get_unique_id(), ife->index, ife->sockfd, &dst, 0)) {
+
+    if(sendPacket(TUNFLAG_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife())) {
         /* We get an error ENETUNREACH if we try pinging out an interface which
          * does not have an IP address.  That case is not interesting, so we
          * suppress the error message. */
@@ -311,8 +306,7 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
         return 0;
     }
     if(send_response) {
-        if(send_second_response(ife, buffer, size, 
-                    from_addr, sizeof(struct sockaddr)) < 0) {
+        if(send_second_response(ife, buffer, size, get_controller_ife()) < 0) {
             ERROR_MSG("send_second_response failed");
         }
     }
@@ -364,8 +358,8 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
  *
  * Assumes the buffer is at least MIN_PING_PACKET_SIZE in length.
  */
-static int send_second_response(const struct interface *ife, 
-        const char *buffer, int len, struct sockaddr_storage *to, socklen_t to_len)
+static int send_second_response(struct interface *ife, 
+        const char *buffer, int len, struct interface *dst_ife)
 {
     assert(len >= MIN_PING_PACKET_SIZE);
 
@@ -392,7 +386,7 @@ static int send_second_response(const struct interface *ife,
     }
     
     fill_ping_digest(ping, response, send_size, private_key);
-    int result = sendPacket(TUNFLAG_PING, response, send_size, get_unique_id(), ife->index, ife->sockfd, to, 0);
+    int result = sendPacket(TUNFLAG_PING, response, send_size, get_unique_id(), ife, dst_ife);
     //int result = sendto(sockfd, response, send_size, 0, to, to_len);
 
     free(response);
