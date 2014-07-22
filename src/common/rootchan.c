@@ -14,6 +14,7 @@
 #include "interface.h"
 #include "netlink.h"
 #include "pathperf.h"
+#include "remote_node.h"
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
@@ -204,12 +205,15 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
 
         memcpy(lease->cinfo, response.cinfo, copy_size);
         for(int i = 0; i < lease->controllers; i++){
-            struct interface *cont_ife = (struct interface *)malloc(sizeof(struct interface));
-            memset(cont_ife, 0, sizeof(struct interface));
+            struct interface *cont_ife = alloc_interface();
             ipaddr_to_ipv4(&lease->cinfo[i].pub_ip, &cont_ife->public_ip.s_addr);
             cont_ife->data_port = lease->cinfo[i].data_port;
             cont_ife->control_port = lease->cinfo[i].control_port;
-            lease->cinfo[i].ife = cont_ife;
+
+            struct remote_node *node = alloc_remote_node();
+            node->head_interface = cont_ife;
+            node->unique_id = lease->cinfo[i].unique_id;
+            add_remote_node(node);
         }
     }
     
@@ -416,8 +420,9 @@ int get_controller_privip(char *dest, int dest_len)
 
 struct interface *get_controller_ife()
 {
-    if(latest_lease.controllers > 0) {
-        return latest_lease.cinfo[0].ife;
+    if(remote_node_id_hash != 0) {
+        DEBUG_MSG("Controller ife is %d:%d",remote_node_id_hash->unique_id, remote_node_id_hash->head_interface->index);
+        return remote_node_id_hash->head_interface;
     } else {
         return NULL;
     }

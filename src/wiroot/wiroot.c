@@ -260,6 +260,7 @@ static void handle_gateway_config(struct client* client, const char* packet, int
                 copy_ipaddr(&controller_list[i]->pub_ip, &response.cinfo[i].pub_ip);
                 response.cinfo[i].data_port = controller_list[i]->data_port;
                 response.cinfo[i].control_port = controller_list[i]->control_port;
+                response.cinfo[i].unique_id = controller_list[i]->unique_id;
             }
 
             copy_ipaddr(&lease->ip, &response.priv_ip);
@@ -365,7 +366,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
                     return;
             }
 
-            add_controller(&lease->ip, &ctrl_ip, ctrlreg->data_port, ctrlreg->control_port,
+            add_controller(unique_id, &lease->ip, &ctrl_ip, ctrlreg->data_port, ctrlreg->control_port,
                     ctrlreg->latitude, ctrlreg->longitude);
 
             char p_ip[INET6_ADDRSTRLEN];

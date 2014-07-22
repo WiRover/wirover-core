@@ -21,7 +21,7 @@ struct controller_info {
     ipaddr_t          pub_ip;
     uint16_t          data_port;
     uint16_t          control_port;
-    struct interface *ife;
+    uint16_t          unique_id;
 } __attribute__((__packed__));
 
 struct rchan_response {

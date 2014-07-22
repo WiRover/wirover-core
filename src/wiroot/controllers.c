@@ -11,7 +11,7 @@ static struct controller*    controllers_ip_hash = 0;
  *
  * Adds a controller to list of available controllers.
  */
-void add_controller(const ipaddr_t* priv_ip, const ipaddr_t* pub_ip, 
+void add_controller(uint16_t unique_id, const ipaddr_t* priv_ip, const ipaddr_t* pub_ip, 
         uint16_t data_port, uint16_t control_port, double latitude, double longitude)
 {
     struct controller* controller;
@@ -34,7 +34,8 @@ void add_controller(const ipaddr_t* priv_ip, const ipaddr_t* pub_ip,
     controller->control_port = control_port;
     controller->latitude = latitude;
     controller->longitude = longitude;
-
+    controller->unique_id = unique_id;
+    DEBUG_MSG("Adding controller with unique id %d",unique_id);
     if(is_new) {
         HASH_ADD(hh_ip, controllers_ip_hash, priv_ip, sizeof(*priv_ip), controller);
     }
