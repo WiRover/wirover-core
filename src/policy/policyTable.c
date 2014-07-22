@@ -3,7 +3,7 @@
 #include <string.h>
 
 #include "policyTable.h"
-#include "flowTable.h"
+#include "flow_table.h"
 #include "debug.h"
 
 int insertPolicy(char *tbl_name, struct policy_entry *pr) {
@@ -140,6 +140,6 @@ int getMatch(struct flow_tuple *ft, struct policy_entry *pd, int dir) {
 DEFAULT:
     pd->type = 0;
     pd->action = POLICY_ACT_ENCAP;
-    strcpy(pd->alg_name, "def");
+    strcpy(pd->alg_name, "wrr");
     return NO_MATCH;
 }

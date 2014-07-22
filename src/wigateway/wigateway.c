@@ -19,7 +19,6 @@
 #include "debug.h"
 #include "gps_handler.h"
 #include "netlink.h"
-#include "pathperf.h"
 #include "ping.h"
 #include "rootchan.h"
 #include "callback.h"
@@ -88,8 +87,6 @@ int main(int argc, char* argv[])
     if(init_gps_handler() == -1) {
         DEBUG_MSG("Failed to initialize gps handler");
     }
-
-    start_path_perf_thread();
 
     uint32_t private_ip = 0;
     inet_pton(AF_INET, DEFAULT_TUN_ADDRESS, &private_ip);

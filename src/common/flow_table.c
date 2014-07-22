@@ -9,7 +9,7 @@
 
 #include "debug.h"
 
-#include "flowTable.h"
+#include "flow_table.h"
 #include "uthash.h"
 #include "tunnel.h"
 #include "policyTable.h"
@@ -47,6 +47,7 @@ struct flow_entry *add_entry(struct flow_tuple* entry) {
         fe = (struct flow_entry *) malloc(sizeof(struct flow_entry));
         memset(fe, 0, sizeof(struct flow_entry));
         fe->id = newKey;
+
         fe->last_visit_time = time(NULL);
         HASH_ADD_KEYPTR(hh, flow_table, newKey, sizeof(struct flow_tuple), fe);
         return fe;
@@ -89,11 +90,9 @@ void expiration_time_check() {
 }
 
 //Updates an entry and expires old entries in the flow table
-int update_flow_entry(struct flow_entry *fe, uint16_t node_id, uint16_t link_id) {
+int update_flow_entry(struct flow_entry *fe) {
 
     fe->count++;
-    fe->node_id = node_id;
-    fe->link_id = link_id;
 
     if(last_expiration_check == 0) {
         last_expiration_check = time(NULL);
@@ -116,20 +115,22 @@ int set_flow_table_timeout(int value) {
 
 
 //All methods below here are for debugging purposes
-int print_flow_table() {
-    struct flow_entry *current_key, *tmp;
+void print_flow_entry(struct flow_entry *fe) {
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
-    HASH_ITER(hh, flow_table, current_key, tmp) {
-            inet_ntop(AF_INET, &current_key->id->sAddr,src_ip, INET6_ADDRSTRLEN);
-            inet_ntop(AF_INET, &current_key->id->dAddr,dst_ip, INET6_ADDRSTRLEN);
-            DEBUG_MSG("From: %s:%d To: %s:%d Proto: %d Action: %d node_id: %d link_id: %d hits: %d",
-              src_ip, current_key->id->sPort, dst_ip, current_key->id->dPort,
-              current_key->id->proto, current_key->action, current_key->node_id, current_key->link_id, current_key->count
-            );
-    }
+    inet_ntop(AF_INET, &fe->id->sAddr,src_ip, INET6_ADDRSTRLEN);
+    inet_ntop(AF_INET, &fe->id->dAddr,dst_ip, INET6_ADDRSTRLEN);
+    DEBUG_MSG("%s:%d -> %s:%d Proto: %d Action: %d node_id: %d link_id: %d hits: %d",
+        src_ip, fe->id->sPort, dst_ip, fe->id->dPort,
+        fe->id->proto, fe->action, fe->node_id, fe->link_id, fe->count
+    );
+}
 
-    return 0;
+void print_flow_table() {
+    struct flow_entry *current_key, *tmp;
+    HASH_ITER(hh, flow_table, current_key, tmp) {
+        print_flow_entry(current_key);
+    }
 }
 
 

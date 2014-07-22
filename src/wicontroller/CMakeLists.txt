@@ -7,11 +7,12 @@ add_executable(wicontroller
     database.c
     dbq.c
     ping.c
+	select_interface.c
     ${COMMON}/bandwidth.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
 	${COMMON}/datapath.c
-	${COMMON}/flowTable.c
+	${COMMON}/flow_table.c
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
     ${COMMON}/netlink.c
@@ -22,9 +23,8 @@ add_executable(wicontroller
     ${COMMON}/sockets.c
     ${COMMON}/timing.c
 	${COMMON}/tunnel.c
-	${COMMON}/selectInterface.c
+	${COMMON}/select_interface.c
     ${COMMON}/format.c
-    ${COMMON}/pathperf.c
 	${COMMON}/packetBuffer.c
 	${COMMON}/util.c
 	${POLICY}/policyTable.c

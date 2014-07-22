@@ -44,7 +44,7 @@ int fill_flow_tuple(struct iphdr*, struct tcphdr*, struct flow_tuple*, unsigned 
 
 struct flow_entry *get_flow_entry(struct flow_tuple *);
 
-int update_flow_entry(struct flow_entry *fe, uint16_t node_id, uint16_t link_id);
+int update_flow_entry(struct flow_entry *fe);
 
 int set_flow_table_timeout(int);
 
@@ -52,8 +52,8 @@ int set_flow_table_timeout(int);
 int record_data_to_file(char *, struct flow_tuple *, struct flow_entry *);
 
 int record_message_to_file(char *, char *);
-
-int print_flow_table();
+void print_flow_entry(struct flow_entry *fe);
+void print_flow_table();
 
 #endif //FLOW_TABLE_H
 

@@ -21,7 +21,7 @@
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
-#include "selectInterface.h"
+#include "select_interface.h"
 #include "timing.h"
 #include "tunnel.h"
 
@@ -262,7 +262,7 @@ void* ping_thread_func(void* arg)
  *
  * Locking: Assumes the calling thread does not have a lock on the interface list.
  */
-int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv_time, int sockfd, char *buffer, int size)
+int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv_time, struct interface *local_ife, struct interface *remote_ife, char *buffer, int size)
 {
     if(size < MIN_PING_PACKET_SIZE) {
         DEBUG_MSG("Incoming packet was too small (%d bytes)", size);

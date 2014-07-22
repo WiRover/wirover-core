@@ -7,14 +7,14 @@
 
 #include "configuration.h"
 #include "debug.h"
-#include "flowTable.h"
+#include "flow_table.h"
 #include "interface.h"
 #include "policyTable.h"
 #include "packetBuffer.h"
 #include "netlink.h"
 #include "rwlock.h"
 #include "rootchan.h"
-#include "selectInterface.h"
+#include "select_interface.h"
 #include "sockets.h"
 #include "tunnel.h"
 #include "ping.h"
@@ -161,12 +161,15 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     if(gw != NULL)
         remote_ife = find_interface_by_index(gw->head_interface, link_id);
 
+    //Process the ping even though we may not have an entry in our remote_nodes
     if((n_tun_hdr.flags & TUNFLAG_PING) != 0){
         handle_incoming_ping(&from, arrival_time, ife, remote_ife, &buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
         return SUCCESS;
     }
+
+    //If it's not a ping and we don't have an entry, it's an error
     if(remote_ife == NULL) { 
-        DEBUG_MSG("Received packet from unknown node");
+        DEBUG_MSG("Received packet from unknown node %d link %d", node_id, link_id);
         return FAILURE;
     }
 
@@ -192,7 +195,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     fill_flow_tuple(ip_hdr, tcp_hdr, ft, 1);
     struct flow_entry *ftd = get_flow_entry(ft);
 
-    update_flow_entry(ftd, node_id, link_id);
+    update_flow_entry(ftd);
 
 
     unsigned short tun_info[2];
@@ -227,15 +230,14 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         orig_packet = &buffer[TUNTAP_OFFSET];
         orig_size -= TUNTAP_OFFSET;
 
-        struct flow_tuple *ft = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
+        struct flow_tuple ft;
         struct iphdr    *ip_hdr = (struct iphdr *)(orig_packet);
         struct tcphdr   *tcp_hdr = (struct tcphdr *)(orig_packet + (ip_hdr->ihl * 4));
 
         // Policy and Flow table
-        fill_flow_tuple(ip_hdr, tcp_hdr, ft, 0);
+        fill_flow_tuple(ip_hdr, tcp_hdr, &ft, 0);
 
-        struct flow_entry *ftd = get_flow_entry(ft);
-        free(ft);
+        struct flow_entry *ftd = get_flow_entry(&ft);
 
         // Check for drop
         if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
@@ -250,28 +252,13 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         //Add a tunnel header to the packet
         if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
             int node_id = get_unique_id();
-            struct interface *dst_ife;
-            struct interface *src_ife;
-            //TODO: Choose something besides the first interface
-            src_ife = interface_list;
-#ifdef CONTROLLER
-            struct remote_node *gw;
-            gw = lookup_remote_node_by_id(ftd->node_id);
-            if(gw == NULL) {
-                DEBUG_MSG("Dropping packet destined for unknown gateway");
-                return SUCCESS;
-            }
-            dst_ife = find_interface_by_index(gw->head_interface, ftd->link_id);
-#endif
-#ifdef GATEWAY
-            dst_ife = get_controller_ife();
 
             obtain_read_lock(&interface_list_lock);
-            src_ife = interface_list;
-            update_flow_entry(ftd, node_id, src_ife->index);
+            struct interface *dst_ife = select_dst_interface(ftd);
+            struct interface *src_ife = select_src_interface(ftd);
             release_read_lock(&interface_list_lock);
 
-#endif
+            
 
             return sendPacket(TUNFLAG_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
         }

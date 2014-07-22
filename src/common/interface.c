@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <time.h>
 
+#include "config.h"
 #include "configuration.h"
 #include "debug.h"
 #include "interface.h"
@@ -56,14 +57,6 @@ int interface_bind(struct interface *ife, int bind_port)
     myAddr.sin_port        = htons((unsigned short)bind_port);
     myAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if(bind(sockfd, (struct sockaddr *)&myAddr, sizeof(struct sockaddr_in)) < 0) 
-    {
-        ERROR_MSG("bind socket failed");
-        close(sockfd);
-        return FAILURE;
-    }
-
-    
     int on = 1;
     if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0 )
     {
@@ -79,6 +72,13 @@ int interface_bind(struct interface *ife, int bind_port)
             close(sockfd);
             return FAILURE;
         }
+    }
+
+    if(bind(sockfd, (struct sockaddr *)&myAddr, sizeof(struct sockaddr_in)) < 0) 
+    {
+        ERROR_MSG("bind socket failed");
+        close(sockfd);
+        return FAILURE;
     }
 
     ife->sockfd = sockfd;
@@ -280,6 +280,25 @@ int copy_active_interfaces(const struct interface *head, struct interface_copy *
     }
     
     return num_active;
+}
+
+long calc_bw_hint(struct interface *ife)
+{
+    long bw_hint;
+
+    if(ife->meas_bw > 0 && ife->pred_bw > 0) {
+        double w = exp(BANDWIDTH_MEASUREMENT_DECAY * 
+                (time(NULL) - ife->meas_bw_time));
+        bw_hint = (long)round(w * ife->meas_bw + (1.0 - w) * ife->pred_bw);
+    } else if(ife->meas_bw > 0) {
+        bw_hint = ife->meas_bw;
+    } else if(ife->pred_bw > 0) {
+        bw_hint = ife->pred_bw;
+    } else {
+        bw_hint = 0;
+    }
+
+    return bw_hint;
 }
 
 /*

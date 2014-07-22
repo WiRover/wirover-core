@@ -7,26 +7,27 @@ add_executable(wigateway
     gps_handler.c
     ping.c
     arguments.c
+	select_interface.c
     ${COMMON}/bandwidth.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
 	${COMMON}/datapath.c
-	${COMMON}/flowTable.c
+	${COMMON}/flow_table.c
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
     ${COMMON}/netlink.c
     ${COMMON}/ping.c
+	${COMMON}/remote_node.c
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
     ${COMMON}/timing.c
 	${COMMON}/packetBuffer
     ${COMMON}/tunnel.c
-	${COMMON}/selectInterface.c
+	${COMMON}/select_interface.c
     ${COMMON}/callback.c
     ${COMMON}/format.c
     ${COMMON}/version.c
-    ${COMMON}/pathperf.c
 	${COMMON}/util.c
 	${POLICY}/policyTable.c
 )

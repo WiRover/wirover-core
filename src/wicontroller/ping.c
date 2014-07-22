@@ -23,7 +23,7 @@
 #include "ping.h"
 #include "rootchan.h"
 #include "rwlock.h"
-#include "selectInterface.h"
+#include "select_interface.h"
 #include "sockets.h"
 #include "tunnel.h"
 #include "uthash.h"

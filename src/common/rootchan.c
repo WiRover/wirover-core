@@ -13,7 +13,6 @@
 #include "debug.h"
 #include "interface.h"
 #include "netlink.h"
-#include "pathperf.h"
 #include "remote_node.h"
 #include "rootchan.h"
 #include "rwlock.h"
@@ -219,8 +218,6 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
     
     memcpy(&latest_lease, lease, sizeof(latest_lease));
 
-    write_path_list();
-
     free(buffer);
     return 0;
 
@@ -421,7 +418,6 @@ int get_controller_privip(char *dest, int dest_len)
 struct interface *get_controller_ife()
 {
     if(remote_node_id_hash != 0) {
-        DEBUG_MSG("Controller ife is %d:%d",remote_node_id_hash->unique_id, remote_node_id_hash->head_interface->index);
         return remote_node_id_hash->head_interface;
     } else {
         return NULL;

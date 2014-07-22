@@ -88,6 +88,10 @@ struct interface_copy {
     char name[IFNAMSIZ];
 };
 
+// All threads accessing the list need to lock and unlock it the rwlock.
+extern struct interface*    interface_list;
+extern struct rwlock        interface_list_lock;
+
 struct interface* alloc_interface();
 int interface_bind(struct interface *ife, int bind_port);
 void free_interface(struct interface* ife);
@@ -106,6 +110,8 @@ int count_active_interfaces(const struct interface *head);
 struct interface *find_active_interface(struct interface *head);
 int copy_all_interfaces(const struct interface *head, struct interface_copy **out);
 int copy_active_interfaces(const struct interface *head, struct interface_copy **out);
+
+long calc_bw_hint(struct interface *ife);
 
 double ewma_update(double old_val, double new_val, double new_weight);
 

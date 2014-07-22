@@ -4,7 +4,7 @@ add_executable(vpolicy
     vpolicy.c
 	policyTable.c
     ${COMMON}/debug.c
-	${COMMON}/flowTable.c
+	${COMMON}/flow_table.c
 )
 
 target_link_libraries(vpolicy m)
