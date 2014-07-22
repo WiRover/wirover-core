@@ -104,8 +104,6 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
    
     memcpy(&latest_lease, lease, sizeof(latest_lease));
 
-    write_path_list();
-
     free(buffer);
     return 0;
 

@@ -12,7 +12,6 @@
 #include "database.h"
 #include "datapath.h"
 #include "debug.h"
-#include "pathperf.h"
 #include "ping.h"
 #include "netlink.h"
 #include "rootchan.h"
@@ -164,8 +163,6 @@ int main(int argc, char* argv[])
         DEBUG_MSG("Failed to start bandwidth server thread");
         exit(1);
     }
-
-    start_path_perf_thread();
 
     server_loop(cchan_sock);
 

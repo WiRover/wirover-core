@@ -7,7 +7,6 @@
 #include "database.h"
 #include "debug.h"
 #include "remote_node.h"
-#include "pathperf.h"
 #include "rootchan.h"
 #include "utlist.h"
 
@@ -67,8 +66,6 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len, u
             ret = -1;
             break;
     }
-
-    write_path_list();
 
     return ret;
 }
