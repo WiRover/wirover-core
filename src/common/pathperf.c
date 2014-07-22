@@ -15,7 +15,7 @@
 #include "utlist.h"
 
 #ifdef CONTROLLER
-#include "gateway.h"
+#include "remote_node.h"
 #endif
 
 #ifdef GATEWAY
@@ -28,8 +28,8 @@ static int thread_running = 0;
 #ifdef CONTROLLER
 static void __write_path_list(FILE *file)
 {
-    struct gateway *gw;
-    struct gateway *tmp_gw;
+    struct remote_node *gw;
+    struct remote_node *tmp_gw;
 
     ipaddr_t private_ip;
     get_private_ip(&private_ip);
@@ -52,7 +52,7 @@ static void __write_path_list(FILE *file)
                 sizeof(local_addr));
     }   
 
-    HASH_ITER(hh_id, gateway_id_hash, gw, tmp_gw) {
+    HASH_ITER(hh_id, remote_node_id_hash, gw, tmp_gw) {
         struct interface *ife;
         
         char node_addr[INET6_ADDRSTRLEN];
@@ -147,14 +147,14 @@ static int set_pred_bw(const char *local_addr,
 {
     int ret = 0;
 
-    struct gateway *gw;
-    struct gateway *tmp_gw;
+    struct remote_node *gw;
+    struct remote_node *tmp_gw;
 
     ipaddr_t node_addr;
     if(remote_node)
         string_to_ipaddr(remote_node, &node_addr);
 
-    HASH_ITER(hh_id, gateway_id_hash, gw, tmp_gw) {
+    HASH_ITER(hh_id, remote_node_id_hash, gw, tmp_gw) {
         if(!remote_node || ipaddr_cmp(&node_addr, &gw->private_ip) == 0) {
             struct interface *ife;
             
@@ -281,8 +281,8 @@ static long calc_bw_hint(const struct interface *ife)
 #ifdef CONTROLLER
 static int update_path_bandwidths()
 {
-    struct gateway *gw;
-    struct gateway *tmp_gw;
+    struct remote_node *gw;
+    struct remote_node *tmp_gw;
 
     int count = 0;
 
@@ -292,7 +292,7 @@ static int update_path_bandwidths()
     char private_addr[INET6_ADDRSTRLEN];
     ipaddr_to_string(&private_ip, private_addr, sizeof(private_addr));
 
-    HASH_ITER(hh_id, gateway_id_hash, gw, tmp_gw) {
+    HASH_ITER(hh_id, remote_node_id_hash, gw, tmp_gw) {
         struct interface *ife;
         
         DL_FOREACH(gw->head_interface, ife) {

@@ -1,5 +1,5 @@
-#ifndef _GATEWAY_H_
-#define _GATEWAY_H_
+#ifndef _REMOTE_NODE_H_
+#define _REMOTE_NODE_H_
 
 #include <stdint.h>
 #include <time.h>
@@ -11,7 +11,7 @@
 
 struct interface;
 
-struct gateway {
+struct remote_node {
     int state;
 
     ipaddr_t       private_ip;
@@ -36,12 +36,12 @@ struct gateway {
     char hash[NODE_HASH_SIZE+1];
 };
 
-struct gateway* alloc_gateway();
-void add_gateway(struct gateway* gw);
+struct remote_node* alloc_remote_node();
+void add_remote_node(struct remote_node* gw);
 
-struct gateway* lookup_gateway_by_id(unsigned short id);
+struct remote_node* lookup_remote_node_by_id(unsigned short id);
 
-extern struct gateway* gateway_id_hash;
+extern struct remote_node* remote_node_id_hash;
 
-#endif //_GATEWAY_H_
+#endif //_REMOTE_NODE_H_
 

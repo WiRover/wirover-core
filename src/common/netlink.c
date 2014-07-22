@@ -22,14 +22,15 @@
 #include "rwlock.h"
 #include "utlist.h"
 
+
+struct interface*   interface_list = 0;
+struct rwlock       interface_list_lock = RWLOCK_INITIALIZER;
+
 #ifdef GATEWAY
 static void* netlink_thread_func(void* arg);
 static void add_interface(struct interface* ife);
 static void delete_interface(struct interface* ife);
 static int  update_interface_gateways();
-
-struct interface*   interface_list = 0;
-struct rwlock       interface_list_lock = RWLOCK_INITIALIZER;
 
 static pthread_t    netlink_thread;
 
@@ -203,52 +204,6 @@ static int interface_down(int index, int hard)
 
     return ret;
 }
-
-int interface_bind(struct interface *ife, int bind_port)
-{
-    struct sockaddr_in myAddr;
-    int sockfd;
-
-    if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) 
-    {
-        ERROR_MSG("creating socket failed");
-        return FAILURE;
-    }
-    
-    memset(&myAddr, 0, sizeof(struct sockaddr_in));
-    myAddr.sin_family      = AF_INET;
-    myAddr.sin_port        = htons((unsigned short)bind_port);
-    myAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-
-    if(bind(sockfd, (struct sockaddr *)&myAddr, sizeof(struct sockaddr_in)) < 0) 
-    {
-        ERROR_MSG("bind socket failed");
-        close(sockfd);
-        return FAILURE;
-    }
-
-    
-    int on = 1;
-    if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0 )
-    {
-        ERROR_MSG("setsockopt SO_REUSEADDR failed");
-        close(sockfd);
-        return FAILURE;
-    }
-    
-
-    if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, ife->name, IFNAMSIZ) < 0) 
-    {
-        ERROR_MSG("setsockopt SO_BINDTODEVICE failed");
-        close(sockfd);
-        return FAILURE;
-    }
-
-    ife->sockfd = sockfd;
-    DEBUG_MSG("Binding %s on port %d fd = %d",ife->name, bind_port, ife->sockfd);
-
-    return sockfd;
-} // End function int interfaceBind()
 
 /*
  * HANDLE NETLINK MESSAGE

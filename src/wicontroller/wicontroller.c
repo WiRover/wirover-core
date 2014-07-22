@@ -14,6 +14,7 @@
 #include "debug.h"
 #include "pathperf.h"
 #include "ping.h"
+#include "netlink.h"
 #include "rootchan.h"
 #include "sockets.h"
 #include "utlist.h"
@@ -94,6 +95,9 @@ int main(int argc, char* argv[])
         exit(1);
     }
     set_nonblock(cchan_sock, 1);
+
+    interface_list = alloc_interface();
+    interface_bind(interface_list, get_data_port());
 
     if(start_data_thread(getTunnel()) == FAILURE) {
         DEBUG_MSG("Failed to start data thread");

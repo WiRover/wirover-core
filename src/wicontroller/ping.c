@@ -17,7 +17,7 @@
 #include "configuration.h"
 #include "database.h"
 #include "debug.h"
-#include "gateway.h"
+#include "remote_node.h"
 #include "interface.h"
 #include "netlink.h"
 #include "ping.h"
@@ -31,16 +31,15 @@
 
 static void* ping_thread_func(void* arg);
 static int ping_request_valid(char *buffer, int len);
-static int send_response(int sockfd, const struct gateway *gw,
-        unsigned char type, const char *buffer, 
-        int len, struct sockaddr_storage *to, socklen_t to_len);
+static int send_response(struct interface *local_ife, const struct remote_node *gw,
+        unsigned char type, struct sockaddr_storage *from, char *buffer, int len);
 static void process_ping_request(char *buffer, int len, 
         const struct sockaddr *from, socklen_t from_len);
 static void process_ping_response(char *buffer, int len, 
         const struct sockaddr *from, socklen_t from_len,
         const struct timeval *recv_time);
 static void process_ping_payload(char *buffer, int len,
-        struct gateway *gw, struct interface *ife);
+        struct remote_node *gw, struct interface *ife);
 static void remove_stale_links(int link_timeout, int node_timeout);
 
 static int          running;
@@ -99,9 +98,11 @@ void* ping_thread_func(void* arg)
     return 0;
 }
 
-int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv_time, int sockfd, char *buffer, int bytes_recvd)
+int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv_time, struct interface *local_ife,
+    struct interface *remote_ife, char *buffer, int bytes_recvd)
 {
-    int from_len = sizeof(from_addr);
+    int sockfd = local_ife->sockfd;
+    int from_len = sizeof(struct sockaddr_storage);
     int valid = ping_request_valid(buffer, bytes_recvd);
     if(sockfd <= 0) {
         DEBUG_MSG("Tried to handle incoming ping on bad sockfd");
@@ -122,8 +123,8 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
 
         if(error_responses < ERROR_RESPONSE_LIMIT) {
             DEBUG_MSG("Sending error response");
-            if(send_response(sockfd, 0, PING_RESPONSE_ERROR, buffer, 
-                        bytes_recvd, from_addr, from_len) < 0) {
+            if(send_response(local_ife, NULL, PING_RESPONSE_ERROR,  from_addr,
+                buffer, bytes_recvd) < 0) {
                 ERROR_MSG("Failed to send error response");
             }
             error_responses++;
@@ -132,28 +133,26 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
 
         return 0;
     }
-
     const struct ping_packet *ping = (struct ping_packet *)(buffer);
     unsigned short node_id = ntohs(ping->src_id);
-    struct gateway *gw = 0;
-    if(node_id != 0)
-        gw = lookup_gateway_by_id(node_id);
 
+    struct remote_node *gw = lookup_remote_node_by_id(node_id);
+    
     switch(PING_TYPE(ping->type)) {
         case PING_REQUEST:
-            if(send_response(sockfd, gw, PING_RESPONSE, buffer, bytes_recvd, 
-                        from_addr, from_len) < 0) {
+            if(send_response(local_ife, gw, PING_RESPONSE, from_addr,
+                buffer, bytes_recvd) < 0) {
                 ERROR_MSG("Failed to send ping response");
                 return 0;
             }
 
             process_ping_request(buffer, bytes_recvd, 
-                    (struct sockaddr *)&from_addr, from_len);
+                    (struct sockaddr *)from_addr, from_len);
 
             break;
         case PING_SECOND_RESPONSE:                    
             process_ping_response(buffer, bytes_recvd,
-                    (struct sockaddr *)&from_addr, from_len, &recv_time);
+                    (struct sockaddr *)from_addr, from_len, &recv_time);
 
             break;
     }
@@ -180,7 +179,6 @@ static int ping_request_valid(char *buffer, int len)
         return PING_ERR_TOO_SHORT;
 
     struct ping_packet *ping = (struct ping_packet *)(buffer);
-    DEBUG_MSG("Ping type %x, buffer location %x", ping->type, buffer[-4]);
     switch(PING_TYPE(ping->type)) {
         case PING_REQUEST:
         case PING_SECOND_RESPONSE:
@@ -189,13 +187,13 @@ static int ping_request_valid(char *buffer, int len)
             return PING_ERR_BAD_TYPE;
     }
 
-    /* node_id == 0 is invalid, gateway should have received a non-zero id from
+    /* node_id == 0 is invalid, remote_node should have received a non-zero id from
      * the root server. */
     unsigned short node_id = ntohs(ping->src_id);
     if(node_id == 0)
         return PING_ERR_BAD_NODE;
 
-    struct gateway *gw = lookup_gateway_by_id(node_id);
+    struct remote_node *gw = lookup_remote_node_by_id(node_id);
 
     if(gw) {
         if(verify_ping_sender(ping, buffer, 
@@ -215,7 +213,7 @@ static int ping_request_valid(char *buffer, int len)
             return PING_ERR_BAD_HASH;
         }
     } else {
-        DEBUG_MSG("Unrecognized gateway (%hu)", node_id);
+        DEBUG_MSG("Unrecognized remote_node (%hu)", node_id);
         return PING_ERR_BAD_NODE;
     }
 
@@ -227,9 +225,8 @@ static int ping_request_valid(char *buffer, int len)
  *
  * Assumes the buffer is at least MIN_PING_PACKET_SIZE in length.
  */
-static int send_response(int sockfd, const struct gateway *gw,
-        unsigned char type, const char *buffer, 
-        int len, struct sockaddr_storage *to, socklen_t to_len)
+static int send_response(struct interface *local_ife, const struct remote_node *gw,
+        unsigned char type, struct sockaddr_storage *from, char *buffer, int len)
 {
     char response_buffer[MIN_PING_PACKET_SIZE];
 
@@ -251,25 +248,25 @@ static int send_response(int sockfd, const struct gateway *gw,
     } else {
         memset(ping->digest, 0, sizeof(ping->digest));
     }
-    return sendPacket(TUNFLAG_PING, response_buffer, MIN_PING_PACKET_SIZE, 0, 0, sockfd, to, 0);
+    return send_sock_packet(TUNFLAG_PING, response_buffer, MIN_PING_PACKET_SIZE, get_unique_id(), interface_list, from);
     //return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
 }
 
 /*
- * Use the ping packet to update the list of links for a gateway.  If the link
+ * Use the ping packet to update the list of links for a remote_node.  If the link
  * is absent in our list, we can add it as an active interface, or if the link
  * was present but with a different IP address, we can update it.  The latter
- * case is especially relevent when the gateway is behind a NAT.
+ * case is especially relevent when the remote_node is behind a NAT.
  */
 static void process_ping_request(char *buffer, int len, 
         const struct sockaddr *from, socklen_t from_len)
 {
     struct ping_packet *ping = (struct ping_packet *)
-        (buffer + sizeof(struct tunhdr));
+        (buffer);
 
     unsigned short node_id = ntohs(ping->src_id);
 
-    struct gateway *gw = lookup_gateway_by_id(node_id);
+    struct remote_node *gw = lookup_remote_node_by_id(node_id);
     if(!gw)
         return;
 
@@ -286,7 +283,8 @@ static void process_ping_request(char *buffer, int len,
 
     // TODO: Add IPv6 support
     struct sockaddr_in from_in;
-    if(sockaddr_to_sockaddr_in(from, from_len, &from_in) < 0) {
+
+    if(sockaddr_to_sockaddr_in(from, sizeof(struct sockaddr), &from_in) < 0) {
         char p_ip[INET6_ADDRSTRLEN];
         getnameinfo(from, from_len, p_ip, sizeof(p_ip), 0, 0, NI_NUMERICHOST);
 
@@ -294,7 +292,7 @@ static void process_ping_request(char *buffer, int len,
         return;
     }
         
-    /* The main reason for this check is if the gateway is behind a NAT,
+    /* The main reason for this check is if the remote_node is behind a NAT,
      * then the IP address and port that it sends in its notification are
      * not the same as its public IP address and port. */
     if(memcmp(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr)) ||
@@ -329,8 +327,7 @@ static void process_ping_request(char *buffer, int len,
 
     ife->last_ping_time = time(0);
 
-    process_ping_payload(buffer + sizeof(struct tunhdr), 
-            len - sizeof(struct tunhdr), gw, ife);
+    process_ping_payload(buffer, len, gw, ife);
 }
 
 /*
@@ -340,12 +337,13 @@ static void process_ping_response(char *buffer, int len,
         const struct sockaddr *from, socklen_t from_len,
         const struct timeval *recv_time)
 {
-    struct ping_packet *ping = (struct ping_packet *)
-        (buffer + sizeof(struct tunhdr));
+
+    
+    struct ping_packet *ping = (struct ping_packet *)(buffer);
 
     unsigned short node_id = ntohs(ping->src_id);
 
-    struct gateway *gw = lookup_gateway_by_id(node_id);
+    struct remote_node *gw = lookup_remote_node_by_id(node_id);
     if(!gw)
         return;
 
@@ -376,25 +374,24 @@ static void process_ping_response(char *buffer, int len,
         gw->active_interfaces++;
     
         // TODO: Add IPv6 support
-        struct sockaddr_in from_in;
+        /*struct sockaddr_in from_in;
         if(sockaddr_to_sockaddr_in(from, from_len, &from_in) < 0) {
             char p_ip[INET6_ADDRSTRLEN];
             getnameinfo(from, from_len, p_ip, sizeof(p_ip), 0, 0, NI_NUMERICHOST);
 
             DEBUG_MSG("Unable to add interface with address %s (IPv6?)", p_ip);
             return;
-        }
+        }*/
     }
 
     db_update_pings(gw, ife, rtt);
     db_update_link(gw, ife);
 
-    process_ping_payload(buffer + sizeof(struct tunhdr), 
-            len - sizeof(struct tunhdr), gw, ife);
+    process_ping_payload(buffer, len, gw, ife);
 }
 
 static void process_ping_payload(char *buffer, int len, 
-        struct gateway *gw, struct interface *ife)
+        struct remote_node *gw, struct interface *ife)
 {
     int curr_payload_size = sizeof(struct ping_packet);
     int next_type = PING_NEXT(buffer[0]);
@@ -441,10 +438,10 @@ static void remove_stale_links(int link_timeout, int node_timeout)
 {
     time_t now = time(0);
 
-    struct gateway *gw;
-    struct gateway *tmp_gw;
+    struct remote_node *gw;
+    struct remote_node *tmp_gw;
 
-    HASH_ITER(hh_id, gateway_id_hash, gw, tmp_gw) {
+    HASH_ITER(hh_id, remote_node_id_hash, gw, tmp_gw) {
         struct interface *ife;
         struct interface *tmp_ife;
 
@@ -481,7 +478,7 @@ static void remove_stale_links(int link_timeout, int node_timeout)
                 free(ife);
             }
 
-            HASH_DELETE(hh_id, gateway_id_hash, gw);
+            HASH_DELETE(hh_id, remote_node_id_hash, gw);
             free(gw);
         }
     }

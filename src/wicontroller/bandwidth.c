@@ -27,7 +27,7 @@
 #include "constants.h"
 #include "database.h"
 #include "debug.h"
-#include "gateway.h"
+#include "remote_node.h"
 #include "interface.h"
 #include "sockets.h"
 #include "timing.h"
@@ -187,7 +187,7 @@ static int handle_stats_packet(struct bw_server_info *server, struct bw_session 
 {
     struct bw_hdr *bw_hdr = (struct bw_hdr *)buffer;
 
-    // This is the bandwidth from the controller to the gateway
+    // This is the bandwidth from the controller to the remote_node
     double gw_downlink_bw = bw_hdr->bandwidth;
 
     DEBUG_MSG("Bandwidth for node %d link %d down %f Mbps, up: %f Mbps, bytes recvd: %d, bytes sent: %d",
@@ -195,7 +195,7 @@ static int handle_stats_packet(struct bw_server_info *server, struct bw_session 
             gw_downlink_bw, session->measured_bw, 
             session->bytes_recvd, session->bytes_sent);
 
-    struct gateway *gw = lookup_gateway_by_id(session->key.node_id);
+    struct remote_node *gw = lookup_remote_node_by_id(session->key.node_id);
     if(gw) {
         time(&gw->last_bw_time);
             

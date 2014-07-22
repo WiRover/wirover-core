@@ -89,6 +89,7 @@ struct interface_copy {
 };
 
 struct interface* alloc_interface();
+int interface_bind(struct interface *ife, int bind_port);
 void free_interface(struct interface* ife);
 
 //These are currently implemented by searching the linked list, since the list

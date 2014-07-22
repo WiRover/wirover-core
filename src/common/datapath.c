@@ -18,9 +18,7 @@
 #include "sockets.h"
 #include "tunnel.h"
 #include "ping.h"
-#ifdef CONTROLLER
-#include "gateway.h"
-#endif
+#include "remote_node.h"
 
 #ifndef SIOCGSTAMP
 # define SIOCGSTAMP 0x8906
@@ -35,7 +33,6 @@ int handlePackets();
 
 static int                  running = 0;
 static pthread_t            data_thread;
-static int                  data_socket = -1;
 struct tunnel *tun;
 static unsigned int         tunnel_mtu = 0;
 static unsigned int         outbound_mtu = 0;
@@ -51,12 +48,6 @@ int start_data_thread(struct tunnel *tun_in)
         return SUCCESS;
     }
 
-    data_socket = udp_bind_open(get_data_port(), 0);
-    if(data_socket == FAILURE) {
-        DEBUG_MSG("Data thread cannot start due to failure");
-        return FAILURE;
-    }
-
     pthread_attr_t attr;
 
     // Initialize and set thread detached attribute
@@ -66,8 +57,6 @@ int start_data_thread(struct tunnel *tun_in)
     int result = pthread_create(&data_thread, &attr, (void *(*)(void *))handlePackets, NULL);
     if(result != 0) {
         ERROR_MSG("Creating thread failed");
-        close(data_socket);
-        data_socket = -1;
         return FAILURE;
     }
 
@@ -89,11 +78,7 @@ int handlePackets()
     while( 1 )
     {
         FD_ZERO(&read_set);
-#ifdef CONTROLLER
-        FD_SET(data_socket, &read_set);
-#endif
         FD_SET(tun->tunnelfd, &read_set);
-#ifdef GATEWAY        
         obtain_read_lock(&interface_list_lock);
         struct interface* curr_ife = interface_list;
         while (curr_ife) {
@@ -103,7 +88,6 @@ int handlePackets()
             curr_ife = curr_ife->next;
         }
         release_read_lock(&interface_list_lock);
-#endif
         // Pselect should return
         // when SIGINT, or SIGTERM is delivered, but block SIGALRM
         sigemptyset(&orig_set);
@@ -116,13 +100,7 @@ int handlePackets()
             DEBUG_MSG("select() failed");
             continue;
         }
-#ifdef CONTROLLER
-        if( FD_ISSET(data_socket, &read_set) ) 
-        {
-            handleInboundPacket(tun->tunnelfd, data_socket);
-        }
-#endif
-#ifdef GATEWAY        
+
         obtain_read_lock(&interface_list_lock);
         curr_ife = interface_list;
         while (curr_ife) {
@@ -133,7 +111,7 @@ int handlePackets()
             curr_ife = curr_ife->next;
         }
         release_read_lock(&interface_list_lock);
-#endif
+
         if( FD_ISSET(tun->tunnelfd, &read_set) ) 
         {
             handleOutboundPacket(tun->tunnelfd, tun);
@@ -177,13 +155,21 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     unsigned int h_seq_no = ntohl(n_tun_hdr.seq);
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
+    struct interface *remote_ife = NULL;
+
+    struct remote_node *gw = lookup_remote_node_by_id(node_id);
+    if(gw != NULL)
+        remote_ife = find_interface_by_index(gw->head_interface, link_id);
 
     if((n_tun_hdr.flags & TUNFLAG_PING) != 0){
-        handle_incoming_ping(&from, arrival_time, ife->sockfd, &buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
+        handle_incoming_ping(&from, arrival_time, ife, remote_ife, &buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
         return SUCCESS;
     }
+    if(remote_ife == NULL) { 
+        DEBUG_MSG("Received packet from unknown node");
+        return FAILURE;
+    }
 
-    DEBUG_MSG("Received node_id: %d, linkid: %d",node_id, link_id);
     if(addSeqNum(packet_buffer, h_seq_no) == NOT_ADDED) {
         return SUCCESS;
     }
@@ -206,9 +192,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     fill_flow_tuple(ip_hdr, tcp_hdr, ft, 1);
     struct flow_entry *ftd = get_flow_entry(ft);
 
-#ifdef CONTROLLER
     update_flow_entry(ftd, node_id, link_id);
-#endif
 
 
     unsigned short tun_info[2];
@@ -216,8 +200,6 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
     memcpy(&buffer[sizeof(struct tunhdr) - TUNTAP_OFFSET], tun_info, TUNTAP_OFFSET);
 
-
-    DEBUG_MSG("Writing data");
     if( write(tunfd, &buffer[sizeof(struct tunhdr)-TUNTAP_OFFSET], 
         (bufSize-sizeof(struct tunhdr)+TUNTAP_OFFSET)) < 0)
     {
@@ -267,24 +249,22 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         }
         //Add a tunnel header to the packet
         if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
-            int node_id;
+            int node_id = get_unique_id();
             struct interface *dst_ife;
             struct interface *src_ife;
+            //TODO: Choose something besides the first interface
+            src_ife = interface_list;
 #ifdef CONTROLLER
-            link_id = ftd->link_id;
-            node_id = ftd->node_id;
-            struct gateway *gw;
-            gw = lookup_gateway_by_id(node_id);
+            struct remote_node *gw;
+            gw = lookup_remote_node_by_id(ftd->node_id);
             if(gw == NULL) {
                 DEBUG_MSG("Dropping packet destined for unknown gateway");
                 return SUCCESS;
             }
-            dst_ife = find_interface_by_index(gw->head_interface, link_id);
-            sockfd = data_socket;
+            dst_ife = find_interface_by_index(gw->head_interface, ftd->link_id);
 #endif
 #ifdef GATEWAY
             dst_ife = get_controller_ife();
-            node_id = get_unique_id();
 
             obtain_read_lock(&interface_list_lock);
             src_ife = interface_list;

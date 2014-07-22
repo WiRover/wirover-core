@@ -6,7 +6,6 @@ add_executable(wicontroller
     contchan.c
     database.c
     dbq.c
-    gateway.c
     ping.c
     ${COMMON}/bandwidth.c
     ${COMMON}/configuration.c
@@ -17,6 +16,7 @@ add_executable(wicontroller
     ${COMMON}/ipaddr.c
     ${COMMON}/netlink.c
     ${COMMON}/ping.c
+	${COMMON}/remote_node.c
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c

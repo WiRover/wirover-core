@@ -29,7 +29,7 @@
 #include "database.h"
 #include "dbq.h"
 #include "debug.h"
-#include "gateway.h"
+#include "remote_node.h"
 #include "interface.h"
 #include "ping.h"
 #include "timing.h"
@@ -154,7 +154,7 @@ void *db_write_loop(void *arg)
     MYSQL_RES *result;
     MYSQL_ROW row;
 
-    /*Add the gateway if it isn't already in the table*/
+    /*Add the remote_node if it isn't already in the table*/
     snprintf(query,1024,"INSERT ignore into gateways (hash,conid) values ('%s','%d') on duplicate key update conid = '%d'",req->hash,cont_id,cont_id);
     int res = mysql_query(database,query);
     if(res != 0){ 
@@ -203,7 +203,7 @@ continue_free:
   return NULL;
 }
 
-int db_update_gateway(const struct gateway *gw, int state_change)
+int db_update_gateway(const struct remote_node *gw, int state_change)
 {
     if(!database)
         return -1;
@@ -253,7 +253,7 @@ int db_update_gateway(const struct gateway *gw, int state_change)
     return 0;
 }
 
-int db_update_link(const struct gateway *gw, const struct interface *ife)
+int db_update_link(const struct remote_node *gw, const struct interface *ife)
 {
     if(!database)
         return -1;
@@ -284,7 +284,7 @@ int db_update_link(const struct gateway *gw, const struct interface *ife)
     return 0;
 }
 
-int db_update_gps(struct gateway *gw, const struct gps_payload *gps)
+int db_update_gps(struct remote_node *gw, const struct gps_payload *gps)
 {
     if(!database)
         return -1;
@@ -311,7 +311,7 @@ int db_update_gps(struct gateway *gw, const struct gps_payload *gps)
 
 }
 
-int db_update_pings(const struct gateway *gw, const struct interface *ife, int rtt)
+int db_update_pings(const struct remote_node *gw, const struct interface *ife, int rtt)
 {
     if(!database)
         return -1;
@@ -335,7 +335,7 @@ int db_update_pings(const struct gateway *gw, const struct interface *ife, int r
     return 0;
 }
 
-int db_update_passive(const struct gateway *gw, struct interface *ife, 
+int db_update_passive(const struct remote_node *gw, struct interface *ife, 
                 const struct passive_payload *passive)
 {
     struct timeval now;
@@ -408,7 +408,7 @@ int db_update_passive(const struct gateway *gw, struct interface *ife,
     return 0;
 }
 
-int db_update_bandwidth(const struct gateway *gw, const struct interface *ife, 
+int db_update_bandwidth(const struct remote_node *gw, const struct interface *ife, 
                 int type, double bw_down, double bw_up)
 {
     if(!database)

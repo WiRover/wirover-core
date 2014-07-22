@@ -6,24 +6,24 @@
 #include "contchan.h"
 #include "database.h"
 #include "debug.h"
-#include "gateway.h"
+#include "remote_node.h"
 #include "pathperf.h"
 #include "rootchan.h"
 #include "utlist.h"
 
 static int process_notification_v2(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port);
-static struct gateway *update_gateway_v2(const struct cchan_notification_v2 *notif);
-static void update_interface_v2(struct gateway *gw, const struct interface_info_v2 *ifinfo);
-static void remove_dead_interfaces(struct gateway *gw);
-static int send_response_v2(int sockfd, const struct gateway *gw, uint16_t bw_port);
+static struct remote_node *update_remote_node_v2(const struct cchan_notification_v2 *notif);
+static void update_interface_v2(struct remote_node *gw, const struct interface_info_v2 *ifinfo);
+static void remove_dead_interfaces(struct remote_node *gw);
+static int send_response_v2(int sockfd, const struct remote_node *gw, uint16_t bw_port);
 
 static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len);
-static int remove_gateway(struct gateway *gw);
+static int remove_remote_node(struct remote_node *gw);
 
 static int process_notification_v1(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port);
-static struct gateway* make_gateway_v1(const struct cchan_notification_v1* notif);
-static void update_gateway_v1(struct gateway* gw, const struct cchan_notification_v1* notif);
-static int send_response_v1(int sockfd, const struct gateway *gw, uint16_t bw_port);
+static struct remote_node* make_remote_node_v1(const struct cchan_notification_v1* notif);
+static void update_remote_node_v1(struct remote_node* gw, const struct cchan_notification_v1* notif);
+static int send_response_v1(int sockfd, const struct remote_node *gw, uint16_t bw_port);
 
 /*
  * TODO: 
@@ -34,7 +34,7 @@ static int send_response_v1(int sockfd, const struct gateway *gw, uint16_t bw_po
  */
 
 /*
- * Parse a notification packet and update the list of gateways accordingly.
+ * Parse a notification packet and update the list of remote_nodes accordingly.
  */
 int process_notification(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port)
 {
@@ -83,7 +83,7 @@ static int process_notification_v2(int sockfd, const char *packet, unsigned int 
     
     int gw_state_change = 0;
 
-    struct gateway *gw = update_gateway_v2(notif);
+    struct remote_node *gw = update_remote_node_v2(notif);
     if(!gw)
         return -1;
 
@@ -136,22 +136,22 @@ static int process_notification_v2(int sockfd, const char *packet, unsigned int 
 }
 
 /*
- * Update a gateway based on the received notification message.
+ * Update a remote_node based on the received notification message.
  */
-static struct gateway *update_gateway_v2(const struct cchan_notification_v2 *notif)
+static struct remote_node *update_remote_node_v2(const struct cchan_notification_v2 *notif)
 {
     assert(notif);
 
-    struct gateway *gw = lookup_gateway_by_id(ntohs(notif->unique_id));
+    struct remote_node *gw = lookup_remote_node_by_id(ntohs(notif->unique_id));
     if(!gw) {
-        gw = alloc_gateway();
+        gw = alloc_remote_node();
         if(!gw)
             return NULL;
 
         copy_ipaddr(&notif->priv_ip, &gw->private_ip);
         gw->unique_id = ntohs(notif->unique_id);
 
-        add_gateway(gw);
+        add_remote_node(gw);
     }
     memcpy(gw->private_key, notif->key, sizeof(gw->private_key));
     /*gw->hash is size NODE_HASH_SIZE + 1 and is initialized to 0
@@ -169,7 +169,7 @@ static struct gateway *update_gateway_v2(const struct cchan_notification_v2 *not
         char p_ip[INET6_ADDRSTRLEN];
         ipaddr_to_string(&gw->private_ip, p_ip, sizeof(p_ip));
 
-        DEBUG_MSG("Registered gateway %s (uid %d) version %hhu.%hhu.%hu", 
+        DEBUG_MSG("Registered remote_node %s (uid %d) version %hhu.%hhu.%hu", 
                 p_ip, gw->unique_id, notif->ver_maj, notif->ver_min, ntohs(notif->ver_rev));
     }
 
@@ -183,7 +183,7 @@ static struct gateway *update_gateway_v2(const struct cchan_notification_v2 *not
 /*
  * Update an interface from the notification.
  */
-static void update_interface_v2(struct gateway *gw, const struct interface_info_v2 *ifinfo)
+static void update_interface_v2(struct remote_node *gw, const struct interface_info_v2 *ifinfo)
 {
     struct interface *ife;
 
@@ -229,9 +229,9 @@ static void update_interface_v2(struct gateway *gw, const struct interface_info_
 
 /*
  * Remove interfaces that have been marked DEAD or were not included in the
- * recent notification, meaning the gateway no longer uses them.
+ * recent notification, meaning the remote_node no longer uses them.
  */
-static void remove_dead_interfaces(struct gateway *gw)
+static void remove_dead_interfaces(struct remote_node *gw)
 {
     struct interface *ife;
     struct interface *ife_tmp;
@@ -254,7 +254,7 @@ static void remove_dead_interfaces(struct gateway *gw)
     }
 }
 
-static int send_response_v2(int sockfd, const struct gateway *gw, uint16_t bw_port)
+static int send_response_v2(int sockfd, const struct remote_node *gw, uint16_t bw_port)
 {
     struct cchan_notification_v2 response;
     memset(&response, 0, sizeof(response));
@@ -288,30 +288,30 @@ static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len
         return -1;
     }
 
-    struct gateway *gw = lookup_gateway_by_id(ntohs(notif->unique_id));
+    struct remote_node *gw = lookup_remote_node_by_id(ntohs(notif->unique_id));
     if(!gw) {
-        DEBUG_MSG("Received shutdown notification for unrecognized gateway %hhu", notif->unique_id);
+        DEBUG_MSG("Received shutdown notification for unrecognized remote_node %hhu", notif->unique_id);
         return -1;
     }
 
     if(memcmp(gw->private_key, notif->key, sizeof(gw->private_key)) != 0) {
-        DEBUG_MSG("Received shutdown notification with non-matching key for gateway %hhu", notif->unique_id);
+        DEBUG_MSG("Received shutdown notification with non-matching key for remote_node %hhu", notif->unique_id);
         return -1;
     }
 
-    remove_gateway(gw);
+    remove_remote_node(gw);
 
     return 0;
 }
 
 /*
- * This updates the gateway state in the database and frees all of the
- * structures associated with the gateway and its interfaces.
+ * This updates the remote_node state in the database and frees all of the
+ * structures associated with the remote_node and its interfaces.
  *
  * As a result of this function call, the memory pointed to by gw will be
  * freed.
  */
-static int remove_gateway(struct gateway *gw)
+static int remove_remote_node(struct remote_node *gw)
 {
     struct interface *ife;
     struct interface *tmp_ife;
@@ -342,7 +342,7 @@ static int remove_gateway(struct gateway *gw)
     db_update_gateway(gw, 1);
 #endif
 
-    HASH_DELETE(hh_id, gateway_id_hash, gw);
+    HASH_DELETE(hh_id, remote_node_id_hash, gw);
     free(gw);
 
     return 0;
@@ -358,7 +358,7 @@ static int process_notification_v1(int sockfd, const char *packet, unsigned int 
 
     const struct cchan_notification_v1* notif = (const struct cchan_notification_v1*)packet;
 
-    // Make sure the packet is not shorter than the gateway is claiming based
+    // Make sure the packet is not shorter than the remote_node is claiming based
     // on the number of interfaces.  It may be longer than we expect though!
     // We can still accept the packet but not read in more than MAX_INTERFACES.
     const int expected_len = MIN_NOTIFICATION_LEN +
@@ -370,13 +370,13 @@ static int process_notification_v1(int sockfd, const char *packet, unsigned int 
     
     int state_change = 0;
 
-    struct gateway* gw = lookup_gateway_by_id(ntohs(notif->unique_id));
+    struct remote_node* gw = lookup_remote_node_by_id(ntohs(notif->unique_id));
     if(gw) {
-        update_gateway_v1(gw, notif);
+        update_remote_node_v1(gw, notif);
     } else {
-        gw = make_gateway_v1(notif);
+        gw = make_remote_node_v1(notif);
         if(gw)
-            add_gateway(gw);
+            add_remote_node(gw);
 
         state_change = 1;
     }
@@ -402,13 +402,13 @@ static int process_notification_v1(int sockfd, const char *packet, unsigned int 
 }
 
 /*
- * Makes a new gateway based on the received notification message.
+ * Makes a new remote_node based on the received notification message.
  */
-static struct gateway* make_gateway_v1(const struct cchan_notification_v1* notif)
+static struct remote_node* make_remote_node_v1(const struct cchan_notification_v1* notif)
 {
     assert(notif);
 
-    struct gateway* gw = alloc_gateway();
+    struct remote_node* gw = alloc_remote_node();
 
     gw->state = ACTIVE;
     copy_ipaddr(&notif->priv_ip, &gw->private_ip);
@@ -440,16 +440,16 @@ static struct gateway* make_gateway_v1(const struct cchan_notification_v1* notif
     char ip_string[INET6_ADDRSTRLEN];
     ipaddr_to_string(&gw->private_ip, ip_string, sizeof(ip_string));
 
-    DEBUG_MSG("Registered new gateway %s (uid %d) with %d active interfaces",
+    DEBUG_MSG("Registered new remote_node %s (uid %d) with %d active interfaces",
               ip_string, gw->unique_id, gw->active_interfaces);
 
     return gw;
 }
 
 /*
- * Update an exisiting gateway based on the notification message.
+ * Update an exisiting remote_node based on the notification message.
  */
-static void update_gateway_v1(struct gateway* gw, const struct cchan_notification_v1* notif)
+static void update_remote_node_v1(struct remote_node* gw, const struct cchan_notification_v1* notif)
 {
     assert(gw && notif);
 
@@ -510,11 +510,11 @@ static void update_gateway_v1(struct gateway* gw, const struct cchan_notificatio
     char p_ip[INET6_ADDRSTRLEN];
     ipaddr_to_string(&gw->private_ip, p_ip, sizeof(p_ip));
 
-    DEBUG_MSG("Updated gateway %s (uid %d) with %d active interfaces",
+    DEBUG_MSG("Updated remote_node %s (uid %d) with %d active interfaces",
               p_ip, gw->unique_id, gw->active_interfaces);
 }
 
-static int send_response_v1(int sockfd, const struct gateway *gw, uint16_t bw_port)
+static int send_response_v1(int sockfd, const struct remote_node *gw, uint16_t bw_port)
 {
     struct cchan_notification_v1 response;
     memset(&response, 0, sizeof(response));
