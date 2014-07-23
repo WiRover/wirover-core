@@ -120,9 +120,9 @@ void print_flow_entry(struct flow_entry *fe) {
     char dst_ip[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &fe->id->sAddr,src_ip, INET6_ADDRSTRLEN);
     inet_ntop(AF_INET, &fe->id->dAddr,dst_ip, INET6_ADDRSTRLEN);
-    DEBUG_MSG("%s:%d -> %s:%d Proto: %d Action: %d node_id: %d link_id: %d hits: %d",
+    DEBUG_MSG("%s:%d -> %s:%d Proto: %d Action: %d remote: %d:%d Local link: %d hits: %d",
         src_ip, fe->id->sPort, dst_ip, fe->id->dPort,
-        fe->id->proto, fe->action, fe->node_id, fe->link_id, fe->count
+        fe->id->proto, fe->action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
     );
 }
 

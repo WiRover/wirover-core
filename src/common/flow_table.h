@@ -23,8 +23,9 @@ struct flow_entry {
     struct flow_tuple *id;
     time_t last_visit_time;
     UT_hash_handle hh;
-    uint16_t node_id;
-    uint16_t link_id;
+    uint16_t remote_node_id;
+    uint16_t remote_link_id;
+    uint16_t local_link_id;
     int count;
     uint32_t action;
     int32_t type;

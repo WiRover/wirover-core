@@ -15,7 +15,7 @@
  *
  * Allocate and initialize an interface structure.
  */
-struct interface* alloc_interface()
+struct interface* alloc_interface(int node_id)
 {
     struct interface* ife;
 
@@ -23,6 +23,7 @@ struct interface* alloc_interface()
     assert(ife);
 
     memset(ife, 0, sizeof(*ife));
+    ife->node_id = node_id;
     ife->avg_rtt = NAN;
     ife->avg_downlink_bw = NAN;
     ife->avg_uplink_bw = NAN;

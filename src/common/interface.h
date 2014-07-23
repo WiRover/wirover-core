@@ -23,6 +23,7 @@ enum if_state {
 
 struct interface {
     int                 index; //interface index assigned by kernel
+    int                 node_id; //Unique node_id assigned by root server
     char                name[IFNAMSIZ];
     char                network[NETWORK_NAME_LENGTH];
     enum if_state       state;
@@ -92,7 +93,7 @@ struct interface_copy {
 extern struct interface*    interface_list;
 extern struct rwlock        interface_list_lock;
 
-struct interface* alloc_interface();
+struct interface* alloc_interface(int node_id);
 int interface_bind(struct interface *ife, int bind_port);
 void free_interface(struct interface* ife);
 

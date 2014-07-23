@@ -40,6 +40,7 @@ struct remote_node* alloc_remote_node();
 void add_remote_node(struct remote_node* gw);
 
 struct remote_node* lookup_remote_node_by_id(unsigned short id);
+struct remote_node* lookup_remote_node_by_ip(ipaddr_t private_ip);
 
 extern struct remote_node* remote_node_id_hash;
 

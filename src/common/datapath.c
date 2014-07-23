@@ -195,6 +195,10 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     fill_flow_tuple(ip_hdr, tcp_hdr, ft, 1);
     struct flow_entry *ftd = get_flow_entry(ft);
 
+    ftd->remote_node_id = node_id;
+    ftd->remote_link_id = link_id;
+    ftd->local_link_id = ife->index;
+
     update_flow_entry(ftd);
 
 
@@ -254,11 +258,19 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
             int node_id = get_unique_id();
 
             obtain_read_lock(&interface_list_lock);
-            struct interface *dst_ife = select_dst_interface(ftd);
-            struct interface *src_ife = select_src_interface(ftd);
-            release_read_lock(&interface_list_lock);
 
-            
+            struct interface *src_ife = select_src_interface(ftd);
+            if(src_ife != NULL) {
+                ftd->local_link_id = src_ife->index;
+            }
+
+            struct interface *dst_ife = select_dst_interface(ftd);
+            if(dst_ife != NULL) { 
+                ftd->remote_link_id = dst_ife->index;
+                ftd->remote_node_id = dst_ife->node_id;
+            }
+
+            release_read_lock(&interface_list_lock);
 
             return sendPacket(TUNFLAG_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
         }

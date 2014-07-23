@@ -95,7 +95,7 @@ int main(int argc, char* argv[])
     }
     set_nonblock(cchan_sock, 1);
 
-    interface_list = alloc_interface();
+    interface_list = alloc_interface(get_unique_id());
     interface_bind(interface_list, get_data_port());
 
     if(start_data_thread(getTunnel()) == FAILURE) {
@@ -201,7 +201,6 @@ static void server_loop(int cchan_sock)
         } else {
             if(FD_ISSET(cchan_sock, &read_set)) {
                 handle_connection(&cchan_clients, cchan_sock);
-                DEBUG_MSG("Handled accept connection");
             }
 
             struct client* client;

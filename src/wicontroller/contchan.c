@@ -186,7 +186,7 @@ static void update_interface_v2(struct remote_node *gw, const struct interface_i
 
     ife = find_interface_by_name(gw->head_interface, ifinfo->ifname);
     if(!ife) {
-        ife = alloc_interface();
+        ife = alloc_interface(gw->unique_id);
         if(!ife)
             return;
 
@@ -418,7 +418,7 @@ static struct remote_node* make_remote_node_v1(const struct cchan_notification_v
 
     int i;
     for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
-        struct interface* ife = alloc_interface();
+        struct interface* ife = alloc_interface(gw->unique_id);
 
         strncpy(ife->name, notif->if_info[i].ifname, sizeof(ife->name));
         strncpy(ife->network, notif->if_info[i].network, sizeof(ife->network));
@@ -467,7 +467,7 @@ static void update_remote_node_v1(struct remote_node* gw, const struct cchan_not
     for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
         ife = find_interface_by_name(gw->head_interface, notif->if_info[i].ifname);
         if(!ife) {
-            ife = alloc_interface();
+            ife = alloc_interface(gw->unique_id);
             
             strncpy(ife->name, notif->if_info[i].ifname, sizeof(ife->name));
             ife->public_ip.s_addr = notif->if_info[i].local_ip;

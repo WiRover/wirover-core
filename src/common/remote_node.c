@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <arpa/inet.h>
 
 #include "config.h"
 #include "debug.h"
