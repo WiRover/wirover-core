@@ -262,7 +262,8 @@ int add_tunnel_header(uint8_t flags, char *orig_packet, int size, char *dst_pack
     //tun_hdr.client_id = 0; // TODO: Add a client ID.
     tun_hdr.node_id = htons(node_id);
     tun_hdr.link_id = htons(src_ife->index);
-    tun_hdr.seq = htonl(src_ife->tx_seq++);
+    tun_hdr.seq = htonl(src_ife->next_seq++);
+    tun_hdr.path_ack = htonl(src_ife->last_ack);
 
     struct timeval tv;
     gettimeofday(&tv,NULL);

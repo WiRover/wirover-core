@@ -11,8 +11,8 @@
 
 struct interface *select_src_interface(struct flow_entry *fe)
 {
-    struct interface *output = find_interface_by_index(interface_list, fe->link_id);
-    if(output == NULL || output->state != ACTIVE)
+    struct interface *output = find_interface_by_index(interface_list, fe->local_link_id);
+    if(output == NULL || output->state != ACTIVE || output->st_state == ST_STALLED)
     {
         //Find the subset of interfaces with the highest priority
         int size = count_active_interfaces(interface_list);
@@ -22,7 +22,7 @@ struct interface *select_src_interface(struct flow_entry *fe)
         int highest_priority = 0;
         int ife_count = 0;
         while(curr_ife) {
-            if(curr_ife->state != ACTIVE) { 
+            if(curr_ife->state != ACTIVE || curr_ife->st_state == ST_STALLED) { 
                 curr_ife = curr_ife->next;
                 continue;
             }
@@ -44,7 +44,6 @@ struct interface *select_src_interface(struct flow_entry *fe)
             weight = calc_bw_hint(interfaces[i]);
             weights[i] = weight;
             sum_weights += weight;
-            DEBUG_MSG("Weight for %s is %d", interfaces[i]->name, weight);
         }
         long choice = round(rand() / (double)RAND_MAX * sum_weights);
         int i = 0;
@@ -52,11 +51,7 @@ struct interface *select_src_interface(struct flow_entry *fe)
             choice -= weights[i];
             if(choice <= 0) { break; }
         }
-        DEBUG_MSG("Choice %d", i);
         output = interfaces[i];
-        DEBUG_MSG("Link select algo %s choosing interface %s, %d", fe->alg_name, output->name, calc_bw_hint(output));
-        fe->link_id = output->index;
-        fe->node_id = get_unique_id();
     }
     update_flow_entry(fe);
     return output;

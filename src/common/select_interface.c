@@ -24,7 +24,7 @@ int send_sock_packet(uint8_t flags, char *packet, int size, uint16_t node_id, st
     int rtn = 0;
     if ( sockfd == 0 )
     {
-        DEBUG_MSG("Tried to send packet over bad sockfd for interface %d", src_ife->index);
+        DEBUG_MSG("Tried to send packet over bad sockfd for interface %d", src_ife->name);
         return FAILURE;
     }
     char *new_packet = (char *)malloc(size + sizeof(struct tunhdr));
@@ -36,6 +36,8 @@ int send_sock_packet(uint8_t flags, char *packet, int size, uint16_t node_id, st
 
         return FAILURE;
     }
+    src_ife->packets_since_ack++;
+    if(src_ife->packets_since_ack > 5) { src_ife->st_state = ST_STALLED; }
     free(new_packet);
     return SUCCESS;
 }

@@ -202,7 +202,7 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
 
         memcpy(lease->cinfo, response.cinfo, copy_size);
         for(int i = 0; i < lease->controllers; i++){
-            struct interface *cont_ife = alloc_interface();
+            struct interface *cont_ife = alloc_interface(lease->cinfo[i].unique_id);
             ipaddr_to_ipv4(&lease->cinfo[i].pub_ip, &cont_ife->public_ip.s_addr);
             cont_ife->data_port = lease->cinfo[i].data_port;
             cont_ife->control_port = lease->cinfo[i].control_port;

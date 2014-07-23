@@ -14,8 +14,9 @@
 #define TUNHDR_NO_TIMESTAMP 0xFFFFFFFF
 #define TUNNEL_LATENCY_INVALID 0xFFFFFFFF
 
-#define TUNFLAG_DATA  0x01
-#define TUNFLAG_PING  0x10
+#define TUNFLAG_DATA    0x01
+#define TUNFLAG_ACK     0x02
+#define TUNFLAG_PING    0x10
 
 struct tunhdr {
     __u8        flags;

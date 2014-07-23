@@ -174,7 +174,6 @@ unsigned int get_max_ping_failures()
         DEBUG_MSG("max-ping-failures %d is not acceptable", max_ping_failures);
         max_ping_failures = DEFAULT_MAX_PING_FAILURES;
     }
-
     return max_ping_failures;
 }
 

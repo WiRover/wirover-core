@@ -16,6 +16,11 @@ enum if_state {
     INACTIVE,
     DEAD
 };
+enum if_stall_state {
+    ST_ACTIVE = 1,
+    ST_STALL_WAITING = 2,
+    ST_STALLED = 3
+};
 
 /* Set after the source address and port are verified by a ping.  Checking this
  * is necessary because the source may be behind a NAT. */
@@ -27,10 +32,13 @@ struct interface {
     char                name[IFNAMSIZ];
     char                network[NETWORK_NAME_LENGTH];
     enum if_state       state;
+    enum if_stall_state st_state;
     int                 priority;
-	int                 num_ping_failures;
-    int                 tx_seq;
-    int                 rx_seq;
+
+    //This is for local interfaces
+    int                 packets_since_ack;
+    int                 next_seq;
+    int                 last_ack;
     time_t              rx_time;
 
     int                 flags;

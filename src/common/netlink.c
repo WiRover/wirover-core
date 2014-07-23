@@ -62,7 +62,7 @@ int init_interface_list()
                 if(priority < 0)
                     goto next_ifap;
 
-                ife = alloc_interface();
+                ife = alloc_interface(get_unique_id());
                 if(!ife)
                     goto next_ifap;
 
@@ -75,7 +75,7 @@ int init_interface_list()
 
                 ife->data_port = htons(get_data_port());
                 ife->priority = priority;
-                ife->num_ping_failures = 0;
+                ife->pings_outstanding = 0;
 
                 add_interface(ife);
             }
@@ -232,7 +232,7 @@ int handle_netlink_message(const char* msg, int msg_len)
             } else {
                 int priority = get_interface_priority(device);
                 if(priority >= 0) {
-                    ife = alloc_interface();
+                    ife = alloc_interface(get_unique_id());
                     assert(ife);
 
                     ife->index = ifa->ifa_index;
@@ -412,46 +412,6 @@ int change_interface_state(struct interface *ife, enum if_state state)
     if(ife->state == state)
         return 0;
     DEBUG_MSG("Changing interface %s state from %d to %d", ife->name, ife->state, state);
-    //TODO: Notify interface selection about these changes
-    //switch(state) {
-    //    case INACTIVE:
-    //        if(virt_set_notx_flag(ife->name) == FAILURE) {
-    //            DEBUG_MSG("Failed to set notx flag on device %s", ife->name);
-    //            return FAILURE;
-    //        }
-    //        break;
-
-    //    case ACTIVE:
-    //        if(ife->gateway_ip.s_addr) {
-    //            if(virt_set_gateway_ip(ife->name, &ife->gateway_ip) < 0) {
-    //                DEBUG_MSG("Failed to set gateway IP for device %s", ife->name);
-    //                return FAILURE;
-    //            }
-    //        }
-
-    //        if(ife->priority) {
-    //            if(virt_local_prio(ife->index, ife->priority) < 0) {
-    //                DEBUG_MSG("Failed to set priority for device %s", ife->name);
-    //                return FAILURE;
-    //            }
-    //        }
-    //        
-    //        if(virt_clear_notx_flag(ife->name) == FAILURE) {
-    //            DEBUG_MSG("Failed to clear notx flag on device %s", ife->name);
-    //            return FAILURE;
-    //        }
-    //        break;
-
-    //    case DEAD:
-    //        if(kernel_release_device(ife->name) == FAILURE) {
-    //            DEBUG_MSG("Failed to release device");
-    //            return FAILURE;
-    //        }
-    //        break;
-
-    //    default:
-    //        break;
-    //}
 
     ife->state = state;
     return 0;

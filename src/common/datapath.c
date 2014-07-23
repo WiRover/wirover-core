@@ -146,6 +146,8 @@ int handleInboundPacket(int tunfd, struct interface *ife)
         gettimeofday(&arrival_time, 0);
     }
     ife->rx_time = arrival_time.tv_sec * USEC_PER_SEC + arrival_time.tv_usec;
+    ife->packets_since_ack = 0;
+    ife->st_state = ST_ACTIVE;
 
     // Get the tunhdr (should be the first n bytes in the packet)
     // store network format in temporary struct
@@ -161,6 +163,10 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     if(gw != NULL)
         remote_ife = find_interface_by_index(gw->head_interface, link_id);
 
+    //An ack is an empty packet meant only to update our interface's tx_ack
+    if((n_tun_hdr.flags & TUNFLAG_ACK) != 0) {
+        return SUCCESS;
+    }
     //Process the ping even though we may not have an entry in our remote_nodes
     if((n_tun_hdr.flags & TUNFLAG_PING) != 0){
         handle_incoming_ping(&from, arrival_time, ife, remote_ife, &buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
