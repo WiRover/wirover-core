@@ -156,7 +156,6 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     }
     ife->rx_time = arrival_time;
     ife->packets_since_ack = 0;
-    ife->stall_waiting = 0;
     change_interface_state(ife, ACTIVE);
 
     // Get the tunhdr (should be the first n bytes in the packet)
@@ -339,12 +338,8 @@ int send_sock_packet(uint8_t flags, char *packet, int size, uint16_t node_id, st
 
         return FAILURE;
     }
-    gettimeofday(&src_ife->tx_time, NULL);
     src_ife->packets_since_ack++;
-    if(src_ife->packets_since_ack > 5) { 
-        src_ife->stall_waiting = 1;
-        change_interface_state(src_ife, INACTIVE);
-    }
+    gettimeofday(&src_ife->tx_time, NULL);
     free(new_packet);
     return SUCCESS;
 }

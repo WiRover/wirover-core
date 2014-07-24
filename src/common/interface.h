@@ -27,7 +27,6 @@ struct interface {
     char                name[IFNAMSIZ];
     char                network[NETWORK_NAME_LENGTH];
     enum if_state       state;
-    int                 stall_waiting;
     int                 priority;
 
     //This is for local interfaces

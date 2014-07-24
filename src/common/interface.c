@@ -372,16 +372,16 @@ void dump_interface(const struct interface *ife, const char *prepend)
                 break;
         }
 
-        DEBUG_MSG(" %s%-2d %-8s %-12s %-8s %-4hhd %-5hhd %-5hhd",
-                prepend, ife->index, ife->name, ife->network, state, ife->priority, ife->stall_waiting, ife->packets_since_ack);
+        DEBUG_MSG(" %s%-2d %-8s %-12s %-8s %-4hhd %-5hhd",
+                prepend, ife->index, ife->name, ife->network, state, ife->priority, ife->packets_since_ack);
 }
 void dump_interfaces(const struct interface *head, const char *prepend)
 {
     if(!prepend)
         prepend = "";
 
-    /*           xx xxxxxxxx xxxxxxxxxxxx xxxxxxxx xxxx xxxxx xxxxx*/
-    DEBUG_MSG("%sID Name     Network      State    Prio Stall Unack", prepend);
+    /*           xx xxxxxxxx xxxxxxxxxxxx xxxxxxxx xxxx xxxxx*/
+    DEBUG_MSG("%sID Name     Network      State    Prio Unack", prepend);
 
     while(head) {
         dump_interface(head, prepend);
