@@ -17,7 +17,7 @@ struct interface *select_src_interface(struct flow_entry *fe)
     if(output != NULL){
         struct timeval tv;
         gettimeofday(&tv, NULL);
-        if(output->packets_since_ack > 5 && timeval_diff(&tv, &output->tx_time) > output->avg_rtt * 1.5) { 
+        if(output->packets_since_ack > 5 && timeval_diff(&tv, &output->rx_time) > output->avg_rtt * 1.5){
             change_interface_state(output, INACTIVE);
         }
     }
