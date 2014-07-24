@@ -14,13 +14,6 @@ struct interface *select_src_interface(struct flow_entry *fe)
 {
     int max_priority = max_active_interface_priority(interface_list);
     struct interface *output = find_interface_by_index(interface_list, fe->local_link_id);
-    if(output != NULL){
-        struct timeval tv;
-        gettimeofday(&tv, NULL);
-        if(output->packets_since_ack > 5 && timeval_diff(&tv, &output->rx_time) > output->avg_rtt * 1.5){
-            change_interface_state(output, INACTIVE);
-        }
-    }
     if(output == NULL || output->state != ACTIVE || output->priority < max_priority)
     {
         //Find the subset of interfaces with the highest priority
