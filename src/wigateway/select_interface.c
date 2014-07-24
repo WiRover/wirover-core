@@ -11,8 +11,9 @@
 
 struct interface *select_src_interface(struct flow_entry *fe)
 {
+    int max_priority = max_active_interface_priority(interface_list);
     struct interface *output = find_interface_by_index(interface_list, fe->local_link_id);
-    if(output == NULL || output->state != ACTIVE || output->st_state == ST_STALLED)
+    if(output == NULL || output->state != ACTIVE || output->priority < max_priority)
     {
         //Find the subset of interfaces with the highest priority
         int size = count_active_interfaces(interface_list);
@@ -21,8 +22,9 @@ struct interface *select_src_interface(struct flow_entry *fe)
         struct interface *curr_ife = interface_list;
         int highest_priority = 0;
         int ife_count = 0;
+        //TODO: This is total shit
         while(curr_ife) {
-            if(curr_ife->state != ACTIVE || curr_ife->st_state == ST_STALLED) { 
+            if(curr_ife->state != ACTIVE) { 
                 curr_ife = curr_ife->next;
                 continue;
             }

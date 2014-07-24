@@ -23,7 +23,6 @@ add_executable(wicontroller
     ${COMMON}/sockets.c
     ${COMMON}/timing.c
 	${COMMON}/tunnel.c
-	${COMMON}/select_interface.c
     ${COMMON}/format.c
 	${COMMON}/packetBuffer.c
 	${COMMON}/util.c

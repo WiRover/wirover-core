@@ -16,11 +16,6 @@ enum if_state {
     INACTIVE,
     DEAD
 };
-enum if_stall_state {
-    ST_ACTIVE = 1,
-    ST_STALL_WAITING = 2,
-    ST_STALLED = 3
-};
 
 /* Set after the source address and port are verified by a ping.  Checking this
  * is necessary because the source may be behind a NAT. */
@@ -32,7 +27,7 @@ struct interface {
     char                name[IFNAMSIZ];
     char                network[NETWORK_NAME_LENGTH];
     enum if_state       state;
-    enum if_stall_state st_state;
+    int                 stall_waiting;
     int                 priority;
 
     //This is for local interfaces
@@ -112,6 +107,7 @@ struct interface *find_interface_by_index(struct interface *head, unsigned int i
 struct interface *find_interface_by_name(struct interface *head, const char *name);
 struct interface *find_interface_by_network(struct interface *head, const char *network);
 struct interface *find_interface_at_pos(struct interface *head, unsigned pos);
+int max_active_interface_priority(struct interface *head);
 
 int count_all_interfaces(const struct interface *head);
 int count_active_interfaces(const struct interface *head);
@@ -124,6 +120,7 @@ long calc_bw_hint(struct interface *ife);
 
 double ewma_update(double old_val, double new_val, double new_weight);
 
+void dump_interface(const struct interface *ife, const char *prepend);
 void dump_interfaces(const struct interface *head, const char *prepend);
 
 #endif //_INTERFACE_H_

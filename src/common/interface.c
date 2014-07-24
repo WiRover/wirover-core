@@ -42,6 +42,23 @@ struct interface* alloc_interface(int node_id)
     return ife;
 }
 
+/*
+ * Sets the interface's state to the given state, and if there was a change
+ * between ACTIVE and non-ACTIVE states on a gateway, it notifies the controller
+ */
+int change_interface_state(struct interface *ife, enum if_state state)
+{
+    if(ife->state == state)
+        return 0;
+    DEBUG_MSG("Changing interface %s state from %d to %d", ife->name, ife->state, state);
+    ife->state = state;
+
+#ifdef GATEWAY
+    send_notification(1);
+#endif
+    return 0;
+}
+
 int interface_bind(struct interface *ife, int bind_port)
 {
     struct sockaddr_in myAddr;
@@ -174,6 +191,20 @@ struct interface *find_active_interface(struct interface *head)
     }
 
     return 0;
+}
+
+int max_active_interface_priority(struct interface *head)
+{
+    int max_priority = -1;
+    while(head) {
+        if(head->state == ACTIVE && head->priority > max_priority)
+            max_priority = head->priority;
+
+        assert(head != head->next);
+        head = head->next;
+    }
+
+    return max_priority;
 }
 
 int count_all_interfaces(const struct interface *head)
@@ -314,18 +345,10 @@ double ewma_update(double old_val, double new_val, double new_weight)
         return ((1.0 - new_weight) * old_val + new_weight * new_val);
     }
 }
-
-void dump_interfaces(const struct interface *head, const char *prepend)
+void dump_interface(const struct interface *ife, const char *prepend)
 {
-    if(!prepend)
-        prepend = "";
-
-    /*           xx xxxxxxxxxxxxxxxx xxxxxxxxxxxxxxxx xxxxxxxx xxxx*/
-    DEBUG_MSG("%sID Name             Network          State    Prio", prepend);
-
-    while(head) {
-        const char *state;
-        switch(head->state) {
+    const char *state;
+        switch(ife->state) {
             case INIT_INACTIVE:
                 state = "INIT";
                 break;
@@ -343,9 +366,19 @@ void dump_interfaces(const struct interface *head, const char *prepend)
                 break;
         }
 
-        DEBUG_MSG("%s%-2d %-16s %-16s %-8s %-4hhd",
-                prepend, head->index, head->name, head->network, state, head->priority);
+        DEBUG_MSG(" %s%-2d %-8s %-12s %-8s %-4hhd %-5hhd %-5hhd",
+                prepend, ife->index, ife->name, ife->network, state, ife->priority, ife->stall_waiting, ife->packets_since_ack);
+}
+void dump_interfaces(const struct interface *head, const char *prepend)
+{
+    if(!prepend)
+        prepend = "";
 
+    /*           xx xxxxxxxx xxxxxxxxxxxx xxxxxxxx xxxx xxxxx xxxxx*/
+    DEBUG_MSG("%sID Name     Network      State    Prio Stall Unack", prepend);
+
+    while(head) {
+        dump_interface(head, prepend);
         assert(head != head->next);
         head = head->next;
     }

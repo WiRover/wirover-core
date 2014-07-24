@@ -13,6 +13,7 @@
 #include "config.h"
 #include "configuration.h"
 #include "contchan.h"
+#include "datapath.h"
 #include "debug.h"
 #include "gps_handler.h"
 #include "interface.h"
@@ -21,7 +22,6 @@
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
-#include "select_interface.h"
 #include "timing.h"
 #include "tunnel.h"
 
@@ -29,7 +29,6 @@ static int send_ping(struct interface* ife);
 static void* ping_thread_func(void* arg);
 static int send_second_response(struct interface *ife, 
         const char *buffer, int len, struct interface *dst_ife);
-static void mark_inactive_interfaces();
 
 static int          running = 0;
 static pthread_t    ping_thread;
@@ -159,7 +158,7 @@ static int send_ping(struct interface* ife)
 
     fill_ping_digest(pkt, buffer, send_size, private_key);
 
-    if(sendPacket(TUNFLAG_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife())) {
+    if(send_packet(TUNFLAG_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife())) {
         /* We get an error ENETUNREACH if we try pinging out an interface which
          * does not have an IP address.  That case is not interesting, so we
          * suppress the error message. */
@@ -229,7 +228,6 @@ void* ping_thread_func(void* arg)
 
 		long time_diff = timeval_diff(&now, &last_ping_time);
 		if(time_diff >= ping_spacing) {
-			mark_inactive_interfaces();
 
 			obtain_read_lock(&interface_list_lock);
 			struct interface *ife = find_interface_at_pos(
@@ -269,8 +267,6 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
 
     struct ping_packet *pkt = (struct ping_packet *)(buffer);
 
-    int notif_needed = 0;
-
     // TODO: interface_list is supposed to be locked, but I do not want to wait
     // for a lock before sending the response packet
 
@@ -287,7 +283,7 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
     if(pkt->type == PING_RESPONSE_ERROR) {
         DEBUG_MSG("Controller responded with an error, will send a notification");
         send_response = 0;
-        notif_needed = 1;
+        send_notification(1);
     }
 
     if(iszero(pkt->digest, sizeof(pkt->digest))) {
@@ -317,19 +313,6 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
     // If the ping response is older than the ping interval we ignore it.
     if(diff < (get_ping_interval() * USEC_PER_SEC)) {
         ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
-        if(ife->state == INIT_INACTIVE || ife->state == INACTIVE) {
-            change_interface_state(ife, ACTIVE);
-            notif_needed = 1;
-        }
-
-        char network[NETWORK_NAME_LENGTH];
-        read_network_name(ife->name, network, sizeof(network));
-
-        if(strncmp(network, ife->network, sizeof(network)) != 0) {
-            // If we detect a different network name, send another notification.
-            strncpy(ife->network, network, sizeof(ife->network));
-            notif_needed = 1;
-        }
 
         ife->last_ping_success = time(NULL);
         ife->last_ping_seq_no = ntohl(pkt->seq_no);
@@ -341,10 +324,6 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
 
         DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f", 
                 ife->name, ife->network, diff, ife->avg_rtt);
-    }
-
-    if(notif_needed) {
-        send_notification(1);
     }
 
     return 0;
@@ -384,7 +363,7 @@ static int send_second_response(struct interface *ife,
     }
     
     fill_ping_digest(ping, response, send_size, private_key);
-    int result = sendPacket(TUNFLAG_PING, response, send_size, get_unique_id(), ife, dst_ife);
+    int result = send_packet(TUNFLAG_PING, response, send_size, get_unique_id(), ife, dst_ife);
     //int result = sendto(sockfd, response, send_size, 0, to, to_len);
 
     free(response);
@@ -394,37 +373,4 @@ static int send_second_response(struct interface *ife,
         return -1;
     }
     return 0;
-}
-
-static void mark_inactive_interfaces()
-{
-	int notif_needed = 0;
-
-	const int MAX_PING_FAILURES = get_max_ping_failures();
-
-	obtain_read_lock(&interface_list_lock);
-
-	struct interface* curr_ife = interface_list;
-	while (curr_ife) {
-        if(curr_ife->state == ACTIVE) {
-            if(curr_ife->pings_outstanding > MAX_PING_FAILURES) {
-                /* This is a fail-safe condition.  If timeout <= interval, then
-                 * we may never explicitly record a timeout because the next
-                 * ping may be sent before we see a timeout; however, we will
-                 * see the number of outstanding pings start to accumulate. */
-                DEBUG_MSG("Max ping failures reached on %s (%d)",curr_ife->name, curr_ife->pings_outstanding);
-                change_interface_state(curr_ife, INACTIVE);
-                notif_needed = 1;
-            }
-        }
-		assert(curr_ife != curr_ife->next);
-
-		curr_ife = curr_ife->next;
-	}
-
-	release_read_lock(&interface_list_lock);
-
-	if(notif_needed) {
-		send_notification(1);
-	}
 }

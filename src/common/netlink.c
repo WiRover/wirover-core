@@ -402,21 +402,9 @@ int handle_netlink_message(const char* msg, int msg_len)
     return 0;
 }
 
-/*
- * Sets the interface's state to the given state, and if there was a change
- * between ACTIVE and non-ACTIVE states, it makes the appropriate ioctl()
- * calls.
- */
-int change_interface_state(struct interface *ife, enum if_state state)
-{
-    if(ife->state == state)
-        return 0;
-    DEBUG_MSG("Changing interface %s state from %d to %d", ife->name, ife->state, state);
-
-    ife->state = state;
-    return 0;
-}
 #endif /* GATEWAY */
+
+
 
 /*
  * The network name is a descriptive name for an interface such as "verizon" or
