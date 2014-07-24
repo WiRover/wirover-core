@@ -9,6 +9,9 @@
 #include "configuration.h"
 #include "debug.h"
 #include "interface.h"
+#ifdef GATEWAY
+#include "contchan.h"
+#endif
 
 /*
  * ALLOC INTERFACE
@@ -27,6 +30,9 @@ struct interface* alloc_interface(int node_id)
     ife->avg_rtt = NAN;
     ife->avg_downlink_bw = NAN;
     ife->avg_uplink_bw = NAN;
+    
+    gettimeofday(&ife->rx_time, NULL);
+    gettimeofday(&ife->tx_time, NULL);
 
     ife->ping_interval = get_ping_interval();
     ife->ping_timeout = get_ping_timeout();

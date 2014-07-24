@@ -23,19 +23,20 @@
  */
 
 /* Configuration file keys */
-#define CONFIG_WIROOT_ADDRESS           "wiroot-address"
-#define CONFIG_WIROOT_PORT              "wiroot-port"
-#define CONFIG_DATA_PORT                "data-port"
-#define CONFIG_CONTROL_PORT             "control-port"
-#define CONFIG_PING_PORT                "ping-port"
-#define CONFIG_REGISTER_ADDRESS         "register-address"
-#define CONFIG_REGISTER_DATA_PORT       "register-data-port"
-#define CONFIG_REGISTER_CONTROL_PORT    "register-control-port"
-#define CONFIG_REGISTER_BANDWIDTH_PORT  "register-bandwidth-port"
-#define CONFIG_BANDWIDTH_TEST_INTERVAL  "bandwidth-test-interval"
-#define CONFIG_PING_TIMEOUT             "ping-timeout"
-#define CONFIG_MAX_PING_FAILURES        "max-ping-failures"
-#define CONFIG_LINK_TIMEOUT             "link-timeout"
+#define CONFIG_WIROOT_ADDRESS               "wiroot-address"
+#define CONFIG_WIROOT_PORT                  "wiroot-port"
+#define CONFIG_DATA_PORT                    "data-port"
+#define CONFIG_CONTROL_PORT                 "control-port"
+#define CONFIG_PING_PORT                    "ping-port"
+#define CONFIG_REGISTER_ADDRESS             "register-address"
+#define CONFIG_REGISTER_DATA_PORT           "register-data-port"
+#define CONFIG_REGISTER_CONTROL_PORT        "register-control-port"
+#define CONFIG_REGISTER_BANDWIDTH_PORT      "register-bandwidth-port"
+#define CONFIG_BANDWIDTH_TEST_INTERVAL      "bandwidth-test-interval"
+#define CONFIG_PING_TIMEOUT                 "ping-timeout"
+#define CONFIG_MAX_PING_FAILURES            "max-ping-failures"
+#define CONFIG_LINK_TIMEOUT                 "link-timeout"
+#define CONFIG_LINK_STALL_RETRY_INTERVAL    "link-stall-retry-interval"
 
 #define CONFIG_MYSQL_HOST           "mysql-host"
 #define CONFIG_MYSQL_USER           "mysql-user"
@@ -54,10 +55,11 @@
 #define DEFAULT_REGISTER_CONTROL_PORT   0
 #define DEFAULT_REGISTER_BANDWIDTH_PORT 0
 
-#define DEFAULT_BANDWIDTH_TEST_INTERVAL 60
-#define DEFAULT_PING_TIMEOUT             3
-#define DEFAULT_MAX_PING_FAILURES        4
-#define DEFAULT_LINK_TIMEOUT             15
+#define DEFAULT_BANDWIDTH_TEST_INTERVAL   60
+#define DEFAULT_PING_TIMEOUT              3
+#define DEFAULT_MAX_PING_FAILURES         4
+#define DEFAULT_LINK_TIMEOUT              15
+#define DEFAULT_LINK_STALL_RETRY_INTERVAL 500
 
 #define DEFAULT_MYSQL_HOST          "localhost"
 #define DEFAULT_MYSQL_USER          "wirover"
@@ -85,6 +87,7 @@ int             get_interface_priority(const char *ifname);
 unsigned int    get_bandwidth_test_interval();
 int             get_ping_timeout();
 int             get_link_timeout();
+int             get_link_stall_retry_interval();
 
 const char      *get_register_address();
 unsigned short  get_register_data_port();

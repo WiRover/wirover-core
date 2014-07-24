@@ -6,6 +6,7 @@
 #include <signal.h>
 
 #include "configuration.h"
+#include "constants.h"
 #include "debug.h"
 #include "datapath.h"
 #include "flow_table.h"
@@ -17,6 +18,7 @@
 #include "rootchan.h"
 #include "select_interface.h"
 #include "sockets.h"
+#include "timing.h"
 #include "tunnel.h"
 #include "ping.h"
 #include "remote_node.h"
@@ -37,11 +39,17 @@ static pthread_t            data_thread;
 struct tunnel *tun;
 static unsigned int         tunnel_mtu = 0;
 static unsigned int         outbound_mtu = 0;
+#ifdef GATEWAY
+static int                  stall_retry_interval = 0;
+#endif
 
 int start_data_thread(struct tunnel *tun_in)
 {
     //The mtu in the config file accounts for the tunhdr, but we have that extra space in here
     tunnel_mtu = get_mtu();
+#ifdef GATEWAY
+    stall_retry_interval = get_link_stall_retry_interval() * USECS_PER_MSEC;
+#endif
     outbound_mtu =  1500;
     tun = tun_in;
     if(running) {
@@ -146,7 +154,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
         ERROR_MSG("ioctl SIOCGSTAMP failed");
         gettimeofday(&arrival_time, 0);
     }
-    ife->rx_time = arrival_time.tv_sec * USEC_PER_SEC + arrival_time.tv_usec;
+    ife->rx_time = arrival_time;
     ife->packets_since_ack = 0;
     ife->stall_waiting = 0;
     change_interface_state(ife, ACTIVE);
@@ -281,6 +289,18 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
                 ftd->remote_node_id = dst_ife->node_id;
             }
 
+#ifdef GATEWAY
+            struct interface *inactive_interface = interface_list;
+            struct timeval tv;
+            gettimeofday(&tv,NULL);
+            while(inactive_interface)
+            {
+                if(inactive_interface->state != ACTIVE && timeval_diff(&tv, &inactive_interface->tx_time) > stall_retry_interval){
+                    send_packet(TUNFLAG_DATA, orig_packet, orig_size, node_id, inactive_interface, dst_ife);
+                }
+                inactive_interface = inactive_interface->next;
+            }
+#endif
             release_read_lock(&interface_list_lock);
 
             return send_packet(TUNFLAG_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
@@ -294,7 +314,6 @@ int send_packet(uint8_t flags, char *packet, int size, uint16_t node_id, struct 
 {
     if(dst_ife == NULL || src_ife == NULL)
     {
-        DEBUG_MSG("Tried to send packet to null interface");
         return FAILURE;
     }
     struct sockaddr_storage dst;
@@ -320,6 +339,7 @@ int send_sock_packet(uint8_t flags, char *packet, int size, uint16_t node_id, st
 
         return FAILURE;
     }
+    gettimeofday(&src_ife->tx_time, NULL);
     src_ife->packets_since_ack++;
     if(src_ife->packets_since_ack > 5) { 
         src_ife->stall_waiting = 1;

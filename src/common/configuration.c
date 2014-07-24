@@ -301,6 +301,23 @@ int get_link_timeout()
     return timeout;
 }
 
+int get_link_stall_retry_interval()
+{
+    const config_t* config = get_config();
+
+    int interval;
+    if(!config || config_lookup_int_compat(config, CONFIG_LINK_STALL_RETRY_INTERVAL, 
+                &interval) == CONFIG_FALSE) {
+        DEBUG_MSG("failed to read %s from config file", CONFIG_LINK_STALL_RETRY_INTERVAL);
+        interval = DEFAULT_LINK_STALL_RETRY_INTERVAL;
+    } else if(interval <= 0) {
+        DEBUG_MSG("%s %d is not valid", CONFIG_LINK_STALL_RETRY_INTERVAL, interval);
+        interval = DEFAULT_LINK_STALL_RETRY_INTERVAL;
+    }
+
+    return interval;
+}
+
 const char *get_register_address()
 {
     const config_t* config = get_config();

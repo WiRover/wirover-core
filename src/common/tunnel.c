@@ -268,7 +268,7 @@ int add_tunnel_header(uint8_t flags, char *orig_packet, int size, char *dst_pack
     struct timeval tv;
     gettimeofday(&tv,NULL);
     tun_hdr.send_ts = htonl(tv.tv_sec * USEC_PER_SEC + tv.tv_usec);
-    tun_hdr.recv_ts = htonl(src_ife->rx_time);
+    tun_hdr.recv_ts = htonl(src_ife->rx_time.tv_sec * USEC_PER_SEC + src_ife->rx_time.tv_usec);
 
     memcpy(dst_packet, &tun_hdr, sizeof(struct tunhdr));
     memcpy(&dst_packet[sizeof(struct tunhdr)], orig_packet, size);

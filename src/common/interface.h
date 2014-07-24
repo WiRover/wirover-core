@@ -34,7 +34,8 @@ struct interface {
     int                 packets_since_ack;
     int                 next_seq;
     int                 last_ack;
-    time_t              rx_time;
+    struct timeval      rx_time;
+    struct timeval      tx_time;
 
     int                 flags;
 
@@ -97,6 +98,7 @@ extern struct interface*    interface_list;
 extern struct rwlock        interface_list_lock;
 
 struct interface* alloc_interface(int node_id);
+int change_interface_state(struct interface *ife, enum if_state state);
 int interface_bind(struct interface *ife, int bind_port);
 void free_interface(struct interface* ife);
 
