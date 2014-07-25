@@ -10,6 +10,7 @@
 #include <linux/if.h>
 
 #include "debug.h"
+#include "interface.h"
 #include "ping.h"
 
 static const char *PING_ERR_STR[] = {

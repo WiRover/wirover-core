@@ -33,7 +33,6 @@ static struct bw_server_info bw_server = {
 static unsigned short bw_ext_port = DEFAULT_BANDWIDTH_PORT;
 
 static void server_loop(int cchan_sock);
-static int find_gateway_ip(const char *device, struct in_addr *gw_ip);
 static int request_lease(const struct lease_info *old_lease, struct lease_info *new_lease);
 
 static struct lease_info lease;
@@ -241,54 +240,6 @@ static void server_loop(int cchan_sock)
 }
 
 /*
- * Read the routing table for a default route containing the gateway IP address.
- */
-static int find_gateway_ip(const char *device, struct in_addr *gw_ip)
-{
-    const char *delims = "\t ";
-
-    FILE *file = fopen("/proc/net/route", "r");
-    if(!file) {
-        ERROR_MSG("Failed to open /proc/net/route");
-        return -1;
-    }
-
-    char buffer[256];
-
-    // Skip the header line
-    fgets(buffer, sizeof(buffer), file);
-
-    char *saveptr = 0;
-
-    while(!feof(file) && fgets(buffer, sizeof(buffer), file)) {
-        buffer[sizeof(buffer) - 1] = 0;
-
-        char *dev_str = strtok_r(buffer, delims, &saveptr);
-        if(!device)
-            continue;
-
-        char *dest = strtok_r(0, delims, &saveptr);
-        if(!dest)
-            continue;
-
-        char *gateway = strtok_r(0, delims, &saveptr);
-        if(!gateway)
-            continue;
-
-        uint32_t dest_ip    = (uint32_t)strtoul(dest, 0, 16);
-        uint32_t gateway_ip = (uint32_t)strtoul(gateway, 0, 16);
-
-        if(strcmp(device, dev_str) == 0 && dest_ip == 0) {
-            gw_ip->s_addr = gateway_ip;
-            break;
-        }
-    }
-
-    fclose(file);
-    return 0;
-}
-
-/*
  * Request a lease from root server.  If successful, the new lease is stored in
  * new_lease.  
  *
@@ -332,10 +283,6 @@ static int request_lease(const struct lease_info *old_lease, struct lease_info *
 
             uint32_t priv_ip;
             ipaddr_to_ipv4(&new_lease->priv_ip, &priv_ip);
-    
-            uint32_t priv_netmask = htonl(slash_to_netmask(new_lease->priv_subnet_size));
-            
-
         }
 
         return 0;

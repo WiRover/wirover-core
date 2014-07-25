@@ -147,13 +147,12 @@ int handleInboundPacket(int tunfd, struct interface *ife)
         return FAILURE;
     }
 
-    
-
     struct timeval arrival_time;
     if(ioctl(ife->sockfd, SIOCGSTAMP, &arrival_time) == -1) {
         ERROR_MSG("ioctl SIOCGSTAMP failed");
         gettimeofday(&arrival_time, 0);
     }
+
     ife->rx_time = arrival_time;
     ife->packets_since_ack = 0;
     change_interface_state(ife, ACTIVE);
@@ -172,7 +171,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     if(gw != NULL)
         remote_ife = find_interface_by_index(gw->head_interface, link_id);
 
-    //An ack is an empty packet meant only to update our interface's tx_ack
+    //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
     if((n_tun_hdr.flags & TUNFLAG_ACK) != 0) {
         return SUCCESS;
     }
@@ -188,8 +187,11 @@ int handleInboundPacket(int tunfd, struct interface *ife)
         return FAILURE;
     }
 
-    //Send an ack
+    //Send an ack and return if the packet was only requesting an ack
     send_packet(TUNFLAG_ACK, "", 0, get_unique_id(), ife, remote_ife);
+    if((n_tun_hdr.flags & TUNFLAG_ACKREQ) != 0){
+        return SUCCESS;
+    }
 
     if(addSeqNum(packet_buffer, h_seq_no) == NOT_ADDED) {
         return SUCCESS;

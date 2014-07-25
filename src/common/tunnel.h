@@ -16,6 +16,7 @@
 
 #define TUNFLAG_DATA    0x01
 #define TUNFLAG_ACK     0x02
+#define TUNFLAG_ACKREQ  0x04
 #define TUNFLAG_PING    0x10
 
 struct tunhdr {

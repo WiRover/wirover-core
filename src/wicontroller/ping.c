@@ -16,6 +16,7 @@
 #include "config.h"
 #include "configuration.h"
 #include "database.h"
+#include "datapath.h"
 #include "debug.h"
 #include "remote_node.h"
 #include "interface.h"
@@ -78,6 +79,7 @@ void* ping_thread_func(void* arg)
 {
     int link_timeout = get_link_timeout();
     int node_timeout = DEFAULT_NODE_TIMEOUT;
+    int sleep_time = link_timeout;;
 
     const config_t *config = get_config();
     if(config) {
@@ -87,12 +89,11 @@ void* ping_thread_func(void* arg)
             node_timeout = DEFAULT_NODE_TIMEOUT;
         }
     }
-
-    /*int timeout_sec = (link_timeout < node_timeout) ? 
-        link_timeout : node_timeout;*/
+    if(node_timeout < sleep_time) { sleep_time = node_timeout; }
 
     while(1) {
         remove_stale_links(link_timeout, node_timeout);
+        sleep(sleep_time);
     }
     running = 0;
     return 0;
