@@ -39,17 +39,11 @@ static pthread_t            data_thread;
 struct tunnel *tun;
 static unsigned int         tunnel_mtu = 0;
 static unsigned int         outbound_mtu = 0;
-#ifdef GATEWAY
-static int                  stall_retry_interval = 0;
-#endif
 
 int start_data_thread(struct tunnel *tun_in)
 {
     //The mtu in the config file accounts for the tunhdr, but we have that extra space in here
     tunnel_mtu = get_mtu();
-#ifdef GATEWAY
-    stall_retry_interval = get_link_stall_retry_interval() * USECS_PER_MSEC;
-#endif
     outbound_mtu =  1500;
     tun = tun_in;
     if(running) {
@@ -290,18 +284,6 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
                 ftd->remote_node_id = dst_ife->node_id;
             }
 
-#ifdef GATEWAY
-            struct interface *inactive_interface = interface_list;
-            struct timeval tv;
-            gettimeofday(&tv,NULL);
-            while(inactive_interface)
-            {
-                if(inactive_interface->state != ACTIVE && timeval_diff(&tv, &inactive_interface->tx_time) > stall_retry_interval){
-                    send_packet(TUNFLAG_DATA, orig_packet, orig_size, node_id, inactive_interface, dst_ife);
-                }
-                inactive_interface = inactive_interface->next;
-            }
-#endif
             release_read_lock(&interface_list_lock);
 
             return send_packet(TUNFLAG_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);

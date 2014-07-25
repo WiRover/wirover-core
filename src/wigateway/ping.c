@@ -12,6 +12,7 @@
 
 #include "config.h"
 #include "configuration.h"
+#include "constants.h"
 #include "contchan.h"
 #include "datapath.h"
 #include "debug.h"
@@ -25,7 +26,6 @@
 #include "timing.h"
 #include "tunnel.h"
 
-static int send_ping(struct interface* ife);
 static void* ping_thread_func(void* arg);
 static int send_second_response(struct interface *ife, 
         const char *buffer, int len, struct interface *dst_ife);
@@ -91,38 +91,11 @@ int ping_all_interfaces()
 }
 
 /*
- * PING INTERFACE
- *
- * This is a more convenient method for initiating a connectivity test
- * from outside this module -- eg. to be used by the netlink module when
- * a link comes up.
- *
- * Locking: Assumes the calling thread has a read lock on the interface list.
- */
-int ping_interface(struct interface* ife)
-{
-    struct sockaddr_storage dest_addr;
-    unsigned dest_len;
-    dest_len = build_data_sockaddr(get_controller_ife(), &dest_addr);
-    if(dest_len < 0) {
-        DEBUG_MSG("build_sockaddr failed");
-        return FAILURE;
-    }
-
-    if(send_ping(ife) == FAILURE) {
-        DEBUG_MSG("send_ping failed");
-        return FAILURE;
-    }
-
-    return 0;
-}   
-
-/*
  * SEND PING
  *
  * Locking: Assumes the calling thread has a read lock on the interface list.
  */
-static int send_ping(struct interface* ife)
+int send_ping(struct interface* ife)
 {
     char *buffer = malloc(MAX_PING_PACKET_SIZE);
     if(!buffer) {
@@ -175,9 +148,6 @@ static int send_ping(struct interface* ife)
     ife->last_ping_time = time(NULL);
     ife->pings_outstanding++;
 
-    ife->next_ping_time = ife->last_ping_time + ife->ping_interval;
-    ife->next_ping_timeout = ife->last_ping_time + ife->ping_timeout;
-
     free(buffer);
     return 0;
 }
@@ -187,7 +157,7 @@ static int should_send_ping(const struct interface *ife)
     if(ife->state == DEAD)
         return 0;
 
-    if(time(NULL) >= ife->next_ping_time)
+    if(time(NULL) >= ife->last_ping_time + ife->ping_interval)
         return 1;
 
     return 0;
@@ -196,6 +166,7 @@ static int should_send_ping(const struct interface *ife)
 void* ping_thread_func(void* arg)
 {   
 	const unsigned int ping_interval = get_ping_interval();
+    int stall_retry_interval = get_link_stall_retry_interval() * USECS_PER_MSEC;
 
 	// Initialize this so that the first ping will be sent immediately.
 	struct timeval last_ping_time = {
@@ -205,13 +176,27 @@ void* ping_thread_func(void* arg)
 	int curr_iface_pos = 0;
 
 	unsigned ping_spacing = ping_interval * USEC_PER_SEC;
-	unsigned next_timeout;
 
 	struct timeval now;
 
 	while(1) {
+        
+		gettimeofday(&now, 0);
+
 		obtain_read_lock(&interface_list_lock);
+
 		num_ifaces = count_all_interfaces(interface_list);
+
+        struct interface *inactive_interface = interface_list;
+
+        while(inactive_interface)
+        {
+            if(inactive_interface->state != ACTIVE && timeval_diff(&now, &inactive_interface->tx_time) >= stall_retry_interval){
+                send_packet(TUNFLAG_ACKREQ, "", 0, get_unique_id(), inactive_interface, get_controller_ife());
+            }
+            inactive_interface = inactive_interface->next;
+        }
+
 	    release_read_lock(&interface_list_lock);
 
 		if(curr_iface_pos >= num_ifaces) {
@@ -224,7 +209,6 @@ void* ping_thread_func(void* arg)
 			ping_spacing = ping_interval * USEC_PER_SEC;
 
 
-		gettimeofday(&now, 0);
 
 		long time_diff = timeval_diff(&now, &last_ping_time);
 		if(time_diff >= ping_spacing) {
@@ -233,21 +217,16 @@ void* ping_thread_func(void* arg)
 			struct interface *ife = find_interface_at_pos(
 				interface_list, curr_iface_pos);
             if(ife && should_send_ping(ife)) {
-                ping_interface(ife);
+                send_ping(ife);
             }
 			release_read_lock(&interface_list_lock);
 
 			memcpy(&last_ping_time, &now, sizeof(last_ping_time));
-			next_timeout = ping_spacing;
 
 			curr_iface_pos++;
-		} else {
-			// Set the timeout on select such that it will return in time for
-			// the next ping.
-			next_timeout = ping_spacing - time_diff;
 		}
-        //TODO: This is implicitly defined because I can't use -D_BSD_SOURCE for that linux/if vs net/if issue
-        usleep(next_timeout);
+
+        safe_usleep(stall_retry_interval);
 	}
 
 	running = 0;
@@ -316,8 +295,6 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
 
         ife->last_ping_success = time(NULL);
         ife->last_ping_seq_no = ntohl(pkt->seq_no);
-
-        ife->next_ping_timeout = ife->next_ping_time + ife->ping_timeout;
 
         /* Reset on a successful ping so that we do not accumulate spurious losses. */
         ife->pings_outstanding = 0;

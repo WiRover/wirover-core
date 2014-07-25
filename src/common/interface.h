@@ -50,9 +50,6 @@ struct interface {
     time_t              last_ping_success;
     int                 pings_outstanding;
 
-    time_t              next_ping_time;
-    time_t              next_ping_timeout;
-
     uint32_t            next_ping_seq_no;
     uint32_t            last_ping_seq_no;
 

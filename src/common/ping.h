@@ -79,7 +79,7 @@ int fill_passive_payload(const char *ifname, struct passive_payload *dest);
 #ifdef GATEWAY
 struct interface;
 int ping_all_interfaces();
-int ping_interface(struct interface *ife);
+int send_ping(struct interface* ife);
 #endif
 //This is defined differently for both the gateway and controller
 //It's called from the datapath when a packet comes in with the TUNFLAG_PING flag set

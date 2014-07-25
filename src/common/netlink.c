@@ -264,7 +264,7 @@ int handle_netlink_message(const char* msg, int msg_len)
                     
                 read_network_name(ife->name, ife->network, sizeof(ife->network));
 
-                ping_interface(ife);
+                send_ping(ife);
                 should_notify = 1;
             }
 
@@ -328,7 +328,7 @@ int handle_netlink_message(const char* msg, int msg_len)
                         memcpy(&ife->gateway_ip, &gwaddr, 
                                 sizeof(ife->gateway_ip));
 
-                        ping_interface(ife);
+                        send_ping(ife);
                     }
 
                     release_read_lock(&interface_list_lock);

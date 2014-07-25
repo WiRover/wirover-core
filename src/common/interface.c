@@ -43,9 +43,6 @@ struct interface* alloc_interface(int node_id)
     ife->last_ping_time = now;
     ife->last_ping_success = now;
 
-    ife->next_ping_time = now;
-    ife->next_ping_timeout = now;
-
     return ife;
 }
 
