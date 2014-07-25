@@ -7,6 +7,8 @@
 #include <sys/socket.h> // IPPROTO
 #include <math.h>
 
+#include "config.h"
+#include "debug.h"
 #include "policyTable.h"
 
 #define SOURCE 0
@@ -126,19 +128,21 @@ unsigned netmask_to_slash(uint32_t netmask) {
 }
 
 int createPolicyFiles() {
-    FILE *infile = fopen(POLICY_TABLE_IN_FILE, "r");
+    FILE *infile = fopen(INGRESS_POLICY_PATH, "r");
     if(!infile) {
-        FILE *infile = fopen(POLICY_TABLE_IN_FILE, "w");
+        FILE *infile = fopen(INGRESS_POLICY_PATH, "w");
+        if(infile == NULL) { return FAILURE; }
         fclose(infile);
     }
 
-    FILE *outfile = fopen(POLICY_TABLE_OUT_FILE, "r");
+    FILE *outfile = fopen(EGRESS_POLICY_PATH, "r");
     if(!outfile) {
-        FILE *outfile = fopen(POLICY_TABLE_OUT_FILE, "w");
+        FILE *outfile = fopen(EGRESS_POLICY_PATH, "w");
+        if(outfile == NULL) { return FAILURE; }
         fclose(outfile);
     }
 
-    return 0;
+    return SUCCESS;
 }
 
 
@@ -148,8 +152,9 @@ int main(int argc, char *argv[]) {
         usage(argv[0]);
         exit(0);
     }
-
-    createPolicyFiles();
+    if(createPolicyFiles() == FAILURE) {
+        return FAILURE;
+    }
 
     struct policy_entry policy = {
         .type = POLICY_TYPE_FLOW,
@@ -307,36 +312,23 @@ int main(int argc, char *argv[]) {
 
         c = getopt_long(argc, argv, optstring, longopts, &longindex);
     }
-
+    
+    char *table_path = (policy.table & POLICY_TBL_OUTPUT) == POLICY_TBL_OUTPUT 
+        ? EGRESS_POLICY_PATH : INGRESS_POLICY_PATH;
     switch(policy.command) {
         case POLICY_CMD_APPEND:
-            if((policy.table & POLICY_TBL_OUTPUT) == POLICY_TBL_OUTPUT) {
-                appendPolicy(POLICY_TABLE_OUT_FILE, &policy);
-            }
-            if((policy.table & POLICY_TBL_INPUT) == POLICY_TBL_INPUT) {
-                appendPolicy(POLICY_TABLE_IN_FILE, &policy);
-            }
+            appendPolicy(table_path, &policy);
             break;
         case POLICY_CMD_DELETE:
-            if((policy.table & POLICY_TBL_OUTPUT) == POLICY_TBL_OUTPUT) {
-                deletePolicy(POLICY_TABLE_OUT_FILE, &policy);
-            }
-            if((policy.table & POLICY_TBL_INPUT) == POLICY_TBL_INPUT) {
-                deletePolicy(POLICY_TABLE_IN_FILE, &policy);
-            }
+            deletePolicy(table_path, &policy);
             break;
         case POLICY_CMD_INSERT:
-            if((policy.table & POLICY_TBL_OUTPUT) == POLICY_TBL_OUTPUT) {
-                insertPolicy(POLICY_TABLE_OUT_FILE, &policy);
-            }
-            if((policy.table & POLICY_TBL_INPUT) == POLICY_TBL_INPUT) {
-                insertPolicy(POLICY_TABLE_IN_FILE, &policy);
-            }
+            insertPolicy(table_path, &policy);
             break;
         case POLICY_CMD_FLUSH: ;         
-            FILE *infile = fopen(POLICY_TABLE_IN_FILE, "w");
+            FILE *infile = fopen(EGRESS_POLICY_PATH, "w");
             fclose(infile);
-            FILE *outfile = fopen(POLICY_TABLE_OUT_FILE, "w");
+            FILE *outfile = fopen(INGRESS_POLICY_PATH, "w");
             fclose(outfile);
             break;
     }
@@ -694,12 +686,11 @@ static int print_nice_policy_line(char *buffer) {
 }
 
 static int list_policies() {
-    FILE *infile = fopen(POLICY_TABLE_IN_FILE, "r");
+    FILE *infile = fopen(INGRESS_POLICY_PATH, "r");
     if(!infile) {
         fprintf(stderr, "In policy table does not exist\n");
     }
-
-    FILE *outfile = fopen(POLICY_TABLE_OUT_FILE, "r");
+    FILE *outfile = fopen(EGRESS_POLICY_PATH, "r");
     if(!outfile) {
         fprintf(stderr, "Out policy table does not exist\n");
     }

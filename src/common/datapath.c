@@ -326,7 +326,7 @@ int send_sock_packet(uint8_t flags, char *packet, int size, uint16_t node_id, st
 #ifdef GATEWAY
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    if(src_ife->packets_since_ack > 5 && timeval_diff(&tv, &src_ife->rx_time) > src_ife->avg_rtt * 1.5){
+    if(src_ife->packets_since_ack > 5 && timeval_diff(&tv, &src_ife->rx_time) > (src_ife->avg_rtt + 100 * USECS_PER_MSEC) * 2){
         change_interface_state(src_ife, INACTIVE);
     }
 #endif

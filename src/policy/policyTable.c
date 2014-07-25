@@ -2,6 +2,7 @@
 #include <inttypes.h>
 #include <string.h>
 
+#include "config.h"
 #include "policyTable.h"
 #include "flow_table.h"
 #include "debug.h"
@@ -82,13 +83,13 @@ int getMatch(struct flow_tuple *ft, struct policy_entry *pd, int dir) {
     char *token;
 
     if(dir == INGRESS) {    
-        table = fopen("../common/policy/" POLICY_TABLE_IN_FILE, "rt");
+        table = fopen(INGRESS_POLICY_PATH, "r");
         if(table == NULL) {
             goto DEFAULT;
         }
     }
     else if(dir == EGRESS) {
-        table = fopen("../common/policy/" POLICY_TABLE_OUT_FILE, "r");
+        table = fopen(EGRESS_POLICY_PATH, "r");
         if(table == NULL) {
             goto DEFAULT;
         }

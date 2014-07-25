@@ -8,8 +8,6 @@
 #include <stdint.h>
 #include "flow_table.h"
 
-#define POLICY_TABLE_IN_FILE "policy_table_in.txt"
-#define POLICY_TABLE_OUT_FILE "policy_table_out.txt"
 #define INGRESS 0
 #define EGRESS 1
 
