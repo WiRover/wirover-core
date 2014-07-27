@@ -162,15 +162,27 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     struct interface *remote_ife = NULL;
 
     struct remote_node *gw = lookup_remote_node_by_id(node_id);
-    if(gw != NULL)
-        remote_ife = find_interface_by_index(gw->head_interface, link_id);
+    if(gw == NULL)
+    {
+        DEBUG_MSG("Sending error for bad node");
+        char error[] = { TUNERROR_BAD_NODE };
+        return send_sock_packet(TUNTYPE_ERROR, error, 1, node_id, ife, &from);
+    }
+    
+    remote_ife = find_interface_by_index(gw->head_interface, link_id);
+    if(remote_ife == NULL)
+    {
+        DEBUG_MSG("Sending error for bad link");
+        char error[] = { TUNERROR_BAD_LINK };
+        return send_sock_packet(TUNTYPE_ERROR, error, 1, node_id, ife, &from);
+    }
 
     //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
-    if((n_tun_hdr.flags & TUNFLAG_ACK) != 0) {
+    if((n_tun_hdr.type == TUNTYPE_ACK)) {
         return SUCCESS;
     }
     //Process the ping even though we may not have an entry in our remote_nodes
-    if((n_tun_hdr.flags & TUNFLAG_PING) != 0){
+    if((n_tun_hdr.type == TUNTYPE_PING)){
         handle_incoming_ping(&from, arrival_time, ife, remote_ife, &buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
         return SUCCESS;
     }
@@ -182,8 +194,8 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     }
 
     //Send an ack and return if the packet was only requesting an ack
-    send_packet(TUNFLAG_ACK, "", 0, get_unique_id(), ife, remote_ife);
-    if((n_tun_hdr.flags & TUNFLAG_ACKREQ) != 0){
+    send_packet(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife);
+    if((n_tun_hdr.type == TUNTYPE_ACKREQ)){
         return SUCCESS;
     }
 
@@ -286,14 +298,14 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
 
             release_read_lock(&interface_list_lock);
 
-            return send_packet(TUNFLAG_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
+            return send_packet(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
         }
     }
 
     return SUCCESS;
 } // End function int handleOutboundPacket()
 
-int send_packet(uint8_t flags, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife)
+int send_packet(uint8_t type, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife)
 {
     if(dst_ife == NULL || src_ife == NULL)
     {
@@ -301,10 +313,10 @@ int send_packet(uint8_t flags, char *packet, int size, uint16_t node_id, struct 
     }
     struct sockaddr_storage dst;
     build_data_sockaddr(dst_ife, &dst);
-    return send_sock_packet(flags, packet, size, node_id, src_ife, &dst);
+    return send_sock_packet(type, packet, size, node_id, src_ife, &dst);
 }
 
-int send_sock_packet(uint8_t flags, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct sockaddr_storage *dst)
+int send_sock_packet(uint8_t type, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct sockaddr_storage *dst)
 {
     int sockfd = src_ife->sockfd;
     int rtn = 0;
@@ -314,7 +326,7 @@ int send_sock_packet(uint8_t flags, char *packet, int size, uint16_t node_id, st
         return FAILURE;
     }
     char *new_packet = (char *)malloc(size + sizeof(struct tunhdr));
-    int new_size = add_tunnel_header(flags, packet, size, new_packet, node_id, src_ife);
+    int new_size = add_tunnel_header(type, packet, size, new_packet, node_id, src_ife);
 
     if( (rtn = sendto(sockfd, new_packet, new_size, 0, (struct sockaddr *)dst, sizeof(struct sockaddr))) < 0)
     {

@@ -14,13 +14,17 @@
 #define TUNHDR_NO_TIMESTAMP 0xFFFFFFFF
 #define TUNNEL_LATENCY_INVALID 0xFFFFFFFF
 
-#define TUNFLAG_DATA    0x01
-#define TUNFLAG_ACK     0x02
-#define TUNFLAG_ACKREQ  0x04
-#define TUNFLAG_PING    0x10
+#define TUNTYPE_DATA        0x01
+#define TUNTYPE_PING        0x02
+#define TUNTYPE_ACK         0x03
+#define TUNTYPE_ACKREQ      0x04
+#define TUNTYPE_ERROR       0x05
+
+#define TUNERROR_BAD_NODE   0x01
+#define TUNERROR_BAD_LINK   0x02
 
 struct tunhdr {
-    __u8        flags;
+    __u8        type;
     __u8        version;
     __be16      header_len;
 
@@ -53,7 +57,7 @@ void   dumpTunHdr(struct tunhdr *tun_hdr);
 void   dumpNetworkTunHdr(struct tunhdr *tun_hdr);
 int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu);
 struct tunnel *getTunnel();
-int add_tunnel_header(uint8_t flags, char *orig_packet, int size, char *dst_packet, uint16_t node_id, struct interface *src_ife);
+int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packet, uint16_t node_id, struct interface *src_ife);
 
 #endif //TUNNEL_H
 
