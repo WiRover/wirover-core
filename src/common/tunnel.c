@@ -267,7 +267,6 @@ int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packe
     if(update_ife != NULL){
         tun_hdr.seq = htonl(update_ife->next_seq++);
         tun_hdr.path_ack = htonl(update_ife->last_ack);
-        DEBUG_MSG("Sequence number %d, ack %d for %s",update_ife->next_seq, update_ife->last_ack, update_ife->name);
 
         struct timeval tv;
         gettimeofday(&tv,NULL);

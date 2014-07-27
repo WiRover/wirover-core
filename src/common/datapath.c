@@ -34,7 +34,6 @@ static struct buffer_storage *packet_buffer[PACKET_BUFFER_SIZE];
 int handleInboundPacket(int tunfd, struct interface *ife);
 int handleOutboundPacket(int tunfd, struct tunnel *tun);
 int handlePackets();
-int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src_ife, struct sockaddr_storage *dst, struct interface *update_ife);
 
 static int                  running = 0;
 static pthread_t            data_thread;
@@ -184,6 +183,13 @@ int handleInboundPacket(int tunfd, struct interface *ife)
         char error[] = { TUNERROR_BAD_LINK };
         return send_sock_packet(TUNTYPE_ERROR, error, 1, ife, &from, NULL);
     }
+
+#ifdef CONTROLLER
+    remote_ife->last_ack = h_seq_no;
+#endif
+#ifdef GATEWAY
+    ife->last_ack = h_seq_no;
+#endif
 
     //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
     if((n_tun_hdr.type == TUNTYPE_ACK)) {

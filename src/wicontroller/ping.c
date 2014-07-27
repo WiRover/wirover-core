@@ -249,7 +249,7 @@ static int send_response(struct interface *local_ife, const struct remote_node *
     } else {
         memset(ping->digest, 0, sizeof(ping->digest));
     }
-    return send_sock_packet(TUNTYPE_PING, response_buffer, MIN_PING_PACKET_SIZE, get_unique_id(), interface_list, from);
+    return send_sock_packet(TUNTYPE_PING, response_buffer, MIN_PING_PACKET_SIZE, interface_list, from, NULL);
     //return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
 }
 
