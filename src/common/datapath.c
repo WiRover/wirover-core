@@ -7,6 +7,7 @@
 
 #include "configuration.h"
 #include "constants.h"
+#include "contchan.h"
 #include "debug.h"
 #include "datapath.h"
 #include "flow_table.h"
@@ -33,6 +34,7 @@ static struct buffer_storage *packet_buffer[PACKET_BUFFER_SIZE];
 int handleInboundPacket(int tunfd, struct interface *ife);
 int handleOutboundPacket(int tunfd, struct tunnel *tun);
 int handlePackets();
+int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src_ife, struct sockaddr_storage *dst, struct interface *update_ife);
 
 static int                  running = 0;
 static pthread_t            data_thread;
@@ -160,13 +162,19 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
     struct interface *remote_ife = NULL;
+#ifdef GATEWAY
+    if(n_tun_hdr.type == TUNTYPE_ERROR){
+        send_notification(1);
+        return SUCCESS;
+    }
+#endif
 
     struct remote_node *gw = lookup_remote_node_by_id(node_id);
     if(gw == NULL)
     {
         DEBUG_MSG("Sending error for bad node");
         char error[] = { TUNERROR_BAD_NODE };
-        return send_sock_packet(TUNTYPE_ERROR, error, 1, node_id, ife, &from);
+        return send_sock_packet(TUNTYPE_ERROR, error, 1, ife, &from, NULL);
     }
     
     remote_ife = find_interface_by_index(gw->head_interface, link_id);
@@ -174,7 +182,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     {
         DEBUG_MSG("Sending error for bad link");
         char error[] = { TUNERROR_BAD_LINK };
-        return send_sock_packet(TUNTYPE_ERROR, error, 1, node_id, ife, &from);
+        return send_sock_packet(TUNTYPE_ERROR, error, 1, ife, &from, NULL);
     }
 
     //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
@@ -313,10 +321,17 @@ int send_packet(uint8_t type, char *packet, int size, uint16_t node_id, struct i
     }
     struct sockaddr_storage dst;
     build_data_sockaddr(dst_ife, &dst);
-    return send_sock_packet(type, packet, size, node_id, src_ife, &dst);
+    struct interface *update_ife;
+#ifdef CONTROLLER
+    update_ife = dst_ife;
+#endif
+#ifdef GATEWAY
+    update_ife = src_ife;
+#endif
+    return send_sock_packet(type, packet, size, src_ife, &dst, update_ife);
 }
 
-int send_sock_packet(uint8_t type, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct sockaddr_storage *dst)
+int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src_ife, struct sockaddr_storage *dst, struct interface *update_ife)
 {
     int sockfd = src_ife->sockfd;
     int rtn = 0;
@@ -326,7 +341,7 @@ int send_sock_packet(uint8_t type, char *packet, int size, uint16_t node_id, str
         return FAILURE;
     }
     char *new_packet = (char *)malloc(size + sizeof(struct tunhdr));
-    int new_size = add_tunnel_header(type, packet, size, new_packet, node_id, src_ife);
+    int new_size = add_tunnel_header(type, packet, size, new_packet, src_ife, update_ife);
 
     if( (rtn = sendto(sockfd, new_packet, new_size, 0, (struct sockaddr *)dst, sizeof(struct sockaddr))) < 0)
     {

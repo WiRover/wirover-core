@@ -131,7 +131,7 @@ int send_ping(struct interface* ife)
 
     fill_ping_digest(pkt, buffer, send_size, private_key);
 
-    if(send_packet(TUNFLAG_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife())) {
+    if(send_packet(TUNTYPE_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife())) {
         /* We get an error ENETUNREACH if we try pinging out an interface which
          * does not have an IP address.  That case is not interesting, so we
          * suppress the error message. */
@@ -192,7 +192,7 @@ void* ping_thread_func(void* arg)
         while(inactive_interface)
         {
             if(inactive_interface->state != ACTIVE && timeval_diff(&now, &inactive_interface->tx_time) >= stall_retry_interval){
-                send_packet(TUNFLAG_ACKREQ, "", 0, get_unique_id(), inactive_interface, get_controller_ife());
+                send_packet(TUNTYPE_ACKREQ, "", 0, get_unique_id(), inactive_interface, get_controller_ife());
             }
             inactive_interface = inactive_interface->next;
         }
@@ -262,7 +262,6 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
     if(pkt->type == PING_RESPONSE_ERROR) {
         DEBUG_MSG("Controller responded with an error, will send a notification");
         send_response = 0;
-        send_notification(1);
     }
 
     if(iszero(pkt->digest, sizeof(pkt->digest))) {
@@ -340,7 +339,7 @@ static int send_second_response(struct interface *ife,
     }
     
     fill_ping_digest(ping, response, send_size, private_key);
-    int result = send_packet(TUNFLAG_PING, response, send_size, get_unique_id(), ife, dst_ife);
+    int result = send_packet(TUNTYPE_PING, response, send_size, get_unique_id(), ife, dst_ife);
     //int result = sendto(sockfd, response, send_size, 0, to, to_len);
 
     free(response);

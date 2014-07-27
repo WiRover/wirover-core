@@ -27,6 +27,7 @@
 #include "configuration.h"
 #include "debug.h"
 #include "interface.h"
+#include "rootchan.h"
 #include "timing.h"
 #include "tunnel.h"
 #include "util.h"
@@ -252,7 +253,7 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
     return SUCCESS;
 } // End function tunnelCreate()
 
-int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packet, uint16_t node_id, struct interface *src_ife)
+int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packet, struct interface *src_ife, struct interface *update_ife)
 {
     // Getting a sequence number should be done as close to sending as possible
     struct tunhdr tun_hdr;
@@ -260,15 +261,19 @@ int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packe
 
     tun_hdr.type = type;
     //tun_hdr.client_id = 0; // TODO: Add a client ID.
-    tun_hdr.node_id = htons(node_id);
+    tun_hdr.node_id = htons(get_unique_id());
     tun_hdr.link_id = htons(src_ife->index);
-    tun_hdr.seq = htonl(src_ife->next_seq++);
-    tun_hdr.path_ack = htonl(src_ife->last_ack);
 
-    struct timeval tv;
-    gettimeofday(&tv,NULL);
-    tun_hdr.send_ts = htonl(tv.tv_sec * USEC_PER_SEC + tv.tv_usec);
-    tun_hdr.recv_ts = htonl(src_ife->rx_time.tv_sec * USEC_PER_SEC + src_ife->rx_time.tv_usec);
+    if(update_ife != NULL){
+        tun_hdr.seq = htonl(update_ife->next_seq++);
+        tun_hdr.path_ack = htonl(update_ife->last_ack);
+        DEBUG_MSG("Sequence number %d, ack %d for %s",update_ife->next_seq, update_ife->last_ack, update_ife->name);
+
+        struct timeval tv;
+        gettimeofday(&tv,NULL);
+        tun_hdr.send_ts = htonl(tv.tv_sec * USEC_PER_SEC + tv.tv_usec);
+        tun_hdr.recv_ts = htonl(update_ife->rx_time.tv_sec * USEC_PER_SEC + update_ife->rx_time.tv_usec);
+    }
 
     memcpy(dst_packet, &tun_hdr, sizeof(struct tunhdr));
     memcpy(&dst_packet[sizeof(struct tunhdr)], orig_packet, size);
