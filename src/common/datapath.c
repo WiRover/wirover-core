@@ -178,10 +178,6 @@ int handleInboundPacket(int tunfd, struct interface *ife)
         char error[] = { TUNERROR_BAD_LINK };
         return send_sock_packet(TUNTYPE_ERROR, error, 1, ife, &from, NULL);
     }
-    
-    if(pb_add_seq_num(ife->rec_seq_buffer, h_seq_no) == DUPLICATE) {
-        return SUCCESS;
-    }
 
     struct interface *update_ife;
 #ifdef CONTROLLER
@@ -190,10 +186,14 @@ int handleInboundPacket(int tunfd, struct interface *ife)
 #ifdef GATEWAY
     update_ife = ife;
 #endif
+    
+    if(pb_add_seq_num(update_ife->rec_seq_buffer, h_seq_no) == DUPLICATE) {
+        return SUCCESS;
+    }
+
     update_ife->remote_ack = h_path_ack;
     update_ife->remote_seq = h_seq_no;
 
-    DEBUG_MSG("Buffer for %s length: %d", update_ife->name, update_ife->rt_buffer.length);
     pb_free_packets(&update_ife->rt_buffer, h_path_ack);
 
     //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
