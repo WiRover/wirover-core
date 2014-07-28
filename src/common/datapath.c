@@ -13,7 +13,7 @@
 #include "flow_table.h"
 #include "interface.h"
 #include "policyTable.h"
-#include "packetBuffer.h"
+#include "packet_buffer.h"
 #include "netlink.h"
 #include "rwlock.h"
 #include "rootchan.h"
@@ -27,9 +27,6 @@
 #ifndef SIOCGSTAMP
 # define SIOCGSTAMP 0x8906
 #endif
-
-
-static struct buffer_storage *packet_buffer[PACKET_BUFFER_SIZE];
 
 int handleInboundPacket(int tunfd, struct interface *ife);
 int handleOutboundPacket(int tunfd, struct tunnel *tun);
@@ -75,9 +72,6 @@ int handlePackets()
     // The File Descriptor set to add sockets to
     fd_set read_set;
     sigset_t orig_set;
-
-    initPacketBuffer(packet_buffer);
-
 
     while( 1 )
     {
@@ -158,6 +152,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
 
     // Copy temporary to host format
     unsigned int h_seq_no = ntohl(n_tun_hdr.seq);
+    unsigned int h_path_ack = ntohl(n_tun_hdr.path_ack);
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
     struct interface *remote_ife = NULL;
@@ -183,13 +178,23 @@ int handleInboundPacket(int tunfd, struct interface *ife)
         char error[] = { TUNERROR_BAD_LINK };
         return send_sock_packet(TUNTYPE_ERROR, error, 1, ife, &from, NULL);
     }
+    
+    if(pb_add_seq_num(ife->rec_seq_buffer, h_seq_no) == DUPLICATE) {
+        return SUCCESS;
+    }
 
+    struct interface *update_ife;
 #ifdef CONTROLLER
-    remote_ife->last_ack = h_seq_no;
+    update_ife = remote_ife;
 #endif
 #ifdef GATEWAY
-    ife->last_ack = h_seq_no;
+    update_ife = ife;
 #endif
+    update_ife->remote_ack = h_path_ack;
+    update_ife->remote_seq = h_seq_no;
+
+    DEBUG_MSG("Buffer for %s length: %d", update_ife->name, update_ife->rt_buffer.length);
+    pb_free_packets(&update_ife->rt_buffer, h_path_ack);
 
     //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
     if((n_tun_hdr.type == TUNTYPE_ACK)) {
@@ -210,10 +215,6 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     //Send an ack and return if the packet was only requesting an ack
     send_packet(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife);
     if((n_tun_hdr.type == TUNTYPE_ACKREQ)){
-        return SUCCESS;
-    }
-
-    if(addSeqNum(packet_buffer, h_seq_no) == NOT_ADDED) {
         return SUCCESS;
     }
 
@@ -334,6 +335,7 @@ int send_packet(uint8_t type, char *packet, int size, uint16_t node_id, struct i
 #ifdef GATEWAY
     update_ife = src_ife;
 #endif
+    pb_add_packet(&update_ife->rt_buffer, update_ife->local_seq, packet);
     return send_sock_packet(type, packet, size, src_ife, &dst, update_ife);
 }
 

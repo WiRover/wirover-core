@@ -10,6 +10,7 @@
 #include "configuration.h"
 #include "debug.h"
 #include "interface.h"
+#include "packet_buffer.h"
 #ifdef GATEWAY
 #include "contchan.h"
 #endif
@@ -34,6 +35,8 @@ struct interface* alloc_interface(int node_id)
     
     gettimeofday(&ife->rx_time, NULL);
     gettimeofday(&ife->tx_time, NULL);
+
+    ife->rec_seq_buffer = pb_alloc_seq_buffer();
 
     ife->ping_interval = get_ping_interval();
     ife->ping_timeout = get_ping_timeout();

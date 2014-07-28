@@ -22,7 +22,7 @@ add_executable(wigateway
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
     ${COMMON}/timing.c
-	${COMMON}/packetBuffer
+	${COMMON}/packet_buffer
     ${COMMON}/tunnel.c
     ${COMMON}/callback.c
     ${COMMON}/format.c

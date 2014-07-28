@@ -6,7 +6,9 @@
 #include <sys/time.h>
 #include <linux/if.h>
 #include <netinet/in.h>
+
 #include "uthash.h"
+#include "packet_buffer.h"
 
 #define NETWORK_NAME_LENGTH 16
 
@@ -31,8 +33,9 @@ struct interface {
 
     //This is for local interfaces
     int                 packets_since_ack;
-    int                 next_seq;
-    int                 last_ack;
+    int                 local_seq;
+    int                 remote_ack;
+    int                 remote_seq;
     struct timeval      rx_time;
     struct timeval      tx_time;
 
@@ -56,6 +59,9 @@ struct interface {
     unsigned int        packets;
     unsigned int        packets_lost;
     unsigned int        out_of_order_packets;
+    uint32_t*           rec_seq_buffer;
+    
+    struct retrans_buffer rt_buffer;
 
     double              avg_rtt;
     double              avg_downlink_bw;

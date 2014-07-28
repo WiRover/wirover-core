@@ -265,8 +265,8 @@ int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packe
     tun_hdr.link_id = htons(src_ife->index);
 
     if(update_ife != NULL){
-        tun_hdr.seq = htonl(update_ife->next_seq++);
-        tun_hdr.path_ack = htonl(update_ife->last_ack);
+        tun_hdr.seq = htonl(update_ife->local_seq++);
+        tun_hdr.path_ack = htonl(update_ife->remote_seq);
 
         struct timeval tv;
         gettimeofday(&tv,NULL);
