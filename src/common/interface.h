@@ -59,7 +59,6 @@ struct interface {
     unsigned int        packets;
     unsigned int        packets_lost;
     unsigned int        out_of_order_packets;
-    uint32_t*           rec_seq_buffer;
     
     struct retrans_buffer rt_buffer;
 

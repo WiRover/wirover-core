@@ -5,6 +5,7 @@
 #include "debug.h"
 #include "remote_node.h"
 #include "netlink.h"
+#include "packet_buffer.h"
 
 struct remote_node* remote_node_id_hash = 0;
 
@@ -21,6 +22,7 @@ struct remote_node* alloc_remote_node()
     node->last_ping_time = node->creation_time;
     node->active_interfaces = 0;
     node->head_interface = 0;
+    node->rec_seq_buffer = pb_alloc_seq_buffer();
 
     return node;
 }

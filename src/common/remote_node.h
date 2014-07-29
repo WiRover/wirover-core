@@ -14,14 +14,17 @@ struct interface;
 struct remote_node {
     int state;
 
-    ipaddr_t       private_ip;
-    unsigned short unique_id;
+    ipaddr_t        private_ip;
+    unsigned short  unique_id;
 
-    time_t   creation_time;
-    time_t   last_ping_time;
-    time_t   last_bw_time;
+    uint32_t        global_seq;
+    uint32_t*       rec_seq_buffer;
 
-    uint8_t  private_key[SHA256_DIGEST_LENGTH];
+    time_t          creation_time;
+    time_t          last_ping_time;
+    time_t          last_bw_time;
+
+    uint8_t         private_key[SHA256_DIGEST_LENGTH];
 
     unsigned int        active_interfaces;
     struct interface*   head_interface;

@@ -151,7 +151,8 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     memcpy(&n_tun_hdr, buffer, sizeof(struct tunhdr));
 
     // Copy temporary to host format
-    unsigned int h_seq_no = ntohl(n_tun_hdr.seq);
+    unsigned int h_global_seq = ntohl(n_tun_hdr.global_seq);
+    unsigned int h_link_seq = ntohl(n_tun_hdr.link_seq);
     unsigned int h_path_ack = ntohl(n_tun_hdr.path_ack);
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
@@ -168,15 +169,19 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     {
         DEBUG_MSG("Sending error for bad node");
         char error[] = { TUNERROR_BAD_NODE };
-        return send_sock_packet(TUNTYPE_ERROR, error, 1, ife, &from, NULL);
+        return send_sock_packet(TUNTYPE_ERROR, error, 1, ife, &from, NULL, NULL);
     }
     
+    if(pb_add_seq_num(gw->rec_seq_buffer, h_global_seq) == DUPLICATE) {
+        return SUCCESS;
+    }
+
     remote_ife = find_interface_by_index(gw->head_interface, link_id);
     if(remote_ife == NULL)
     {
         DEBUG_MSG("Sending error for bad link");
         char error[] = { TUNERROR_BAD_LINK };
-        return send_sock_packet(TUNTYPE_ERROR, error, 1, ife, &from, NULL);
+        return send_sock_packet(TUNTYPE_ERROR, error, 1, ife, &from, NULL, NULL);
     }
 
     struct interface *update_ife;
@@ -186,13 +191,9 @@ int handleInboundPacket(int tunfd, struct interface *ife)
 #ifdef GATEWAY
     update_ife = ife;
 #endif
-    
-    if(pb_add_seq_num(update_ife->rec_seq_buffer, h_seq_no) == DUPLICATE) {
-        return SUCCESS;
-    }
 
     update_ife->remote_ack = h_path_ack;
-    update_ife->remote_seq = h_seq_no;
+    update_ife->remote_seq = h_link_seq;
 
     pb_free_packets(&update_ife->rt_buffer, h_path_ack);
 
@@ -242,7 +243,6 @@ int handleInboundPacket(int tunfd, struct interface *ife)
 
     update_flow_entry(ftd);
 
-
     unsigned short tun_info[2];
     tun_info[0] = 0; //flags
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
@@ -254,7 +254,6 @@ int handleInboundPacket(int tunfd, struct interface *ife)
         ERROR_MSG("write() failed");
         return FAILURE;
     }
-
 
     return SUCCESS;
 } // End function int handleInboundPacket()
@@ -306,7 +305,7 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
             }
 
             struct interface *dst_ife = select_dst_interface(ftd);
-            if(dst_ife != NULL) { 
+            if(dst_ife != NULL) {
                 ftd->remote_link_id = dst_ife->index;
                 ftd->remote_node_id = dst_ife->node_id;
             }
@@ -328,6 +327,11 @@ int send_packet(uint8_t type, char *packet, int size, uint16_t node_id, struct i
     }
     struct sockaddr_storage dst;
     build_data_sockaddr(dst_ife, &dst);
+    struct remote_node *remote_node = lookup_remote_node_by_id(dst_ife->node_id);
+    if(remote_node == NULL) {
+        DEBUG_MSG("Destination interface %s had bad remote_node id %d", dst_ife->name, dst_ife->node_id);
+        return FAILURE;
+    }
     struct interface *update_ife;
 #ifdef CONTROLLER
     update_ife = dst_ife;
@@ -336,10 +340,11 @@ int send_packet(uint8_t type, char *packet, int size, uint16_t node_id, struct i
     update_ife = src_ife;
 #endif
     pb_add_packet(&update_ife->rt_buffer, update_ife->local_seq, packet);
-    return send_sock_packet(type, packet, size, src_ife, &dst, update_ife);
+    return send_sock_packet(type, packet, size, src_ife, &dst, update_ife, &remote_node->global_seq);
 }
 
-int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src_ife, struct sockaddr_storage *dst, struct interface *update_ife)
+int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src_ife,
+    struct sockaddr_storage *dst, struct interface *update_ife, uint32_t *global_seq)
 {
     int sockfd = src_ife->sockfd;
     int rtn = 0;
@@ -349,7 +354,7 @@ int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src
         return FAILURE;
     }
     char *new_packet = (char *)malloc(size + sizeof(struct tunhdr));
-    int new_size = add_tunnel_header(type, packet, size, new_packet, src_ife, update_ife);
+    int new_size = add_tunnel_header(type, packet, size, new_packet, src_ife, update_ife, global_seq);
 
     if( (rtn = sendto(sockfd, new_packet, new_size, 0, (struct sockaddr *)dst, sizeof(struct sockaddr))) < 0)
     {

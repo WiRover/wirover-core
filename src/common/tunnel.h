@@ -28,7 +28,8 @@ struct tunhdr {
     __u8        version;
     __be16      header_len;
 
-    __be32      seq;
+    __be32      global_seq;
+    __be32      link_seq;
     uint16_t    link_id;
     uint16_t    node_id;
     __be32      path_ack;
@@ -57,7 +58,8 @@ void   dumpTunHdr(struct tunhdr *tun_hdr);
 void   dumpNetworkTunHdr(struct tunhdr *tun_hdr);
 int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu);
 struct tunnel *getTunnel();
-int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packet, struct interface *src_ife, struct interface *update_ife);
+int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packet, 
+    struct interface *src_ife, struct interface *update_ife, uint32_t *global_seq);
 
 #endif //TUNNEL_H
 
