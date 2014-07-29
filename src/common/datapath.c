@@ -214,7 +214,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     }
 
     //Send an ack and return if the packet was only requesting an ack
-    send_packet(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife);
+    send_ife_packet(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife);
     if((n_tun_hdr.type == TUNTYPE_ACKREQ)){
         return SUCCESS;
     }
@@ -274,52 +274,58 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         orig_packet = &buffer[TUNTAP_OFFSET];
         orig_size -= TUNTAP_OFFSET;
 
-        struct flow_tuple ft;
-        struct iphdr    *ip_hdr = (struct iphdr *)(orig_packet);
-        struct tcphdr   *tcp_hdr = (struct tcphdr *)(orig_packet + (ip_hdr->ihl * 4));
-
-        // Policy and Flow table
-        fill_flow_tuple(ip_hdr, tcp_hdr, &ft, 0);
-
-        struct flow_entry *ftd = get_flow_entry(&ft);
-
-        // Check for drop
-        if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
-            return SUCCESS;
-        }
-
-        // Send on all interfaces
-        if((ftd->action & POLICY_OP_DUPLICATE) != 0) {
-            //sendAllInterfaces(orig_packet, orig_size);
-            return SUCCESS;
-        }
-        //Add a tunnel header to the packet
-        if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
-            int node_id = get_unique_id();
-
-            obtain_read_lock(&interface_list_lock);
-
-            struct interface *src_ife = select_src_interface(ftd);
-            if(src_ife != NULL) {
-                ftd->local_link_id = src_ife->index;
-            }
-
-            struct interface *dst_ife = select_dst_interface(ftd);
-            if(dst_ife != NULL) {
-                ftd->remote_link_id = dst_ife->index;
-                ftd->remote_node_id = dst_ife->node_id;
-            }
-
-            release_read_lock(&interface_list_lock);
-
-            return send_packet(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
-        }
+        return send_packet(orig_packet, orig_size);
     }
 
     return SUCCESS;
 } // End function int handleOutboundPacket()
 
-int send_packet(uint8_t type, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife)
+int send_packet(char *orig_packet, int orig_size)
+{
+    struct flow_tuple ft;
+    struct iphdr    *ip_hdr = (struct iphdr *)(orig_packet);
+    struct tcphdr   *tcp_hdr = (struct tcphdr *)(orig_packet + (ip_hdr->ihl * 4));
+
+    // Policy and Flow table
+    fill_flow_tuple(ip_hdr, tcp_hdr, &ft, 0);
+
+    struct flow_entry *ftd = get_flow_entry(&ft);
+
+    // Check for drop
+    if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
+        return SUCCESS;
+    }
+
+    // Send on all interfaces
+    if((ftd->action & POLICY_OP_DUPLICATE) != 0) {
+        //sendAllInterfaces(orig_packet, orig_size);
+        return SUCCESS;
+    }
+    //Add a tunnel header to the packet
+    if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
+        int node_id = get_unique_id();
+
+        obtain_read_lock(&interface_list_lock);
+
+        struct interface *src_ife = select_src_interface(ftd);
+        if(src_ife != NULL) {
+            ftd->local_link_id = src_ife->index;
+        }
+
+        struct interface *dst_ife = select_dst_interface(ftd);
+        if(dst_ife != NULL) {
+            ftd->remote_link_id = dst_ife->index;
+            ftd->remote_node_id = dst_ife->node_id;
+        }
+
+        release_read_lock(&interface_list_lock);
+
+        return send_ife_packet(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
+    }
+    return SUCCESS;
+}
+
+int send_ife_packet(uint8_t type, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife)
 {
     if(dst_ife == NULL || src_ife == NULL)
     {
@@ -339,7 +345,7 @@ int send_packet(uint8_t type, char *packet, int size, uint16_t node_id, struct i
 #ifdef GATEWAY
     update_ife = src_ife;
 #endif
-    pb_add_packet(&update_ife->rt_buffer, update_ife->local_seq, packet);
+    pb_add_packet(&update_ife->rt_buffer, update_ife->local_seq, packet, size);
     return send_sock_packet(type, packet, size, src_ife, &dst, update_ife, &remote_node->global_seq);
 }
 

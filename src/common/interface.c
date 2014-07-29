@@ -8,6 +8,7 @@
 
 #include "config.h"
 #include "configuration.h"
+#include "datapath.h"
 #include "debug.h"
 #include "interface.h"
 #include "packet_buffer.h"
@@ -57,6 +58,14 @@ int change_interface_state(struct interface *ife, enum if_state state)
         return 0;
     DEBUG_MSG("Changing interface %s state from %d to %d", ife->name, ife->state, state);
     ife->state = state;
+    if(state == INACTIVE)
+    {
+        DEBUG_MSG("Retransmitting %d unacked packets", ife->rt_buffer.length);
+        while(ife->rt_buffer.length > 0) {
+            send_packet(ife->rt_buffer.head->packet, ife->rt_buffer.head->size);
+            pb_free_head(&ife->rt_buffer);
+        }
+    }
 
 #ifdef GATEWAY
     send_notification(1);

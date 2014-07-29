@@ -16,9 +16,9 @@ int pb_free_head(struct retrans_buffer *rt_buffer)
     return SUCCESS;
 }
 
-int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, char* packet)
+int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, char* packet, int size)
 {
-    if(seq == 0){ return rt_buffer->length; }
+    if(seq == 0 || size == 0){ return rt_buffer->length; }
     if(rt_buffer->length >= RETRANSMIT_BUFFER_SIZE)
     {
         pb_free_head(rt_buffer);
@@ -26,8 +26,9 @@ int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, char* packet)
     struct retrans_buffer_entry *to_add = (struct retrans_buffer_entry *)malloc(sizeof(struct retrans_buffer_entry));
 
     to_add->seq = seq;
-    to_add->packet = (char *)malloc(sizeof(packet));
-    memcpy(to_add->packet, packet, sizeof(packet));
+    to_add->packet = (char *)malloc(size);
+    memcpy(to_add->packet, packet, size);
+    to_add->size = size;
     to_add->next = NULL;
     if(rt_buffer->length == 0) {
         rt_buffer->head = to_add;

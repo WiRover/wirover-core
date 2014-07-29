@@ -16,6 +16,7 @@
 struct retrans_buffer_entry {
     uint32_t                         seq;
     char*                            packet;
+    int                              size;
     struct retrans_buffer_entry*     next;
 };
 
@@ -25,8 +26,9 @@ struct retrans_buffer {
     struct retrans_buffer_entry*    tail;
 };
 
-int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, char* packet);
+int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, char* packet, int size);
 int pb_free_packets(struct retrans_buffer *rt_buffer, uint32_t seq);
+int pb_free_head(struct retrans_buffer *rt_buffer);
 
 uint32_t *pb_alloc_seq_buffer();
 int pb_add_seq_num(uint32_t *received_buffer, uint32_t seq);
