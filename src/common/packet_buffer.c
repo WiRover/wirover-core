@@ -36,7 +36,10 @@ int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, char* packet, 
     }
     else{
         if(rt_buffer->tail->seq >= to_add->seq){
-        DEBUG_MSG("Prev sequence number %d, new sequence number %d",rt_buffer->tail->seq, to_add->seq);
+            ERROR_MSG("Prev sequence number %d is greater than new sequence number %d",rt_buffer->tail->seq, to_add->seq);
+            free(to_add->packet);
+            free(to_add);
+            return rt_buffer->length;
         }
         rt_buffer->tail->next = to_add;
         rt_buffer->tail = to_add;
@@ -50,9 +53,6 @@ int pb_free_packets(struct retrans_buffer *rt_buffer, uint32_t seq)
     {
         pb_free_head(rt_buffer);
     }
-    /*if(rt_buffer->head == NULL) { DEBUG_MSG("Emptied buffer has length %d", rt_buffer->length); }
-    else
-        DEBUG_MSG("Buffer head has seq %d and removed up to %d", rt_buffer->head->seq, seq);*/
     return rt_buffer->length;
 }
 
@@ -75,7 +75,6 @@ int pb_add_seq_num(uint32_t *packet_buffer, uint32_t seq) {
         packet_buffer[index] = seq;
         return NOT_DUPLICATE;
     }
-    DEBUG_MSG("Dropping duplicate packet");
     return DUPLICATE;
 }
 

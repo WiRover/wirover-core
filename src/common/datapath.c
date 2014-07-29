@@ -157,12 +157,13 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
     struct interface *remote_ife = NULL;
-#ifdef GATEWAY
+
     if(n_tun_hdr.type == TUNTYPE_ERROR){
+#ifdef GATEWAY
         send_notification(1);
+#endif
         return SUCCESS;
     }
-#endif
 
     struct remote_node *gw = lookup_remote_node_by_id(node_id);
     if(gw == NULL)
@@ -173,7 +174,9 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     }
     
     if(pb_add_seq_num(gw->rec_seq_buffer, h_global_seq) == DUPLICATE) {
-        return SUCCESS;
+        //TODO: This doesn't quite work yet, when a controller or gateway get out of sync
+        //this method will drop all packets because the sequence numbers start over
+        //return SUCCESS;
     }
 
     remote_ife = find_interface_by_index(gw->head_interface, link_id);
