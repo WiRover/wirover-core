@@ -50,11 +50,10 @@ struct flow_entry *add_entry(struct flow_tuple* entry) {
 
         fe->last_visit_time = time(NULL);
         HASH_ADD_KEYPTR(hh, flow_table, newKey, sizeof(struct flow_tuple), fe);
-        return fe;
     }
 
     free(newKey);
-    return NULL;
+    return fe;
 }
 
 struct flow_entry *get_flow_entry(struct flow_tuple *ft) {

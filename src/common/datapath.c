@@ -239,6 +239,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     // Policy and Flow table
     fill_flow_tuple(ip_hdr, tcp_hdr, ft, 1);
     struct flow_entry *ftd = get_flow_entry(ft);
+    free(ft);
 
     ftd->remote_node_id = node_id;
     ftd->remote_link_id = link_id;
