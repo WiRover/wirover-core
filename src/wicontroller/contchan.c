@@ -211,7 +211,7 @@ static void update_interface_v2(struct remote_node *gw, const struct interface_i
     if(ife->state != ACTIVE && new_state == ACTIVE) {
         gw->active_interfaces++;
     }
-    ife->state = new_state;
+    change_interface_state(ife, new_state);
 
     if(ifinfo->priority != ife->priority) {
         ife->priority = ifinfo->priority;

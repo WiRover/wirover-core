@@ -51,8 +51,6 @@ struct flow_entry *add_entry(struct flow_tuple* entry) {
         fe->last_visit_time = time(NULL);
         HASH_ADD_KEYPTR(hh, flow_table, newKey, sizeof(struct flow_tuple), fe);
     }
-
-    free(newKey);
     return fe;
 }
 
@@ -83,6 +81,7 @@ void expiration_time_check() {
     HASH_ITER(hh, flow_table, current_key, tmp) {
         if(time(NULL) - current_key->last_visit_time > flow_table_timeout) {
             HASH_DEL(flow_table, current_key);
+            free(current_key->id);
             free(current_key);
         }
     }
