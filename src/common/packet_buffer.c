@@ -4,6 +4,7 @@
 
 #include "debug.h"
 #include "packet_buffer.h"
+#include "rwlock.h"
 
 int pb_free_head(struct retrans_buffer *rt_buffer)
 {
@@ -19,10 +20,17 @@ int pb_free_head(struct retrans_buffer *rt_buffer)
 int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, char* packet, int size)
 {
     if(seq == 0 || size == 0){ return rt_buffer->length; }
+    
+    if(rt_buffer->length > 0 && rt_buffer->tail->seq >= seq){
+        ERROR_MSG("Prev sequence number %d is greater than new sequence number %d",rt_buffer->tail->seq, seq);
+        return rt_buffer->length;
+    }
+
     if(rt_buffer->length >= RETRANSMIT_BUFFER_SIZE)
     {
         pb_free_head(rt_buffer);
     }
+
     struct retrans_buffer_entry *to_add = (struct retrans_buffer_entry *)malloc(sizeof(struct retrans_buffer_entry));
 
     to_add->seq = seq;
@@ -35,12 +43,6 @@ int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, char* packet, 
         rt_buffer->tail = to_add;
     }
     else{
-        if(rt_buffer->tail->seq >= to_add->seq){
-            ERROR_MSG("Prev sequence number %d is greater than new sequence number %d",rt_buffer->tail->seq, to_add->seq);
-            free(to_add->packet);
-            free(to_add);
-            return rt_buffer->length;
-        }
         rt_buffer->tail->next = to_add;
         rt_buffer->tail = to_add;
     }

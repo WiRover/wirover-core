@@ -11,6 +11,7 @@
 #include "datapath.h"
 #include "debug.h"
 #include "interface.h"
+#include "rwlock.h"
 #include "packet_buffer.h"
 #ifdef GATEWAY
 #include "contchan.h"
@@ -44,6 +45,8 @@ struct interface* alloc_interface(int node_id)
     time_t now = time(NULL);
     ife->last_ping_time = now;
     ife->last_ping_success = now;
+    struct rwlock lock = RWLOCK_INITIALIZER;
+    memcpy(&ife->rt_buffer.rwlock, &lock, sizeof(struct rwlock));
 
     return ife;
 }
@@ -60,11 +63,13 @@ int change_interface_state(struct interface *ife, enum if_state state)
     ife->state = state;
     if(state == INACTIVE)
     {
+        obtain_write_lock(&ife->rt_buffer.rwlock);
         DEBUG_MSG("Retransmitting %d unacked packets", ife->rt_buffer.length);
         while(ife->rt_buffer.length > 0) {
             send_packet(ife->rt_buffer.head->packet, ife->rt_buffer.head->size);
             pb_free_head(&ife->rt_buffer);
         }
+        release_write_lock(&ife->rt_buffer.rwlock);
     }
 
 #ifdef GATEWAY

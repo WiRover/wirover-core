@@ -2,6 +2,8 @@
  * packetBuffer.h
  */
 
+#include "rwlock.h"
+
 #ifndef PACKET_BUFFER_H
 #define PACKET_BUFFER_H
 
@@ -24,6 +26,7 @@ struct retrans_buffer {
     unsigned int                    length;
     struct retrans_buffer_entry*    head;
     struct retrans_buffer_entry*    tail;
+    struct rwlock                   rwlock;
 };
 
 int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, char* packet, int size);

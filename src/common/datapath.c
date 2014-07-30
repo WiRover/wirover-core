@@ -198,7 +198,9 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     update_ife->remote_ack = h_path_ack;
     update_ife->remote_seq = h_link_seq;
 
+    obtain_write_lock(&update_ife->rt_buffer.rwlock);
     pb_free_packets(&update_ife->rt_buffer, h_path_ack);
+    release_write_lock(&update_ife->rt_buffer.rwlock);
 
     //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
     if((n_tun_hdr.type == TUNTYPE_ACK)) {
@@ -349,7 +351,13 @@ int send_ife_packet(uint8_t type, char *packet, int size, uint16_t node_id, stru
 #ifdef GATEWAY
     update_ife = src_ife;
 #endif
-    pb_add_packet(&update_ife->rt_buffer, update_ife->local_seq, packet, size);
+
+    //There is a a possible infinite loop where send packet
+    if(update_ife->state == ACTIVE) {
+        obtain_write_lock(&update_ife->rt_buffer.rwlock);
+        pb_add_packet(&update_ife->rt_buffer, update_ife->local_seq, packet, size);
+        release_write_lock(&update_ife->rt_buffer.rwlock);
+    }
     return send_sock_packet(type, packet, size, src_ife, &dst, update_ife, &remote_node->global_seq);
 }
 
