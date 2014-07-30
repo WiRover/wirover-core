@@ -142,5 +142,6 @@ DEFAULT:
     pd->type = 0;
     pd->action = POLICY_ACT_ENCAP;
     strcpy(pd->alg_name, "wrr");
+    fclose(table);
     return NO_MATCH;
 }

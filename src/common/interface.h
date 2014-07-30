@@ -38,6 +38,7 @@ struct interface {
     int                 remote_seq;
     struct timeval      rx_time;
     struct timeval      tx_time;
+    struct timeval      st_time;
 
     int                 flags;
 
