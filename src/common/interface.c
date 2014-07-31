@@ -46,7 +46,7 @@ struct interface* alloc_interface(int node_id)
     ife->last_ping_time = now;
     ife->last_ping_success = now;
     struct rwlock lock = RWLOCK_INITIALIZER;
-    memcpy(&ife->rt_buffer.rwlock, &lock, sizeof(struct rwlock));
+    ife->rt_buffer.rwlock = lock;
 
     return ife;
 }

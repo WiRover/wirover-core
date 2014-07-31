@@ -6,6 +6,13 @@
 #include "packet_buffer.h"
 #include "rwlock.h"
 
+#define INTEGER_WRAP_AROUND 0x7FFFFFFF
+
+int pb_seq_is_larger(uint32_t seq, uint32_t next_seq)
+{
+    return next_seq > seq || (seq > INTEGER_WRAP_AROUND && next_seq < seq - INTEGER_WRAP_AROUND);
+}
+
 int pb_free_head(struct retrans_buffer *rt_buffer)
 {
     if(rt_buffer->head == NULL) { return FAILURE; }
@@ -21,8 +28,8 @@ int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, char* packet, 
 {
     if(seq == 0 || size == 0){ return rt_buffer->length; }
     
-    if(rt_buffer->length > 0 && rt_buffer->tail->seq >= seq){
-        ERROR_MSG("Prev sequence number %d is greater than new sequence number %d",rt_buffer->tail->seq, seq);
+    if(rt_buffer->length > 0 && !pb_seq_is_larger(rt_buffer->tail->seq, seq)){
+        DEBUG_MSG("Prev sequence number %d is greater than new sequence number %d",rt_buffer->tail->seq, seq);
         return rt_buffer->length;
     }
 
@@ -51,7 +58,7 @@ int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, char* packet, 
 }
 int pb_free_packets(struct retrans_buffer *rt_buffer, uint32_t seq)
 {
-    while(rt_buffer->head != NULL && rt_buffer->head->seq <= seq)
+    while(rt_buffer->head != NULL && pb_seq_is_larger(rt_buffer->head->seq, seq))
     {
         pb_free_head(rt_buffer);
     }
