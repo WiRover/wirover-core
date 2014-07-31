@@ -37,6 +37,8 @@ static pthread_t            data_thread;
 struct tunnel *tun;
 static unsigned int         tunnel_mtu = 0;
 static unsigned int         outbound_mtu = 0;
+static FILE *               packet_log_file;
+static int                  packet_log_enabled = 0;
 
 int start_data_thread(struct tunnel *tun_in)
 {
@@ -44,6 +46,15 @@ int start_data_thread(struct tunnel *tun_in)
     tunnel_mtu = get_mtu();
     outbound_mtu =  1500;
     tun = tun_in;
+    if(get_packet_log_enabled()){
+        packet_log_file = fopen(get_packet_log_path(), "a");
+        if(packet_log_file == NULL) {
+            ERROR_MSG("Failed to open packet log file for writing %s", get_packet_log_path());
+        }
+        else{
+            packet_log_enabled = 1;
+        }
+    }
     if(running) {
         DEBUG_MSG("Data thread already running");
         return SUCCESS;
@@ -238,6 +249,11 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     struct flow_tuple *ft = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
     struct tcphdr   *tcp_hdr = (struct tcphdr *)(buffer + sizeof(struct tunhdr) + (ip_hdr->ihl * 4));
 
+    if(packet_log_enabled && packet_log_file != NULL){
+        fprintf(packet_log_file, "%ld.%06ld, %s, %d, INGRESS\n",arrival_time.tv_sec, arrival_time.tv_usec,ife->name, bufSize);
+        fflush(packet_log_file);
+    }
+
     // Policy and Flow table
     fill_flow_tuple(ip_hdr, tcp_hdr, ft, 1);
     struct flow_entry *ftd = get_flow_entry(ft);
@@ -279,7 +295,6 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         //Ignore the tuntap header
         orig_packet = &buffer[TUNTAP_OFFSET];
         orig_size -= TUNTAP_OFFSET;
-
         return send_packet(orig_packet, orig_size);
     }
 
@@ -336,6 +351,13 @@ int send_ife_packet(uint8_t type, char *packet, int size, uint16_t node_id, stru
     if(dst_ife == NULL || src_ife == NULL)
     {
         return FAILURE;
+    }
+    
+    if(type == TUNTYPE_DATA && packet_log_enabled && packet_log_file != NULL){
+        struct timeval tv;
+        gettimeofday(&tv, 0);
+        fprintf(packet_log_file, "%ld.%06ld, %s, %d, EGRESS\n",tv.tv_sec, tv.tv_usec,src_ife->name, size);
+        fflush(packet_log_file);
     }
     struct sockaddr_storage dst;
     build_data_sockaddr(dst_ife, &dst);
