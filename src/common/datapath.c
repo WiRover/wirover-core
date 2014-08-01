@@ -77,7 +77,12 @@ int start_data_thread(struct tunnel *tun_in)
     pthread_attr_destroy(&attr);
     return 0;
 }
-
+void logPacket(struct timeval *arrival_time, int size, const char *direction, struct interface *local_ife, struct interface *remote_ife)
+{
+    fprintf(packet_log_file, "%ld.%06ld, %s, %s, %d, %d, %s\n",arrival_time->tv_sec, arrival_time->tv_usec,
+        local_ife->name, remote_ife->name, remote_ife->node_id, size, direction);
+    fflush(packet_log_file);
+}
 int handlePackets()
 {
     // The File Descriptor set to add sockets to
@@ -249,9 +254,9 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     struct flow_tuple *ft = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
     struct tcphdr   *tcp_hdr = (struct tcphdr *)(buffer + sizeof(struct tunhdr) + (ip_hdr->ihl * 4));
 
-    if(packet_log_enabled && packet_log_file != NULL){
-        fprintf(packet_log_file, "%ld.%06ld, %s, %d, INGRESS\n",arrival_time.tv_sec, arrival_time.tv_usec,ife->name, bufSize);
-        fflush(packet_log_file);
+    if(packet_log_enabled && packet_log_file != NULL)
+    {
+        logPacket(&arrival_time, bufSize, "INGRESS", ife, remote_ife);
     }
 
     // Policy and Flow table
@@ -356,8 +361,7 @@ int send_ife_packet(uint8_t type, char *packet, int size, uint16_t node_id, stru
     if(type == TUNTYPE_DATA && packet_log_enabled && packet_log_file != NULL){
         struct timeval tv;
         gettimeofday(&tv, 0);
-        fprintf(packet_log_file, "%ld.%06ld, %s, %d, EGRESS\n",tv.tv_sec, tv.tv_usec,src_ife->name, size);
-        fflush(packet_log_file);
+        logPacket(&tv, size, "EGRESS", src_ife, dst_ife);
     }
     struct sockaddr_storage dst;
     build_data_sockaddr(dst_ife, &dst);
