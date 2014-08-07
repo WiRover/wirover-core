@@ -4,7 +4,8 @@
 
 This is the user-level implementation of WiRover.  The WiRover
 architecture comprises two main components -- the gateway and the
-controller.
+controller. It also includes a root server that handles mapping
+gateways to controllers.
 
 The mobile platform with one or more managed interfaces is the gateway.
 Typically, the gateway is a mobile WiFi access point with multiple
@@ -12,8 +13,7 @@ cellular interfaces, hence the name gateway.
 
 The other component, the controller, is a tunnel endpoint for the
 traffic sent through the gateway.  Tunneling is used to implement
-reliable handover and performance enhancements.  It also serves as a
-central configuration and management server.  Typically, a controller
+reliable handover and performance enhancements. Typically, a controller
 will reside in a fixed location with a well-provisioned network and will
 provide service to many gateways.
 
@@ -21,62 +21,54 @@ provide service to many gateways.
 2   Source Code
 ===================
     
+	src/policy
+	src/wiroot
     src/wigateway
     src/wicontroller
     src/common
 
-The source code is divided into three directories.  The wigateway and
-wicontroller subdirectories are specific to their respective components.
-The common subdirectory contains some shared code and header files.
-Dependencies: libssl-dev libnl-dev libpcap-dev libmysqlclient-dev
+The source code is divided into several directories.  The wi*
+subdirectories are specific to their respective components. The 
+common subdirectory contains some shared code and header files.
+The policy directory contains code related the vpolicy command
+and its interactions with the core WiRover code.
 
 ===================
 3   Installation
 ===================
 
-To compile the code, change to the desired component's source directory,
-either src/wigateway or src/wicontroller and run make.
+On a standard version of Ubuntu, the following commands will
+install all the dependencies:
 
-It is sufficient to manually install a few necessary files.
+sudo apt-get install g++
+sudo apt-get install cmake
+sudo apt-get install make
+sudo apt-get install libconfig-dev
+sudo apt-get install libssl-dev 
+sudo apt-get install libmysqlclient-dev 
+sudo apt-get install libgps-dev
+export CXX=g++
 
-For the gateway, install following files:
+To compile the code run "cmake ." in the src directory. This will generate
+the make files for all the components. Running make in the src/ directory
+will compile all components. Alternative make can be run in a subdirectory
+to compile a single component.
 
-    src/wigateway/wigateway -> /usr/bin/
-    scripts/wigateway/wigateway_config -> /usr/bin/
-    config/wigateway/wirover -> /etc/
-
-For the controller, install the following files:
-
-    src/wicontroller/wicontroller -> /usr/bin/
-    scripts/wicontroller/wicontroller_config -> /usr/bin/
-    config/wicontroller/wirover -> /etc/
+The wi* components require a configuration file. A default is located in the
+subdirectory and can be installed to /etc/ on production systems. The controller
+and root server also require a database. These can be installed from our "dbupdate"
+tool.
 
 ===================
 4   Usage
 ===================
 
-First edit the /etc/wirover configuration file.
-
 For the gateway, it is most important to specify the IP address of the
-controller to which you will be connecting and the interfaces you want
-to allow or disallow.
+root server to which you will be connecting and the interfaces you want
+to allow or disallow. This can be done in the wigateway.conf file.
 
-For the controller, set the public IP address of the controller and
-optionally, change the private IP addresses to be used for the tunnel.
-
-Both the gateway and controller have an option called INTERNAL_IF.
-The internal interface is mainly used for identification.  The MAC address
-of the internal interface is used to uniquely identify the systems.
-Therefore, changing the value of this option changes the identity of
-the system.
-
-IMPORTANT
-
-    Pay attention to the spacing in the configuration file.  Each
-    non-empty, non-comment line is a key-value pair separated by spaces.
-    The key must start at the beginning of the line and be in all capital
-    letters.  The value must start on column 16.  The parser can and
-    often will do insane things if this formatting is not observed.
+For the controller, you will also need to specify the root server that
+the controller will connect to.
 
 Once the configuration is done, it is sufficient to run wigateway or
 wicontroller from the command line as root.  You can also configure the
