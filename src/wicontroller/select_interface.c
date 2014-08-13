@@ -18,6 +18,7 @@ struct interface *select_dst_interface(struct flow_entry *fe)
 {
     struct remote_node *gw;
     gw = lookup_remote_node_by_id(fe->remote_node_id);
+    //Case where a flow isn't inititated by a gateway
     if(gw == NULL) {
         ipaddr_t dst_ip;
         ipv4_to_ipaddr(fe->id->dAddr, &dst_ip);
@@ -34,5 +35,10 @@ struct interface *select_dst_interface(struct flow_entry *fe)
         DEBUG_MSG("Dropping packet destined for unknown gateway");
         return NULL;
     }
-    return find_interface_by_index(gw->head_interface, fe->remote_link_id);
+    struct interface * dst_ife = find_interface_by_index(gw->head_interface, fe->remote_link_id);
+    if(dst_ife->state == INACTIVE)
+    {
+        dst_ife = find_active_interface(gw->head_interface);
+    }
+    return dst_ife;
 }			
