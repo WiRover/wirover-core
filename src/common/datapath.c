@@ -170,6 +170,11 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     unsigned int h_global_seq = ntohl(n_tun_hdr.global_seq);
     unsigned int h_link_seq = ntohl(n_tun_hdr.link_seq);
     unsigned int h_path_ack = ntohl(n_tun_hdr.path_ack);
+    unsigned int h_header_len = ntohs(n_tun_hdr.header_len);
+
+    if(h_header_len == 0)
+        h_header_len = sizeof(struct tunhdr);
+
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
     struct interface *remote_ife = NULL;
@@ -224,7 +229,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     }
     //Process the ping even though we may not have an entry in our remote_nodes
     if((n_tun_hdr.type == TUNTYPE_PING)){
-        handle_incoming_ping(&from, arrival_time, ife, remote_ife, &buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
+        handle_incoming_ping(&from, arrival_time, ife, remote_ife, &buffer[h_header_len], bufSize - h_header_len);
         return SUCCESS;
     }
 
@@ -249,10 +254,10 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     // the flags field, the next two byte (0800 are the protocol field, in this
     // case IP): http://www.mjmwired.net/kernel/Documentation/networking/tuntap.txt
 
-    struct iphdr *ip_hdr = (struct iphdr *)(buffer + sizeof(struct tunhdr));
+    struct iphdr *ip_hdr = (struct iphdr *)(buffer + h_header_len);
 
     struct flow_tuple *ft = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
-    struct tcphdr   *tcp_hdr = (struct tcphdr *)(buffer + sizeof(struct tunhdr) + (ip_hdr->ihl * 4));
+    struct tcphdr   *tcp_hdr = (struct tcphdr *)(buffer + h_header_len + (ip_hdr->ihl * 4));
 
     if(packet_log_enabled && packet_log_file != NULL)
     {
@@ -273,10 +278,10 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     unsigned short tun_info[2];
     tun_info[0] = 0; //flags
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
-    memcpy(&buffer[sizeof(struct tunhdr) - TUNTAP_OFFSET], tun_info, TUNTAP_OFFSET);
+    memcpy(&buffer[h_header_len - TUNTAP_OFFSET], tun_info, TUNTAP_OFFSET);
 
-    if( write(tunfd, &buffer[sizeof(struct tunhdr)-TUNTAP_OFFSET], 
-        (bufSize-sizeof(struct tunhdr)+TUNTAP_OFFSET)) < 0)
+    if( write(tunfd, &buffer[h_header_len - TUNTAP_OFFSET], 
+        (bufSize - h_header_len + TUNTAP_OFFSET)) < 0)
     {
         ERROR_MSG("write() failed");
         return FAILURE;
