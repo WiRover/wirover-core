@@ -207,7 +207,6 @@ static void handle_incoming(struct client* client)
             break;
     }
 }
-
 /*
  * HANDLE GATEWAY CONFIG
  *
@@ -219,6 +218,16 @@ static void handle_gateway_config(struct client* client, const char* packet, int
 
     const char *node_id = packet + offset;
     offset += rchanhdr->id_len;
+
+    const char *pub_key;
+    if(rchanhdr->pub_key_len == 0)
+    {
+        pub_key = "";
+    }
+    else
+        pub_key = packet + offset;
+
+    offset += rchanhdr->pub_key_len;
 
     struct rchan_gwreg *gwreg = (struct rchan_gwreg *)(packet + offset);
     offset += sizeof(struct rchan_gwreg);
@@ -239,9 +248,11 @@ static void handle_gateway_config(struct client* client, const char* packet, int
 
     int unique_id = db_check_privilege(node_id_hex, PRIV_REG_GATEWAY);
     if(unique_id <= 0 && auto_grant)
-        unique_id = db_grant_privilege(node_id_hex, PRIV_REG_GATEWAY);
+        unique_id = db_grant_privilege(node_id_hex, PRIV_REG_GATEWAY, pub_key);
 
     if(unique_id > 0) {
+        db_update_pub_key(node_id_hex, pub_key);
+
         const struct lease* lease;
         lease = grant_lease(unique_id);
       
@@ -307,6 +318,16 @@ static void handle_controller_config(struct client* client, const char* packet, 
     const char *node_id = packet + offset;
     offset += rchanhdr->id_len;
 
+    const char *pub_key;
+    if(rchanhdr->pub_key_len == 0)
+    {
+        pub_key = "";
+    }
+    else
+        pub_key = packet + offset;
+
+    offset += rchanhdr->pub_key_len;
+
     struct rchan_ctrlreg *ctrlreg = (struct rchan_ctrlreg *)(packet + offset);
     offset += sizeof(struct rchan_ctrlreg);
 
@@ -326,9 +347,11 @@ static void handle_controller_config(struct client* client, const char* packet, 
 
     int unique_id = db_check_privilege(node_id_hex, PRIV_REG_CONTROLLER);
     if(unique_id <= 0 && auto_grant)
-        unique_id = db_grant_privilege(node_id_hex, PRIV_REG_CONTROLLER);
+        unique_id = db_grant_privilege(node_id_hex, PRIV_REG_CONTROLLER, pub_key);
 
     if(unique_id > 0) {
+        db_update_pub_key(node_id_hex, pub_key);
+
         const struct lease* lease;
         lease = grant_lease(unique_id);
         
@@ -414,6 +437,9 @@ static void handle_access_request(struct client *client, const char *packet, int
 
     const char *node_id = packet + offset;
     offset += rchanhdr->id_len;
+
+    //const char *pub_key = packet + offset;
+    offset += rchanhdr->pub_key_len;
 
     if(offset > length) {
         DEBUG_MSG("Access request packet was too short: %u bytes, expected %d",

@@ -115,3 +115,15 @@ int delete_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device
     close(skfd);
     return 0;
 }
+
+int read_public_key(char *buffer, int size)
+{
+    FILE *fp = fopen("/home/wirover/.ssh/id_rsa.pub", "r");
+    if(fp == NULL)
+        return FAILURE;
+    buffer = fgets(buffer, size, fp);
+    fclose(fp);
+    if(buffer == NULL)
+        return FAILURE;
+    return strlen(buffer);
+}

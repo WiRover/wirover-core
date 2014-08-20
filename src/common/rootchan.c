@@ -18,6 +18,7 @@
 #include "rwlock.h"
 #include "sockets.h"
 #include "format.h"
+#include "util.h"
 
 static int _obtain_lease(const char *wiroot_ip, unsigned short wiroot_port,
         const char *request, int request_len, const char *interface,
@@ -27,7 +28,43 @@ static struct lease_info latest_lease = {
     .priv_ip = IPADDR_IPV4_ZERO,
     .unique_id = 0,
 };
+int fill_rchanhdr(char *buffer, uint8_t type)
+{
+    int offset = 0;
+    char node_id[NODE_ID_MAX_BIN_LEN];
+    int node_id_len = get_node_id_bin(node_id, sizeof(node_id));
+    if(node_id_len < 0) {
+        DEBUG_MSG("get_node_id_bin failed");
+        return FAILURE;
+    }
 
+    struct rchanhdr *rchanhdr = (struct rchanhdr *)buffer;
+    offset += sizeof(struct rchanhdr);
+
+    rchanhdr->type = type;
+    rchanhdr->id_len = node_id_len;
+
+    /* Copy node_id into the packet. */
+    memcpy(buffer + offset, node_id, node_id_len);
+    offset += node_id_len;
+
+    /* Copy the public key into the packet. */
+    char pub_key[1024];
+    int pub_key_size = read_public_key(pub_key, sizeof(pub_key));
+    if(pub_key_size == FAILURE)
+    {
+        DEBUG_MSG("Could not read public key");
+        pub_key_size = 0;
+    }
+    else
+    {
+        memcpy(buffer + offset, pub_key, pub_key_size);
+        offset += pub_key_size;
+    }
+    rchanhdr->pub_key_len = pub_key_size;
+
+    return offset;
+}
 #ifdef CONTROLLER
 /* 
  * register_controller - Register a controller with the root server.
@@ -47,22 +84,9 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
 
     memset(buffer, 0, BUFSIZ);
     
-    char node_id[NODE_ID_MAX_BIN_LEN];
-    int node_id_len = get_node_id_bin(node_id, sizeof(node_id));
-    if(node_id_len < 0) {
-        DEBUG_MSG("get_node_id_bin failed");
+    offset = fill_rchanhdr(buffer, RCHAN_REGISTER_CONTROLLER);
+    if(offset < 0)
         goto free_and_err_out;
-    }
-
-    struct rchanhdr *rchanhdr = (struct rchanhdr *)buffer;
-    offset += sizeof(struct rchanhdr);
-
-    rchanhdr->type = RCHAN_REGISTER_CONTROLLER;
-    rchanhdr->id_len = node_id_len;
-
-    /* Copy node_id into the packet. */
-    memcpy(buffer + offset, node_id, node_id_len);
-    offset += node_id_len;
 
     struct rchan_ctrlreg *ctrlreg = (struct rchan_ctrlreg *)(buffer + offset);
     offset += sizeof(struct rchan_ctrlreg);

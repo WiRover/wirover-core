@@ -54,6 +54,7 @@ struct rchanhdr {
     uint8_t type;
     uint8_t flags;
     uint8_t id_len;
+    uint16_t pub_key_len;
     /* node_id follows */
 } __attribute__((__packed__));
 
