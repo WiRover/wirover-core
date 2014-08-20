@@ -325,7 +325,7 @@ const char* get_packet_log_path()
 
     const char* log_path = DEFAULT_PACKET_LOG_PATH;
     if(!config || config_lookup_string(config, CONFIG_PACKET_LOG_PATH, &log_path) == CONFIG_FALSE) {
-        DEBUG_MSG("failed to read external-interface from config file");
+        DEBUG_MSG("failed to read packet-log-path from config file");
     }
 
     return log_path;
@@ -342,6 +342,23 @@ int get_packet_log_enabled()
     } else if(enabled != 0 && enabled != 1) {
         DEBUG_MSG("%s %d is not valid", CONFIG_PACKET_LOG_ENABLED, enabled);
         enabled = DEFAULT_PACKET_LOG_ENABLED;
+    }
+
+    return enabled;
+}
+
+int get_status_log_enabled()
+{
+    const config_t* config = get_config();
+
+    int enabled;
+    if(!config || config_lookup_int_compat(config, CONFIG_STATUS_LOG_ENABLED, 
+                &enabled) == CONFIG_FALSE) {
+        DEBUG_MSG("failed to read %s from config file", CONFIG_STATUS_LOG_ENABLED);
+        enabled = DEFAULT_STATUS_LOG_ENABLED;
+    } else if(enabled != 0 && enabled != 1) {
+        DEBUG_MSG("%s %d is not valid", CONFIG_STATUS_LOG_ENABLED, enabled);
+        enabled = DEFAULT_STATUS_LOG_ENABLED;
     }
 
     return enabled;

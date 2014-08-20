@@ -38,8 +38,9 @@
 #define CONFIG_LINK_TIMEOUT                 "link-timeout"
 #define CONFIG_LINK_STALL_RETRY_INTERVAL    "link-stall-retry-interval"
 
-#define CONFIG_PACKET_LOG_PATH             "packet-log-file"
+#define CONFIG_PACKET_LOG_PATH              "packet-log-path"
 #define CONFIG_PACKET_LOG_ENABLED           "packet-log-enabled"
+#define CONFIG_STATUS_LOG_ENABLED           "status-log-enabled"
 
 #define CONFIG_MYSQL_HOST           "mysql-host"
 #define CONFIG_MYSQL_USER           "mysql-user"
@@ -66,6 +67,7 @@
 
 #define DEFAULT_PACKET_LOG_PATH          "/var/log/wirover_packets.log"
 #define DEFAULT_PACKET_LOG_ENABLED        0
+#define DEFAULT_STATUS_LOG_ENABLED        1
 
 #define DEFAULT_MYSQL_HOST          "localhost"
 #define DEFAULT_MYSQL_USER          "wirover"
@@ -97,6 +99,7 @@ int             get_link_stall_retry_interval();
 
 const char*     get_packet_log_path();
 int             get_packet_log_enabled();
+int             get_status_log_enabled();
 
 const char      *get_register_address();
 unsigned short  get_register_data_port();

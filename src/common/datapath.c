@@ -152,6 +152,8 @@ int handleInboundPacket(int tunfd, struct interface *ife)
         return FAILURE;
     }
 
+    ife->rx_bytes += bufSize;
+
     struct timeval arrival_time;
     if(ioctl(ife->sockfd, SIOCGSTAMP, &arrival_time) == -1) {
         ERROR_MSG("ioctl SIOCGSTAMP failed");
@@ -412,6 +414,7 @@ int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src
         return FAILURE;
     }
     src_ife->packets_since_ack++;
+    src_ife->tx_bytes += new_size;
 #ifdef GATEWAY
     struct timeval tv;
     gettimeofday(&tv, NULL);

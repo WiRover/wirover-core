@@ -75,7 +75,6 @@ int init_interface_list()
 
                     ife->data_port = htons(get_data_port());
                     ife->priority = priority;
-                    ife->pings_outstanding = 0;
 
                     add_interface(ife);
                 }

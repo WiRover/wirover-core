@@ -18,10 +18,10 @@
 #endif
 
 /*
- * ALLOC INTERFACE
- *
- * Allocate and initialize an interface structure.
- */
+* ALLOC INTERFACE
+*
+* Allocate and initialize an interface structure.
+*/
 struct interface* alloc_interface(int node_id)
 {
     struct interface* ife;
@@ -34,7 +34,7 @@ struct interface* alloc_interface(int node_id)
     ife->avg_rtt = NAN;
     ife->avg_downlink_bw = NAN;
     ife->avg_uplink_bw = NAN;
-    
+
     gettimeofday(&ife->rx_time, NULL);
     gettimeofday(&ife->tx_time, NULL);
 
@@ -52,13 +52,13 @@ struct interface* alloc_interface(int node_id)
 }
 
 /*
- * Sets the interface's state to the given state, and if there was a change
- * between ACTIVE and non-ACTIVE states on a gateway, it notifies the controller
- */
+* Sets the interface's state to the given state, and if there was a change
+* between ACTIVE and non-ACTIVE states on a gateway, it notifies the controller
+*/
 int change_interface_state(struct interface *ife, enum if_state state)
 {
     if(ife->state == state)
-        return 0;
+    return 0;
     DEBUG_MSG("Changing interface %s state from %d to %d", ife->name, ife->state, state);
     ife->state = state;
     if(state == INACTIVE)
@@ -71,7 +71,6 @@ int change_interface_state(struct interface *ife, enum if_state state)
         }
         release_write_lock(&ife->rt_buffer.rwlock);
     }
-
 #ifdef GATEWAY
     send_notification(1);
 #endif
@@ -88,7 +87,7 @@ int interface_bind(struct interface *ife, int bind_port)
         ERROR_MSG("creating socket failed");
         return FAILURE;
     }
-    
+
     memset(&myAddr, 0, sizeof(struct sockaddr_in));
     myAddr.sin_family      = AF_INET;
     myAddr.sin_port        = htons((unsigned short)bind_port);
@@ -101,7 +100,7 @@ int interface_bind(struct interface *ife, int bind_port)
         close(sockfd);
         return FAILURE;
     }
-    
+
     if(strlen(ife->name) != 0){
         if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, ife->name, IFNAMSIZ) < 0) 
         {
@@ -124,11 +123,11 @@ int interface_bind(struct interface *ife, int bind_port)
 } // End function int interfaceBind()
 
 /*
- * FREE INTERFACE
- *
- * Frees memory used by the interface structure.  If the interface is contained
- * in any data structures, this will NOT update them.
- */
+* FREE INTERFACE
+*
+* Frees memory used by the interface structure.  If the interface is contained
+* in any data structures, this will NOT update them.
+*/
 void free_interface(struct interface* ife)
 {
     if(ife) {
@@ -158,7 +157,7 @@ struct interface *find_interface_by_name(struct interface *head, const char *nam
         if(!strncmp(head->name, name, sizeof(head->name))) {
             return head;
         }
-        
+
         assert(head != head->next);
         head = head->next;
     }
@@ -191,7 +190,7 @@ struct interface *find_interface_at_pos(struct interface *head, unsigned pos)
             return head;
 
         i++;
-        
+
         assert(head != head->next);
         head = head->next;
     }
@@ -256,14 +255,14 @@ int count_active_interfaces(const struct interface *head)
 }
 
 /*
- * Creates an array containing information about every interface.  This is
- * useful for performing an action that would otherwise require the interface
- * list to be locked for a long period of time.
- *
- * Returns the number of interfaces or -1 on memory allocation failure.  A
- * return value of > 0 implies that *out points to an array of interface_copy
- * structures.  Remember to free it.
- */
+* Creates an array containing information about every interface.  This is
+* useful for performing an action that would otherwise require the interface
+* list to be locked for a long period of time.
+*
+* Returns the number of interfaces or -1 on memory allocation failure.  A
+* return value of > 0 implies that *out points to an array of interface_copy
+* structures.  Remember to free it.
+*/
 int copy_all_interfaces(const struct interface *head, struct interface_copy **out)
 {
     assert(out);
@@ -280,7 +279,7 @@ int copy_all_interfaces(const struct interface *head, struct interface_copy **ou
     }
 
     memset(*out, 0, alloc_size);
-    
+
     int i = 0;
     while(head && i < n) {
         (*out)[i].index = head->index;
@@ -289,19 +288,19 @@ int copy_all_interfaces(const struct interface *head, struct interface_copy **ou
         i++;
         head = head->next;
     }
-    
+
     return n;
 }
 
 /*
- * Creates an array containing information about every active interface.  This
- * is useful for performing an action that would otherwise require the
- * interface list to be locked for a long period of time.
- *
- * Returns the number of active interfaces or -1 on memory allocation failure.
- * A return value of > 0 implies that *out points to an array of interface_copy
- * structures.  Remember to free it.
- */
+* Creates an array containing information about every active interface.  This
+* is useful for performing an action that would otherwise require the
+* interface list to be locked for a long period of time.
+*
+* Returns the number of active interfaces or -1 on memory allocation failure.
+* A return value of > 0 implies that *out points to an array of interface_copy
+* structures.  Remember to free it.
+*/
 int copy_active_interfaces(const struct interface *head, struct interface_copy **out)
 {
     assert(out);
@@ -318,7 +317,7 @@ int copy_active_interfaces(const struct interface *head, struct interface_copy *
     }
 
     memset(*out, 0, alloc_size);
-    
+
     int i = 0;
     while(head && i < num_active) {
         if(head->state == ACTIVE) {
@@ -329,7 +328,7 @@ int copy_active_interfaces(const struct interface *head, struct interface_copy *
 
         head = head->next;
     }
-    
+
     return num_active;
 }
 
@@ -339,7 +338,7 @@ long calc_bw_hint(struct interface *ife)
 
     if(ife->meas_bw > 0 && ife->pred_bw > 0) {
         double w = exp(BANDWIDTH_MEASUREMENT_DECAY * 
-                (time(NULL) - ife->meas_bw_time));
+            (time(NULL) - ife->meas_bw_time));
         bw_hint = (long)round(w * ife->meas_bw + (1.0 - w) * ife->pred_bw);
     } else if(ife->meas_bw > 0) {
         bw_hint = ife->meas_bw;
@@ -353,9 +352,9 @@ long calc_bw_hint(struct interface *ife)
 }
 
 /*
- * Performs an exponential weighted moving average.  If the old value is NaN, 
- * then it is assumed that new_val is the first value in the sequence.
- */
+* Performs an exponential weighted moving average.  If the old value is NaN, 
+* then it is assumed that new_val is the first value in the sequence.
+*/
 double ewma_update(double old_val, double new_val, double new_weight)
 {
     if(isnan(old_val)) {
@@ -364,37 +363,59 @@ double ewma_update(double old_val, double new_val, double new_weight)
         return ((1.0 - new_weight) * old_val + new_weight * new_val);
     }
 }
-void dump_interface(const struct interface *ife, const char *prepend)
+int interface_to_string(const struct interface *ife, char *str, int size)
 {
     const char *state;
-        switch(ife->state) {
-            case INIT_INACTIVE:
-                state = "INIT";
-                break;
-            case ACTIVE:
-                state = "ACTIVE";
-                break;
-            case INACTIVE:
-                state = "INACTIVE";
-                break;
-            case DEAD:
-                state = "DEAD";
-                break;
-            default:
-                state = "UNKNOWN";
-                break;
-        }
+    switch(ife->state) {
+    case INIT_INACTIVE:
+        state = "INIT";
+        break;
+    case ACTIVE:
+        state = "ACTIVE";
+        break;
+    case INACTIVE:
+        state = "INACTIVE";
+        break;
+    case DEAD:
+        state = "DEAD";
+        break;
+    default:
+        state = "UNKNOWN";
+        break;
+    }
 
-        DEBUG_MSG(" %s%-2d %-8s %-12s %-8s %-4hhd %-5hhd",
-                prepend, ife->index, ife->name, ife->network, state, ife->priority, ife->packets_since_ack);
+    return snprintf(str, size, "%-2d %-8s %-12s %-8s %-4hhd %-5hhd %-10d %-10d",
+        ife->index, ife->name, ife->network, state, ife->priority, ife->packets_since_ack, ife->tx_bytes, ife->rx_bytes);
+}
+void dump_interface(const struct interface *ife, const char *prepend)
+{
+    char buffer[128];
+    interface_to_string(ife, buffer, sizeof(buffer));
+    DEBUG_MSG(" %s%s",
+        prepend, buffer);
+}
+int dump_interfaces_to_file(const struct interface *head, const char *filename)
+{
+    FILE *ife_file = fopen(filename, "w");
+    if(ife_file == NULL)
+        return FAILURE;
+    char buffer[128];
+    while(head) {
+        interface_to_string(head, buffer, sizeof(buffer));
+        fprintf(ife_file, "%s\n", buffer);
+        assert(head != head->next);
+        head = head->next;
+    }
+    fclose(ife_file);
+    return SUCCESS;
 }
 void dump_interfaces(const struct interface *head, const char *prepend)
 {
     if(!prepend)
         prepend = "";
 
-    /*           xx xxxxxxxx xxxxxxxxxxxx xxxxxxxx xxxx xxxxx*/
-    DEBUG_MSG("%sID Name     Network      State    Prio Unack", prepend);
+    /*           xx xxxxxxxx xxxxxxxxxxxx xxxxxxxx xxxx xxxxx xxxxxxxxxx xxxxxxxxxx*/
+    DEBUG_MSG("%sID Name     Network      State    Prio Unack TX Bytes   RX Bytes  ", prepend);
 
     while(head) {
         dump_interface(head, prepend);

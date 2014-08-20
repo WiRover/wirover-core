@@ -52,10 +52,12 @@ struct interface {
 
     time_t              last_ping_time;
     time_t              last_ping_success;
-    int                 pings_outstanding;
 
     uint32_t            next_ping_seq_no;
     uint32_t            last_ping_seq_no;
+
+    unsigned int        tx_bytes;
+    unsigned int        rx_bytes;
 
     unsigned int        packets;
     unsigned int        packets_lost;
@@ -124,6 +126,7 @@ long calc_bw_hint(struct interface *ife);
 
 double ewma_update(double old_val, double new_val, double new_weight);
 
+int dump_interfaces_to_file(const struct interface *head, const char *filename);
 void dump_interface(const struct interface *ife, const char *prepend);
 void dump_interfaces(const struct interface *head, const char *prepend);
 

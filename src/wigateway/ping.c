@@ -30,6 +30,7 @@ static void* ping_thread_func(void* arg);
 static int send_second_response(struct interface *ife, 
         const char *buffer, int len, struct interface *dst_ife);
 
+static int          status_log_enabled = 0;
 static int          running = 0;
 static pthread_t    ping_thread;
 
@@ -40,6 +41,7 @@ int start_ping_thread()
         return 0;
     }
 
+    status_log_enabled = get_status_log_enabled();
     pthread_attr_t attr;
 
     // Initialize and set thread detached attribute
@@ -145,7 +147,6 @@ int send_ping(struct interface* ife)
     // request.
     //ife->last_ping_time = now.tv_sec;
     ife->last_ping_time = time(NULL);
-    ife->pings_outstanding++;
 
     free(buffer);
     return 0;
@@ -165,11 +166,14 @@ static int should_send_ping(const struct interface *ife)
 void* ping_thread_func(void* arg)
 {   
 	const unsigned int ping_interval = get_ping_interval();
+    const unsigned int status_interval = 1;
     int stall_retry_interval = get_link_stall_retry_interval() * USECS_PER_MSEC;
 
 	// Initialize this so that the first ping will be sent immediately.
 	struct timeval last_ping_time = {
 		.tv_sec = time(0) - ping_interval, .tv_usec = 0};
+    struct timeval last_status_time = {
+		.tv_sec = time(0) - status_interval, .tv_usec = 0};
 
 	int num_ifaces = 0;
 	int curr_iface_pos = 0;
@@ -183,9 +187,15 @@ void* ping_thread_func(void* arg)
 		gettimeofday(&now, 0);
 
 		obtain_read_lock(&interface_list_lock);
+        
+        if(get_status_log_enabled())
+        {
+            dump_interfaces_to_file(interface_list, "/var/lib/wirover/ife_list");
+        }
 
 		num_ifaces = count_all_interfaces(interface_list);
 
+        //Send retry packets over inactive interfaces
         struct interface *inactive_interface = interface_list;
 
         while(inactive_interface)
@@ -224,6 +234,17 @@ void* ping_thread_func(void* arg)
 
 			curr_iface_pos++;
 		}
+
+        time_diff = timeval_diff(&now, &last_status_time);
+        if(time_diff >= status_interval) {
+			memcpy(&last_status_time, &now, sizeof(last_status_time));
+            if(get_status_log_enabled())
+            {
+                obtain_read_lock(&interface_list_lock);
+                dump_interfaces_to_file(interface_list, "/var/lib/wirover/ife_list");
+                release_read_lock(&interface_list_lock);
+            }
+        }
 
         safe_usleep(stall_retry_interval);
 	}
@@ -293,9 +314,6 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
 
         ife->last_ping_success = time(NULL);
         ife->last_ping_seq_no = ntohl(pkt->seq_no);
-
-        /* Reset on a successful ping so that we do not accumulate spurious losses. */
-        ife->pings_outstanding = 0;
 
         DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f", 
                 ife->name, ife->network, diff, ife->avg_rtt);
