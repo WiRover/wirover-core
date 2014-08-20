@@ -156,22 +156,9 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
 
     memset(buffer, 0, BUFSIZ);
     
-    char node_id[NODE_ID_MAX_BIN_LEN];
-    int node_id_len = get_node_id_bin(node_id, sizeof(node_id));
-    if(node_id_len < 0) {
-        DEBUG_MSG("get_node_id_bin failed");
+    offset = fill_rchanhdr(buffer, RCHAN_REGISTER_GATEWAY);
+    if(offset < 0)
         goto free_and_err_out;
-    }
-
-    struct rchanhdr *rchanhdr = (struct rchanhdr *)buffer;
-    offset += sizeof(struct rchanhdr);
-
-    rchanhdr->type = RCHAN_REGISTER_GATEWAY;
-    rchanhdr->id_len = node_id_len;
-
-    /* Copy node_id into the packet. */
-    memcpy(buffer + offset, node_id, node_id_len);
-    offset += node_id_len;
 
     struct rchan_gwreg *gwreg = (struct rchan_gwreg *)(buffer + offset);
     offset += sizeof(struct rchan_gwreg);
