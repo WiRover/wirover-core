@@ -20,9 +20,9 @@
 #include "format.h"
 #include "util.h"
 
-static int _obtain_lease(const char *wiroot_ip, unsigned short wiroot_port,
+static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
         const char *request, int request_len, const char *interface,
-        struct rchan_response *response);
+        char *response);
 
 static struct lease_info latest_lease = {
     .priv_ip = IPADDR_IPV4_ZERO,
@@ -117,7 +117,7 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
 
     struct rchan_response response;
 
-    result = _obtain_lease(wiroot_ip, wiroot_port, buffer, offset, 0, &response);
+    result = _rchan_message(wiroot_ip, wiroot_port, buffer, offset, 0, (char *)&response);
     if(result < 0) {
         DEBUG_MSG("Failed to obtain lease from root server");
         goto free_and_err_out;
@@ -186,8 +186,8 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
     for(i = 0; i < num_ifaces; i++) {
         const char *ifname = iface_list[i].name;
 
-        if(_obtain_lease(wiroot_ip, wiroot_port, buffer, offset, 
-                    ifname, &response) == 0) {
+        if(_rchan_message(wiroot_ip, wiroot_port, buffer, offset, 
+                    ifname, (char *)&response) == 0) {
             lease_obtained = 1;
             break;
         }
@@ -277,30 +277,31 @@ static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
         DEBUG_MSG("root channel response was too small to be valid");
         goto close_and_err_out;
         close(sockfd);
-        return -1;
+        return FAILURE;
     }
 
     close(sockfd);
-    return 0;
+    return SUCCESS;
 
 close_and_err_out:
     close(sockfd);
 err_out:
-    return -1;
+    return FAILURE;
 }
-static int request_pubkey(const char *wiroot_ip, unsigned short wiroot_port,
+
+int request_pubkey(const char *wiroot_ip, unsigned short wiroot_port,
         uint16_t remote_id, const char *interface, char *pub_key)
 {
-    char buffer[BUFSIZE];
+    char buffer[BUFSIZ];
     int offset = 0;
     offset = fill_rchanhdr(buffer, RCHAN_ACCESS_REQUEST, 0);
 
-    memcpy(buffer + offset, remote_id, sizeof(unit16_t));
-    offset += sizeof(unit16_t);
+    memcpy(buffer + offset, &remote_id, sizeof(uint16_t));
+    offset += sizeof(uint16_t);
 
-
-
+    return _rchan_message(wiroot_ip, wiroot_port, buffer, offset, interface, pub_key);
 }
+
 /*
  * Read cryptographic node_id from a file as a hexadecimal string.
  *
