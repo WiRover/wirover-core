@@ -28,7 +28,7 @@ static struct lease_info latest_lease = {
     .priv_ip = IPADDR_IPV4_ZERO,
     .unique_id = 0,
 };
-int fill_rchanhdr(char *buffer, uint8_t type)
+int fill_rchanhdr(char *buffer, uint8_t type, int send_pub_key)
 {
     int offset = 0;
     char node_id[NODE_ID_MAX_BIN_LEN];
@@ -49,17 +49,20 @@ int fill_rchanhdr(char *buffer, uint8_t type)
     offset += node_id_len;
 
     /* Copy the public key into the packet. */
-    char pub_key[1024];
-    int pub_key_size = read_public_key(pub_key, sizeof(pub_key));
-    if(pub_key_size == FAILURE)
-    {
-        DEBUG_MSG("Could not read public key");
-        pub_key_size = 0;
-    }
-    else
-    {
-        memcpy(buffer + offset, pub_key, pub_key_size);
-        offset += pub_key_size;
+    int pub_key_size = 0;
+    if(send_pub_key) {
+        char pub_key[1024];
+        pub_key_size = read_public_key(pub_key, sizeof(pub_key));
+        if(pub_key_size == FAILURE)
+        {
+            DEBUG_MSG("Could not read public key");
+            pub_key_size = 0;
+        }
+        else
+        {
+            memcpy(buffer + offset, pub_key, pub_key_size);
+            offset += pub_key_size;
+        }
     }
     rchanhdr->pub_key_len = pub_key_size;
 
@@ -84,7 +87,7 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
 
     memset(buffer, 0, BUFSIZ);
     
-    offset = fill_rchanhdr(buffer, RCHAN_REGISTER_CONTROLLER);
+    offset = fill_rchanhdr(buffer, RCHAN_REGISTER_CONTROLLER, 1);
     if(offset < 0)
         goto free_and_err_out;
 
@@ -156,7 +159,7 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
 
     memset(buffer, 0, BUFSIZ);
     
-    offset = fill_rchanhdr(buffer, RCHAN_REGISTER_GATEWAY);
+    offset = fill_rchanhdr(buffer, RCHAN_REGISTER_GATEWAY, 1);
     if(offset < 0)
         goto free_and_err_out;
 
@@ -243,9 +246,9 @@ err_out:
  * in the response, otherwise it returns -1 and the contents of response are
  * undefined.
  */
-static int _obtain_lease(const char *wiroot_ip, unsigned short wiroot_port,
+static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
         const char *request, int request_len, const char *interface,
-        struct rchan_response *response)
+        char *response)
 { 
     int result;
 
@@ -262,16 +265,16 @@ static int _obtain_lease(const char *wiroot_ip, unsigned short wiroot_port,
 
     result = send(sockfd, request, request_len, 0);
     if(result <= 0) {
-        ERROR_MSG("error sending lease request");
+        ERROR_MSG("error sending root channel message");
         goto close_and_err_out;
     }
 
     result = recv(sockfd, response, sizeof(struct rchan_response), 0);
     if(result <= 0) {
-        ERROR_MSG("error receiving lease response");
+        ERROR_MSG("error receiving root channel response");
         goto close_and_err_out;
     } else if(result < MIN_RESPONSE_LEN) {
-        DEBUG_MSG("lease response was too small to be valid");
+        DEBUG_MSG("root channel response was too small to be valid");
         goto close_and_err_out;
         close(sockfd);
         return -1;
@@ -285,7 +288,19 @@ close_and_err_out:
 err_out:
     return -1;
 }
+static int request_pubkey(const char *wiroot_ip, unsigned short wiroot_port,
+        uint16_t remote_id, const char *interface, char *pub_key)
+{
+    char buffer[BUFSIZE];
+    int offset = 0;
+    offset = fill_rchanhdr(buffer, RCHAN_ACCESS_REQUEST, 0);
 
+    memcpy(buffer + offset, remote_id, sizeof(unit16_t));
+    offset += sizeof(unit16_t);
+
+
+
+}
 /*
  * Read cryptographic node_id from a file as a hexadecimal string.
  *
@@ -349,39 +364,6 @@ int get_node_id_bin(char *dst, int dst_len)
     }
     
     return bin_len;
-}
-
-/*
- * GET DEVICE MAC
- *
- * Return -1 on failure or the size in bytes of the MAC address (should be 6)
- * copied to dest.
- */
-int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, int destlen)
-{
-    struct ifreq ifr;
-    int sockfd;
-    int result;
-
-    strncpy(ifr.ifr_name, device, IFNAMSIZ);
-
-    sockfd = socket(AF_INET6, SOCK_STREAM, 0);
-    if(sockfd < 0) {
-        ERROR_MSG("error creating socket");
-        return -1;
-    }
-
-    result = ioctl(sockfd, SIOCGIFHWADDR, &ifr);
-    if(result < 0) {
-        ERROR_MSG("SIOCGIFHWADDR ioctl failed");
-        return -1;
-    }
-
-    const int copy_bytes = (destlen >= sizeof(ifr.ifr_hwaddr.sa_data)) ? 
-                           sizeof(ifr.ifr_hwaddr.sa_data) : destlen;
-    memcpy(dest, ifr.ifr_hwaddr.sa_data, copy_bytes);
-
-    return copy_bytes;
 }
 
 void get_private_ip(ipaddr_t* dest)

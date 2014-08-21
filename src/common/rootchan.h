@@ -55,7 +55,7 @@ struct rchanhdr {
     uint8_t flags;
     uint8_t id_len;
     uint16_t pub_key_len;
-    /* node_id follows */
+    /* node_id/pub_key follows */
 } __attribute__((__packed__));
 
 /* If the address family is sent as 0, root server will use the connection
@@ -99,8 +99,6 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
 
 int get_node_id_hex(char *dst, int dst_len);
 int get_node_id_bin(char *dst, int dst_len);
-
-int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, int destlen);
 
 uint16_t get_unique_id();
 
