@@ -22,7 +22,7 @@
 
 static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
         const char *request, int request_len, const char *interface,
-        char *response);
+        char *response, int response_len);
 
 static struct lease_info latest_lease = {
     .priv_ip = IPADDR_IPV4_ZERO,
@@ -117,7 +117,7 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
 
     struct rchan_response response;
 
-    result = _rchan_message(wiroot_ip, wiroot_port, buffer, offset, 0, (char *)&response);
+    result = _rchan_message(wiroot_ip, wiroot_port, buffer, offset, 0, (char *)&response, sizeof(struct rchan_response));
     if(result < 0) {
         DEBUG_MSG("Failed to obtain lease from root server");
         goto free_and_err_out;
@@ -248,7 +248,7 @@ err_out:
  */
 static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
         const char *request, int request_len, const char *interface,
-        char *response)
+        char *response, int response_len)
 { 
     int result;
 
@@ -269,7 +269,7 @@ static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
         goto close_and_err_out;
     }
 
-    result = recv(sockfd, response, sizeof(struct rchan_response), 0);
+    result = recv(sockfd, response, response_len, 0);
     if(result <= 0) {
         ERROR_MSG("error receiving root channel response");
         goto close_and_err_out;
@@ -299,7 +299,7 @@ int request_pubkey(const char *wiroot_ip, unsigned short wiroot_port,
     memcpy(buffer + offset, &remote_id, sizeof(uint16_t));
     offset += sizeof(uint16_t);
 
-    return _rchan_message(wiroot_ip, wiroot_port, buffer, offset, interface, pub_key);
+    return _rchan_message(wiroot_ip, wiroot_port, buffer, offset, interface, pub_key, BUFSIZ);
 }
 
 /*
