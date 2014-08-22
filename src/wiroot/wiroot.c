@@ -318,13 +318,9 @@ static void handle_controller_config(struct client* client, const char* packet, 
     const char *node_id = packet + offset;
     offset += rchanhdr->id_len;
 
-    const char *pub_key;
-    if(rchanhdr->pub_key_len == 0)
-    {
-        pub_key = "";
-    }
-    else
-        pub_key = packet + offset;
+    char pub_key[rchanhdr->pub_key_len + 1];
+    pub_key[0] = '\0';
+    memcpy(pub_key, packet + offset, rchanhdr->pub_key_len);
 
     offset += rchanhdr->pub_key_len;
 

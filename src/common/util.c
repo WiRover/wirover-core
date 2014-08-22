@@ -122,6 +122,8 @@ int read_public_key(char *buffer, int size)
     if(fp == NULL)
         return FAILURE;
     buffer = fgets(buffer, size, fp);
+    char *stripped = strtok(buffer, "\n");
+    memcpy(buffer, stripped, size);
     fclose(fp);
     if(buffer == NULL)
         return FAILURE;
