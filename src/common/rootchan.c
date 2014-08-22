@@ -20,9 +20,11 @@
 #include "format.h"
 #include "util.h"
 
-static int _obtain_lease(const char *wiroot_ip, unsigned short wiroot_port,
+static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
         const char *request, int request_len, const char *interface,
-        struct rchan_response *response);
+        char *response, int response_len);
+static int _all_ife_rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
+        const char *request, int request_len, char *response, int response_len);
 
 static struct lease_info latest_lease = {
     .priv_ip = IPADDR_IPV4_ZERO,
@@ -117,7 +119,7 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
 
     struct rchan_response response;
 
-    result = _obtain_lease(wiroot_ip, wiroot_port, buffer, offset, 0, &response);
+    result = _rchan_message(wiroot_ip, wiroot_port, buffer, offset, 0, (char *)&response, sizeof(struct rchan_response));
     if(result < 0) {
         DEBUG_MSG("Failed to obtain lease from root server");
         goto free_and_err_out;
@@ -169,36 +171,13 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
     gwreg->latitude = NAN;
     gwreg->longitude = NAN;
 
-    obtain_read_lock(&interface_list_lock);
-    struct interface_copy *iface_list = NULL;
-    int num_ifaces = copy_all_interfaces(interface_list, &iface_list);
-    release_read_lock(&interface_list_lock);
-
-    if(num_ifaces <= 0) {
-        DEBUG_MSG("Cannot request lease, no interfaces available");
-        goto free_and_err_out;
-    }
-
-    int i;
-    int lease_obtained = 0;
     struct rchan_response response;
 
-    for(i = 0; i < num_ifaces; i++) {
-        const char *ifname = iface_list[i].name;
-
-        if(_obtain_lease(wiroot_ip, wiroot_port, buffer, offset, 
-                    ifname, &response) == 0) {
-            lease_obtained = 1;
-            break;
-        }
-    }
-
-    if(iface_list) {
-        free(iface_list);
-    }
+    int lease_obtained = _all_ife_rchan_message(wiroot_ip, wiroot_port, buffer, offset,
+        (char *)&response, sizeof(struct rchan_response));
 
     if(!lease_obtained) {
-        DEBUG_MSG("Failed to obtain lease, %d interfaces tried", num_ifaces);
+        DEBUG_MSG("Failed to obtain lease");
         goto free_and_err_out;
     }
 
@@ -239,7 +218,37 @@ err_out:
     return -1;
 }
 #endif /* GATEWAY */
+static int _all_ife_rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
+        const char *request, int request_len, char *response, int response_len)
+{
+    obtain_read_lock(&interface_list_lock);
+    struct interface_copy *iface_list = NULL;
+    int num_ifaces = copy_all_interfaces(interface_list, &iface_list);
+    release_read_lock(&interface_list_lock);
 
+    if(num_ifaces <= 0) {
+        DEBUG_MSG("Cannot request lease, no interfaces available");
+        return 0;
+    }
+
+    int i;
+    int lease_obtained = 0;
+
+    for(i = 0; i < num_ifaces; i++) {
+        const char *ifname = iface_list[i].name;
+
+        if(_rchan_message(wiroot_ip, wiroot_port, request, request_len, 
+                    ifname, response, response_len) == 0) {
+            lease_obtained = 1;
+            break;
+        }
+    }
+
+    if(iface_list) {
+        free(iface_list);
+    }
+    return lease_obtained;
+}
 /*
  * Attempt to obtain a lease from the root server.  This will bind to the given
  * interface if interface is not null.  If successful, it returns 0 and fills
@@ -248,7 +257,7 @@ err_out:
  */
 static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
         const char *request, int request_len, const char *interface,
-        char *response)
+        char *response, int response_len)
 { 
     int result;
 
@@ -269,7 +278,7 @@ static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
         goto close_and_err_out;
     }
 
-    result = recv(sockfd, response, sizeof(struct rchan_response), 0);
+    result = recv(sockfd, response, response_len, 0);
     if(result <= 0) {
         ERROR_MSG("error receiving root channel response");
         goto close_and_err_out;
@@ -277,30 +286,31 @@ static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
         DEBUG_MSG("root channel response was too small to be valid");
         goto close_and_err_out;
         close(sockfd);
-        return -1;
+        return FAILURE;
     }
 
     close(sockfd);
-    return 0;
+    return SUCCESS;
 
 close_and_err_out:
     close(sockfd);
 err_out:
-    return -1;
+    return FAILURE;
 }
-static int request_pubkey(const char *wiroot_ip, unsigned short wiroot_port,
-        uint16_t remote_id, const char *interface, char *pub_key)
+
+int request_pubkey(const char *wiroot_ip, unsigned short wiroot_port,
+        uint16_t remote_id, char *pub_key, int pub_key_len)
 {
-    char buffer[BUFSIZE];
+    char buffer[BUFSIZ];
     int offset = 0;
     offset = fill_rchanhdr(buffer, RCHAN_ACCESS_REQUEST, 0);
 
-    memcpy(buffer + offset, remote_id, sizeof(unit16_t));
-    offset += sizeof(unit16_t);
+    memcpy(buffer + offset, &remote_id, sizeof(uint16_t));
+    offset += sizeof(uint16_t);
 
-
-
+    return _all_ife_rchan_message(wiroot_ip, wiroot_port, buffer, offset, pub_key, pub_key_len);
 }
+
 /*
  * Read cryptographic node_id from a file as a hexadecimal string.
  *

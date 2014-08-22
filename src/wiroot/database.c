@@ -198,6 +198,29 @@ int db_update_pub_key(const char *node_id, const char *pub_key)
 
     return id;
 }
+int db_get_pub_key(int remote_id, char *pub_key)
+{
+    int result;
+
+    result = db_query("select public_key from nodes where id=%d limit 1", remote_id);
+
+    if(result < 0)
+        return FAILURE;
+
+    MYSQL_RES *qr = mysql_store_result(database);
+    if(!qr) {
+        DEBUG_MSG("mysql_store_result failed - %s", mysql_error(database));
+        return FAILURE;
+    }
+
+    MYSQL_ROW row = mysql_fetch_row(qr);
+    if(row) {
+        memcpy(pub_key, row[0], strlen(row[0]));
+    }
+
+    mysql_free_result(qr);
+    return strlen(pub_key);
+}
 
 /*
  * Record an access request so that a network admin can approve it.

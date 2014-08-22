@@ -140,7 +140,35 @@ int main(int argc, char* argv[])
                 lease_renewal_time = time(NULL) + lease.time_limit -
                     RENEW_BEFORE_EXPIRATION;
 
-                //TODO: Tunnel setup instead
+                char cont_ip[INET6_ADDRSTRLEN];
+                ipaddr_to_string(&lease.cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
+                DEBUG_MSG("First controller is at: %s, requesting its public key", cont_ip);
+
+                char pub_key[BUFSIZ];
+                result = request_pubkey(wiroot_address, wiroot_port,
+                    lease.cinfo[0].unique_id, pub_key, BUFSIZ);
+                if(result == FAILURE)
+                {
+                    DEBUG_MSG("Failed to obtain controller public key");
+                }
+                else
+                {
+                    if(authorize_public_key(pub_key, result) == FAILURE)
+                    {
+                        DEBUG_MSG("Failed to add controller public key");
+                    }
+                    else
+                    {
+                        DEBUG_MSG("Successfully authorized controller's public key");
+                    }
+                }
+
+                uint32_t priv_ip;
+                uint32_t pub_ip;
+
+                ipaddr_to_ipv4(&lease.cinfo[0].priv_ip, &priv_ip);
+                ipaddr_to_ipv4(&lease.cinfo[0].pub_ip, &pub_ip);
+                
                 result = tunnel_create(private_ip, 
                     private_netmask, get_mtu());
                 if(result == FAILURE) {
@@ -148,30 +176,13 @@ int main(int argc, char* argv[])
                     exit(1);
                 }
 
-
-                char cont_ip[INET6_ADDRSTRLEN];
-                ipaddr_to_string(&lease.cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
-                DEBUG_MSG("First controller is at: %s", cont_ip);
-
-
-                uint32_t priv_ip;
-                uint32_t pub_ip;
-
-                ipaddr_to_ipv4(&lease.cinfo[0].priv_ip, &priv_ip);
-                ipaddr_to_ipv4(&lease.cinfo[0].pub_ip, &pub_ip);
-
-                //TODO
-                //virt_add_remote_node((struct in_addr *)&priv_ip);
-                //virt_add_remote_link((struct in_addr *)&priv_ip, 
-                //    (struct in_addr *)&pub_ip, lease.cinfo[0].data_port);
-
+                if(start_data_thread(getTunnel()) == FAILURE) {
+                    DEBUG_MSG("Failed to start data thread");
+                    exit(1);
+                }
 
                 if(start_ping_thread() == FAILURE) {
                     DEBUG_MSG("Failed to start ping thread");
-                    exit(1);
-                }
-                if(start_data_thread(getTunnel()) == FAILURE) {
-                    DEBUG_MSG("Failed to start data thread");
                     exit(1);
                 }
 
