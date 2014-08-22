@@ -16,8 +16,6 @@ int db_query(const char* format, ...);
 int db_check_privilege(const char *node_id, int priv);
 int db_grant_privilege(const char *node_id, int priv, const char *pub_key);
 int db_update_pub_key(const char *node_id, const char *pub_key);
-int db_grant_privilege(const char *node_id, int priv, const char *pub_key);
-int db_update_pub_key(const char *node_id, const char *pub_key);
 int db_get_pub_key(int remote_id, char *pub_key);
 int db_add_access_request(int priv, const char *node_id, const char *src_ip, int result);
 

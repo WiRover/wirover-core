@@ -285,10 +285,6 @@ static int request_lease(const struct lease_info *old_lease, struct lease_info *
                 ipaddr_to_ipv4(&new_lease->priv_ip, &priv_ip);
         }
 
-        /*char pub_key[BUFSIZ];
-        request_pubkey(wiroot_address, wiroot_port,
-            new_lease->unique_id, 0, pub_key);
-        DEBUG_MSG("My pubkey is %s", pub_key);*/
         return 0;
     } else {
         return -1;
