@@ -129,3 +129,29 @@ int read_public_key(char *buffer, int size)
         return FAILURE;
     return strlen(buffer);
 }
+int authorize_public_key(char *pub_key, int size)
+{
+    FILE *fp = fopen("/home/wirover/.ssh/authorized_keys", "a+");
+    if(fp == NULL)
+        return FAILURE;
+    char buffer[BUFSIZ];
+    int pub_key_already_authed = 0;
+    while (fgets(buffer, BUFSIZ, fp))
+    {
+        char *stripped = strtok(buffer, "\n");
+        memcpy(buffer, stripped, size);
+        if(strcmp(buffer, pub_key) == 0){
+            pub_key_already_authed = 1;
+            break;
+        }
+    }
+    if(pub_key_already_authed){
+        DEBUG_MSG("Pub key is already contained");
+        fclose(fp);
+        return SUCCESS;
+    }
+    DEBUG_MSG("Adding public key");
+    fprintf(fp, "%s\n",pub_key);
+    fclose(fp);
+    return SUCCESS;
+}

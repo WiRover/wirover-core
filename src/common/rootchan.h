@@ -97,7 +97,7 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
 int register_gateway(struct lease_info *lease, const char *wiroot_ip,
         unsigned short wiroot_port);
 int request_pubkey(const char *wiroot_ip, unsigned short wiroot_port,
-        uint16_t remote_id, const char *interface, char *pub_key);
+        uint16_t remote_id, char *pub_key, int pub_key_len);
 
 int get_node_id_hex(char *dst, int dst_len);
 int get_node_id_bin(char *dst, int dst_len);
