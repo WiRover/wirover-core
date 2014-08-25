@@ -6,6 +6,7 @@
 #include <time.h>
 #include <linux/if_ether.h>
 
+#include "controllers.h"
 #include "ipaddr.h"
 #include "uthash.h"
 
@@ -25,9 +26,11 @@ struct lease {
 };
 
 int read_lease_config(const config_t* config);
-const struct lease* grant_lease(int unique_id);
+const struct lease* grant_gw_lease(int unique_id, struct controller *controller);
+const struct lease* grant_controller_lease(int unique_id);
 void remove_stale_leases();
-uint8_t get_lease_subnet_size();
+uint8_t get_gateway_subnet_size();
+uint8_t get_controller_subnet_size();
 
 #endif //_LEASE_H_
 

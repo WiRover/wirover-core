@@ -249,38 +249,32 @@ static void handle_gateway_config(struct client* client, const char* packet, int
     int unique_id = db_check_privilege(node_id_hex, PRIV_REG_GATEWAY);
     if(unique_id <= 0 && auto_grant)
         unique_id = db_grant_privilege(node_id_hex, PRIV_REG_GATEWAY, pub_key);
+    
+    struct controller* controller = assign_controller(gwreg->latitude, gwreg->longitude);
 
-    if(unique_id > 0) {
+    if(unique_id > 0 && controller != NULL) {
         db_update_pub_key(node_id_hex, pub_key);
 
         const struct lease* lease;
-        lease = grant_lease(unique_id);
+        lease = grant_gw_lease(unique_id, controller);
 
         struct rchan_response response;
         response.type = rchanhdr->type;
         response.unique_id = htons(unique_id);
 
         if(lease) {
-            struct controller* controller_list[MAX_CONTROLLERS];
-            response.controllers = assign_controllers(controller_list, MAX_CONTROLLERS, 
-                gwreg->latitude, gwreg->longitude);
-
-            int i;
-            for(i = 0; i < response.controllers && i < MAX_CONTROLLERS; i++) {
-                copy_ipaddr(&controller_list[i]->priv_ip, &response.cinfo[i].priv_ip);
-                copy_ipaddr(&controller_list[i]->pub_ip, &response.cinfo[i].pub_ip);
-                response.cinfo[i].data_port = controller_list[i]->data_port;
-                response.cinfo[i].control_port = controller_list[i]->control_port;
-                response.cinfo[i].unique_id = controller_list[i]->unique_id;
-            }
+            copy_ipaddr(&controller->priv_ip, &response.cinfo.priv_ip);
+            copy_ipaddr(&controller->pub_ip, &response.cinfo.pub_ip);
+            response.cinfo.data_port = controller->data_port;
+            response.cinfo.control_port = controller->control_port;
+            response.cinfo.unique_id = controller->unique_id;
 
             copy_ipaddr(&lease->ip, &response.priv_ip);
-            response.priv_subnet_size = get_lease_subnet_size();
+            response.priv_subnet_size = get_gateway_subnet_size();
             response.lease_time = htonl(lease->end - lease->start);
         }
 
-        const unsigned int response_len = MIN_RESPONSE_LEN +
-            response.controllers * sizeof(struct controller_info);
+        const unsigned int response_len = MIN_RESPONSE_LEN + sizeof(struct controller_info);
 
         int bytes = send(client->fd, &response, response_len, 0);
         if(bytes < response_len) {
@@ -349,7 +343,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
         db_update_pub_key(node_id_hex, pub_key);
 
         const struct lease* lease;
-        lease = grant_lease(unique_id);
+        lease = grant_controller_lease(unique_id);
 
         char response_buffer[MTU];
         struct rchan_response* response = (struct rchan_response*)response_buffer;
@@ -395,9 +389,8 @@ static void handle_controller_config(struct client* client, const char* packet, 
                 p_ip, ntohs(ctrlreg->data_port), ntohs(ctrlreg->control_port));
 
             copy_ipaddr(&lease->ip, &response->priv_ip);
-            response->priv_subnet_size = get_lease_subnet_size();
+            response->priv_subnet_size = get_controller_subnet_size();
             response->lease_time = htonl(lease->end - lease->start);
-            response->controllers = 0;
         }
 
         int bytes = send(client->fd, response, sizeof(struct rchan_response), 0);
