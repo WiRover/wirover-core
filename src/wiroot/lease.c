@@ -129,13 +129,21 @@ const struct lease* grant_controller_lease(int unique_id)
  * lease module and must not be freed by the caller.  Returns a null pointer if
  * a lease cannot be granted.
  */
-const struct lease* grant_gw_lease(int unique_id, struct controller *controller)
+const struct lease* grant_gw_lease(int unique_id, double latitude, double longitude)
 {
+    if(unique_id <= 0)
+        return NULL;
     struct lease* lease;
     HASH_FIND(hh_uid, leases_id_hash, &unique_id, sizeof(unique_id), lease);
     if(lease) {
         renew_lease(lease);
         return lease;
+    }
+    
+    struct controller* controller = assign_controller(latitude, longitude);
+    if(controller == NULL){
+        DEBUG_MSG("Denying lease request until there are controllers available");
+        return NULL;
     }
 
     uint32_t n_ip = find_gw_free_ip(unique_id, controller);
@@ -143,7 +151,9 @@ const struct lease* grant_gw_lease(int unique_id, struct controller *controller)
         DEBUG_MSG("Denying lease request, out of IPs");
         return 0;
     }
-    return _alloc_lease(unique_id, n_ip);
+    lease = _alloc_lease(unique_id, n_ip);
+    lease->controller = controller;
+    return lease;
 }
 
 /*

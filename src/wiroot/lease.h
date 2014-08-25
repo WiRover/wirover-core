@@ -17,6 +17,7 @@ struct lease {
     ipaddr_t    ip;
     time_t      start;
     time_t      end;
+    struct controller* controller;
 
     // managed by utlist and uthash
     struct lease*   next;
@@ -26,7 +27,7 @@ struct lease {
 };
 
 int read_lease_config(const config_t* config);
-const struct lease* grant_gw_lease(int unique_id, struct controller *controller);
+const struct lease* grant_gw_lease(int unique_id, double latitude, double longitude);
 const struct lease* grant_controller_lease(int unique_id);
 void remove_stale_leases();
 uint8_t get_gateway_subnet_size();

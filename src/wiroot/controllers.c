@@ -5,6 +5,7 @@
 #include "controllers.h"
 
 static struct controller*    controllers_ip_hash = 0;
+static struct controller*    last_controller = NULL;
 
 /*
  * ADD CONTROLLER
@@ -49,11 +50,17 @@ void add_controller(uint16_t unique_id, const ipaddr_t* priv_ip, const ipaddr_t*
  * assign_controllers() will return the number of controllers written to the
  * array.
  *
- * TODO: more intelligent assignment, currently we just grab the first
- * controller
+ * TODO: more intelligent assignment, currently we just rr the controller
+ * list
  */
 struct controller *assign_controller(double latitude, double longitude)
 {
-    return controllers_ip_hash;
+    if(last_controller != NULL)
+        last_controller = last_controller->hh_ip.next;
+
+    if(last_controller == NULL)
+        last_controller = controllers_ip_hash;
+
+    return last_controller;
 }
 
