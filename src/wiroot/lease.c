@@ -246,6 +246,7 @@ static uint32_t find_gw_free_ip(int unique_id, struct controller* controller)
 
     uint32_t controller_ip;
     ipaddr_to_ipv4(&controller->priv_ip, &controller_ip);
+    controller_ip = ntohl(controller_ip);
 
     uint32_t subnet_start = controller_ip & subnet_mask;
 
