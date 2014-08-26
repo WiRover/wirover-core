@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
     DEBUG_MSG("Obtained lease of %s", p_ip);
 
     ipaddr_to_ipv4(&lease.priv_ip, &priv_ip);
-    priv_netmask = htonl(slash_to_netmask(lease.priv_subnet_size));
+    priv_netmask = htonl(slash_to_netmask(32 - lease.priv_subnet_size));
 
     result = tunnel_create(priv_ip, priv_netmask, get_mtu());
     if(result == -1) {

@@ -187,7 +187,7 @@ uint8_t get_gateway_subnet_size()
 }
 uint8_t get_controller_subnet_size()
 {
-    return LEASE_CONTROLLER_SUBNET_SIZE;
+    return LEASE_CONTROLLER_SUBNET_SIZE + LEASE_GATEWAY_SUBNET_SIZE;
 }
 
 /*

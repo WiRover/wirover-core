@@ -21,6 +21,7 @@
 #include "rootchan.h"
 #include "sockets.h"
 #include "utlist.h"
+#include "util.h"
 #include "format.h"
 #include "timing.h"
 
@@ -378,6 +379,21 @@ static void handle_controller_config(struct client* client, const char* packet, 
             add_controller(unique_id, &lease->ip, &ctrl_ip, ctrlreg->data_port, ctrlreg->control_port,
                 ctrlreg->latitude, ctrlreg->longitude);
 
+            /* Add a route for the controller's subnet */
+            uint32_t ipv4, priv_ipv4;
+            ipaddr_t perceived_ip;
+            sockaddr_to_ipaddr((const struct sockaddr *)&client->addr, &perceived_ip);
+            ipaddr_to_ipv4(&perceived_ip, &ipv4);
+            ipaddr_to_ipv4(&lease->ip, &priv_ipv4);
+            uint32_t priv_netmask = htonl(slash_to_netmask(32 - get_gateway_subnet_size()));
+            //Don't add a route if the root server and controller are colocated
+            if(ipv4 != htonl(0x7F000001)) {
+                if(add_route(priv_ipv4 & priv_netmask, ipv4, priv_netmask, 0) < 0)
+                {
+                    ERROR_MSG("Could not add route for new controller");
+                }
+            }
+
             char p_ip[INET6_ADDRSTRLEN];
             ipaddr_to_string(&ctrl_ip, p_ip, sizeof(p_ip));
 
@@ -385,7 +401,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
                 p_ip, ntohs(ctrlreg->data_port), ntohs(ctrlreg->control_port));
 
             copy_ipaddr(&lease->ip, &response->priv_ip);
-            response->priv_subnet_size = get_controller_subnet_size();
+            response->priv_subnet_size = get_gateway_subnet_size();
             response->lease_time = htonl(lease->end - lease->start);
         }
 
