@@ -5,22 +5,25 @@
 #include <netinet/in.h>
 
 #include "configuration.h"
+#include "controllers.h"
 #include "debug.h"
 #include "lease.h"
 #include "utlist.h"
 
 // These default values will be overwritten by read_lease_config().
-static uint32_t     LEASE_RANGE_START   = 0xC0A80000;
-static uint32_t     LEASE_RANGE_END     = 0xC0A8FFFF;
-static uint8_t      LEASE_SUBNET_SIZE   = 16;
-static int          LEASE_TIME_LIMIT    = 86400;
+static uint32_t     LEASE_BASE_SUBNET               = 0xAC100000;
+static uint8_t      LEASE_CONTROLLER_SUBNET_SIZE    = 6;
+static uint8_t      LEASE_GATEWAY_SUBNET_SIZE       = 14;
+static int          LEASE_TIME_LIMIT                = 86400;
 
 static struct lease* leases_head = 0;
 static struct lease* leases_ip_hash = 0;
 static struct lease* leases_id_hash = 0;
+static struct lease** controller_leases = 0;
 
 static void renew_lease(struct lease* lease);
-static uint32_t find_free_ip(int unique_id);
+static uint32_t find_controller_free_ip(int unique_id);
+static uint32_t find_gw_free_ip(int unique_id, struct controller* controller);
 
 /*
  * READ LEASE CONFIG
@@ -36,32 +39,34 @@ int read_lease_config(const config_t* config)
         return 0;
     }
 
-    const char *lease_range_start = 0;
-    result = config_lookup_string(config, "lease.range-start", &lease_range_start);
+    const char *lease_base_subnet = 0;
+    result = config_lookup_string(config, "lease.base-subnet", &lease_base_subnet);
     if(result == CONFIG_FALSE) {
         DEBUG_MSG("lease.range-start missing in config file");
     } else {
-        inet_pton(AF_INET, lease_range_start, &LEASE_RANGE_START);
-        LEASE_RANGE_START = ntohl(LEASE_RANGE_START);
+        inet_pton(AF_INET, lease_base_subnet, &LEASE_BASE_SUBNET);
+        LEASE_BASE_SUBNET = ntohl(LEASE_BASE_SUBNET);
     }
     
-    const char *lease_range_end = 0;
-    result = config_lookup_string(config, "lease.range-end", &lease_range_end);
-    if(result == CONFIG_FALSE) {
-        DEBUG_MSG("lease.range-end missing in config file");
-    } else {
-        inet_pton(AF_INET, lease_range_end, &LEASE_RANGE_END);
-        LEASE_RANGE_END = ntohl(LEASE_RANGE_END);
-    }
-    
-    int subnet_size = 0;
-    result = config_lookup_int_compat(config, "lease.subnet-size", &subnet_size);
+    int controller_subnet_size = 0;
+    result = config_lookup_int_compat(config, "lease.controller-subnet-size", &controller_subnet_size);
     if(result == CONFIG_FALSE) {
         DEBUG_MSG("lease.subnet-size missing in config file");
-    } else if(subnet_size <= 0 || subnet_size > UCHAR_MAX) {
-        DEBUG_MSG("Invalid value for lease.subnet-size (%d)", subnet_size);
+    } else if(controller_subnet_size <= 0 || controller_subnet_size > UCHAR_MAX) {
+        DEBUG_MSG("Invalid value for lease.subnet-size (%d)", controller_subnet_size);
     } else {
-        LEASE_SUBNET_SIZE = subnet_size;
+        LEASE_CONTROLLER_SUBNET_SIZE = controller_subnet_size;
+    }
+    controller_leases = (struct lease**)malloc(sizeof(struct lease*) * (1 << LEASE_CONTROLLER_SUBNET_SIZE));
+    
+    int gateway_subnet_size = 0;
+    result = config_lookup_int_compat(config, "lease.gateway-subnet-size", &gateway_subnet_size);
+    if(result == CONFIG_FALSE) {
+        DEBUG_MSG("lease.subnet-size missing in config file");
+    } else if(gateway_subnet_size <= 0 || gateway_subnet_size > UCHAR_MAX || gateway_subnet_size + controller_subnet_size > 24) {
+        DEBUG_MSG("Invalid value for lease.gateway-subnet (%d)", gateway_subnet_size);
+    } else {
+        LEASE_GATEWAY_SUBNET_SIZE = gateway_subnet_size;
     }
 
     result = config_lookup_int_compat(config, "lease.time-limit", &LEASE_TIME_LIMIT);
@@ -72,33 +77,9 @@ int read_lease_config(const config_t* config)
     return 0;
 }
 
-/*
- * GRANT LEASE
- *
- * Grants a new lease for the hardware address or renews an old one if one
- * exists for the hardware address.
- *
- * Returns a lease on success.  The memory for this lease is managed by the
- * lease module and must not be freed by the caller.  Returns a null pointer if
- * a lease cannot be granted.
- */
-const struct lease* grant_lease(int unique_id)
+struct lease* _alloc_lease(int unique_id, uint32_t n_ip)
 {
-    struct lease* lease;
-
-    HASH_FIND(hh_uid, leases_id_hash, &unique_id, sizeof(unique_id), lease);
-    if(lease) {
-        renew_lease(lease);
-        return lease;
-    }
-
-    uint32_t n_ip = find_free_ip(unique_id);
-    if(!n_ip) {
-        DEBUG_MSG("Denying lease request, out of IPs");
-        return 0;
-    }
-
-    lease = (struct lease*)malloc(sizeof(struct lease));
+    struct lease* lease = (struct lease*)malloc(sizeof(struct lease));
     ASSERT_OR_ELSE(lease) {
         DEBUG_MSG("out of memory");
         return 0;
@@ -118,6 +99,60 @@ const struct lease* grant_lease(int unique_id)
 
     DEBUG_MSG("Granted lease of %s for node %d", p_ip, unique_id);
 
+    return lease;
+}
+
+const struct lease* grant_controller_lease(int unique_id)
+{
+    struct lease* lease;
+    HASH_FIND(hh_uid, leases_id_hash, &unique_id, sizeof(unique_id), lease);
+    if(lease) {
+        renew_lease(lease);
+        return lease;
+    }
+
+    uint32_t n_ip = find_controller_free_ip(unique_id);
+    if(!n_ip) {
+        DEBUG_MSG("Denying lease request, out of IPs");
+        return 0;
+    }
+    return _alloc_lease(unique_id, n_ip);
+}
+
+/*
+ * GRANT LEASE
+ *
+ * Grants a new lease for the hardware address or renews an old one if one
+ * exists for the hardware address.
+ *
+ * Returns a lease on success.  The memory for this lease is managed by the
+ * lease module and must not be freed by the caller.  Returns a null pointer if
+ * a lease cannot be granted.
+ */
+const struct lease* grant_gw_lease(int unique_id, double latitude, double longitude)
+{
+    if(unique_id <= 0)
+        return NULL;
+    struct lease* lease;
+    HASH_FIND(hh_uid, leases_id_hash, &unique_id, sizeof(unique_id), lease);
+    if(lease) {
+        renew_lease(lease);
+        return lease;
+    }
+    
+    struct controller* controller = assign_controller(latitude, longitude);
+    if(controller == NULL){
+        DEBUG_MSG("Denying lease request until there are controllers available");
+        return NULL;
+    }
+
+    uint32_t n_ip = find_gw_free_ip(unique_id, controller);
+    if(!n_ip) {
+        DEBUG_MSG("Denying lease request, out of IPs");
+        return 0;
+    }
+    lease = _alloc_lease(unique_id, n_ip);
+    lease->controller = controller;
     return lease;
 }
 
@@ -146,9 +181,13 @@ void remove_stale_leases()
     }
 }
 
-uint8_t get_lease_subnet_size()
+uint8_t get_gateway_subnet_size()
 {
-    return LEASE_SUBNET_SIZE;
+    return LEASE_GATEWAY_SUBNET_SIZE;
+}
+uint8_t get_controller_subnet_size()
+{
+    return LEASE_CONTROLLER_SUBNET_SIZE + LEASE_GATEWAY_SUBNET_SIZE;
 }
 
 /*
@@ -181,21 +220,23 @@ static void renew_lease(struct lease* lease)
  *
  * Returns an IP in network byte order or 0 if one is unavailable.
  */
-static uint32_t find_free_ip(int unique_id)
+
+static uint32_t find_controller_free_ip(int unique_id)
 {
-    static uint32_t dynamic_start = 0;
-    const uint32_t broadcast_mask = (1 << LEASE_SUBNET_SIZE) - 1;
+    const uint32_t max_i = (1 << LEASE_CONTROLLER_SUBNET_SIZE) - 1;
+    const uint32_t subnet_mask = (1 << (LEASE_CONTROLLER_SUBNET_SIZE + LEASE_GATEWAY_SUBNET_SIZE)) - 1;
+    uint32_t subnet_start = LEASE_BASE_SUBNET & (~subnet_mask);
 
     ipaddr_t check_ip;
     memset(&check_ip, 0, sizeof(check_ip));
-
-    /* First, try to make an IP address out of the unique ID. */
-    uint32_t next_ip = LEASE_RANGE_START + unique_id;
-    uint32_t n_ip = htonl(next_ip);
-
+    
+    uint32_t h_ip;
+    uint32_t n_ip;
     struct lease *lease;
-    if(unique_id > 0 && unique_id < broadcast_mask &&
-            next_ip >= LEASE_RANGE_START && next_ip <= LEASE_RANGE_END) {
+    
+    for(int i = 0; i < max_i; i++) {
+        h_ip = subnet_start | (i << LEASE_GATEWAY_SUBNET_SIZE) | 1;
+        n_ip = htonl(h_ip);
         ipv4_to_ipaddr(n_ip, &check_ip);
 
         HASH_FIND(hh_ip, leases_ip_hash, &check_ip, sizeof(check_ip), lease);
@@ -203,29 +244,36 @@ static uint32_t find_free_ip(int unique_id)
             return n_ip;
     }
 
-    if(dynamic_start < LEASE_RANGE_START || dynamic_start > LEASE_RANGE_END) {
-        dynamic_start = LEASE_RANGE_END;
-       
-        // Avoid assigning a broadcast address or an address that ends with zeros.
-        uint32_t ending_bits = dynamic_start & broadcast_mask;
-        if(ending_bits == broadcast_mask || ending_bits == 0)
-            dynamic_start--;
-    }
+    DEBUG_MSG("out of IP addresses");
+    return 0;
+}
 
-    while(dynamic_start >= LEASE_RANGE_START) {
+static uint32_t find_gw_free_ip(int unique_id, struct controller* controller)
+{
+    static uint32_t dynamic_start = 0;
+    const uint32_t broadcast_mask = (1 << LEASE_GATEWAY_SUBNET_SIZE) - 1;
+    const uint32_t subnet_mask = ~broadcast_mask;
+
+    uint32_t controller_ip;
+    ipaddr_to_ipv4(&controller->priv_ip, &controller_ip);
+    controller_ip = ntohl(controller_ip);
+
+    uint32_t subnet_start = controller_ip & subnet_mask;
+
+    ipaddr_t check_ip;
+    memset(&check_ip, 0, sizeof(check_ip));
+
+    uint32_t n_ip;
+    struct lease *lease;
+    
+    /* We begin assigning gateway IP addresses 1 after the controller IP */
+    for(dynamic_start = subnet_start + 2; (dynamic_start & broadcast_mask) < broadcast_mask; dynamic_start ++) {
         n_ip = htonl(dynamic_start);
         ipv4_to_ipaddr(n_ip, &check_ip);
 
         HASH_FIND(hh_ip, leases_ip_hash, &check_ip, sizeof(check_ip), lease);
         if(!lease)
             return n_ip;
-
-        dynamic_start--;
-
-        // Avoid assigning a broadcast address or an address that ends with zeros.
-        uint32_t ending_bits = dynamic_start & broadcast_mask;
-        if(ending_bits == broadcast_mask || ending_bits == 0)
-            dynamic_start--;
     }
 
     DEBUG_MSG("out of IP addresses");

@@ -11,9 +11,6 @@
 #include "netlink.h"
 #include "interface.h"
 
-// Root server will inform gateway of at most 3 controllers
-#define MAX_CONTROLLERS     3
-
 #define RCHAN_CONNECT_TIMEOUT_SEC  5
 
 struct controller_info {
@@ -30,9 +27,8 @@ struct rchan_response {
     uint8_t     priv_subnet_size;
     uint32_t    lease_time;
     uint16_t    unique_id;
-    uint8_t     controllers;
 
-    struct controller_info cinfo[MAX_CONTROLLERS];
+    struct controller_info cinfo;
 } __attribute__((__packed__));
 #define MIN_RESPONSE_LEN (offsetof(struct rchan_response, cinfo))
 
@@ -88,8 +84,7 @@ struct lease_info {
     uint32_t    time_limit;
     uint16_t    unique_id;
 
-    unsigned int    controllers;
-    struct controller_info cinfo[MAX_CONTROLLERS];
+    struct controller_info cinfo;
 };
 
 int register_controller(struct lease_info *lease, const char *wiroot_ip,

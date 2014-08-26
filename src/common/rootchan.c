@@ -21,10 +21,10 @@
 #include "util.h"
 
 static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
-        const char *request, int request_len, const char *interface,
-        char *response, int response_len);
+                          const char *request, int request_len, const char *interface,
+                          char *response, int response_len);
 static int _all_ife_rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
-        const char *request, int request_len, char *response, int response_len);
+                                  const char *request, int request_len, char *response, int response_len);
 
 static struct lease_info latest_lease = {
     .priv_ip = IPADDR_IPV4_ZERO,
@@ -72,10 +72,10 @@ int fill_rchanhdr(char *buffer, uint8_t type, int send_pub_key)
 }
 #ifdef CONTROLLER
 /* 
- * register_controller - Register a controller with the root server.
- */
+* register_controller - Register a controller with the root server.
+*/
 int register_controller(struct lease_info *lease, const char *wiroot_ip, 
-        unsigned short wiroot_port, unsigned short data_port, unsigned short control_port)
+                        unsigned short wiroot_port, unsigned short data_port, unsigned short control_port)
 {
     char *buffer;
     int result;
@@ -88,7 +88,7 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
     }
 
     memset(buffer, 0, BUFSIZ);
-    
+
     offset = fill_rchanhdr(buffer, RCHAN_REGISTER_CONTROLLER, 1);
     if(offset < 0)
         goto free_and_err_out;
@@ -102,7 +102,7 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
     } else {
         struct sockaddr_in sin;
         result = resolve_address(register_address, 
-                (struct sockaddr *)&sin, sizeof(sin));
+            (struct sockaddr *)&sin, sizeof(sin));
         if(result < 0) {
             DEBUG_MSG("Failed to resolve address string: %s", register_address);
             goto free_and_err_out;
@@ -124,13 +124,12 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
         DEBUG_MSG("Failed to obtain lease from root server");
         goto free_and_err_out;
     }
-    
+
     copy_ipaddr(&response.priv_ip, &lease->priv_ip);
     lease->priv_subnet_size = response.priv_subnet_size;
     lease->time_limit = ntohl(response.lease_time);
     lease->unique_id = ntohs(response.unique_id);
-    lease->controllers = 0;
-   
+
     memcpy(&latest_lease, lease, sizeof(latest_lease));
 
     free(buffer);
@@ -145,10 +144,10 @@ err_out:
 
 #ifdef GATEWAY
 /* 
- * register_gateway - Register a gateway with the root server.
- */
+* register_gateway - Register a gateway with the root server.
+*/
 int register_gateway(struct lease_info *lease, const char *wiroot_ip, 
-        unsigned short wiroot_port)
+                     unsigned short wiroot_port)
 {
     char *buffer;
     int offset = 0;
@@ -160,7 +159,7 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
     }
 
     memset(buffer, 0, BUFSIZ);
-    
+
     offset = fill_rchanhdr(buffer, RCHAN_REGISTER_GATEWAY, 1);
     if(offset < 0)
         goto free_and_err_out;
@@ -185,28 +184,19 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
     lease->priv_subnet_size = response.priv_subnet_size;
     lease->time_limit = ntohl(response.lease_time);
     lease->unique_id = ntohs(response.unique_id);
-    lease->controllers = response.controllers;
+    /* Add a remote node that will represent the controller */
+    memcpy(&lease->cinfo, &response.cinfo, sizeof(struct controller_info));
 
-    if(lease->controllers > 0) {
-        if(lease->controllers > MAX_CONTROLLERS)
-            lease->controllers = MAX_CONTROLLERS;
+    struct interface *cont_ife = alloc_interface(lease->cinfo.unique_id);
+    ipaddr_to_ipv4(&lease->cinfo.pub_ip, &cont_ife->public_ip.s_addr);
+    cont_ife->data_port = lease->cinfo.data_port;
+    cont_ife->control_port = lease->cinfo.control_port;
 
-        const int copy_size = lease->controllers * sizeof(struct controller_info);
+    struct remote_node *node = alloc_remote_node();
+    node->head_interface = cont_ife;
+    node->unique_id = lease->cinfo.unique_id;
+    add_remote_node(node);
 
-        memcpy(lease->cinfo, response.cinfo, copy_size);
-        for(int i = 0; i < lease->controllers; i++){
-            struct interface *cont_ife = alloc_interface(lease->cinfo[i].unique_id);
-            ipaddr_to_ipv4(&lease->cinfo[i].pub_ip, &cont_ife->public_ip.s_addr);
-            cont_ife->data_port = lease->cinfo[i].data_port;
-            cont_ife->control_port = lease->cinfo[i].control_port;
-
-            struct remote_node *node = alloc_remote_node();
-            node->head_interface = cont_ife;
-            node->unique_id = lease->cinfo[i].unique_id;
-            add_remote_node(node);
-        }
-    }
-    
     memcpy(&latest_lease, lease, sizeof(latest_lease));
 
     free(buffer);
@@ -219,7 +209,7 @@ err_out:
 }
 #endif /* GATEWAY */
 static int _all_ife_rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
-        const char *request, int request_len, char *response, int response_len)
+                                  const char *request, int request_len, char *response, int response_len)
 {
     obtain_read_lock(&interface_list_lock);
     struct interface_copy *iface_list = NULL;
@@ -238,9 +228,9 @@ static int _all_ife_rchan_message(const char *wiroot_ip, unsigned short wiroot_p
         const char *ifname = iface_list[i].name;
 
         if(_rchan_message(wiroot_ip, wiroot_port, request, request_len, 
-                    ifname, response, response_len) == 0) {
-            lease_obtained = 1;
-            break;
+            ifname, response, response_len) == 0) {
+                lease_obtained = 1;
+                break;
         }
     }
 
@@ -250,14 +240,14 @@ static int _all_ife_rchan_message(const char *wiroot_ip, unsigned short wiroot_p
     return lease_obtained;
 }
 /*
- * Attempt to obtain a lease from the root server.  This will bind to the given
- * interface if interface is not null.  If successful, it returns 0 and fills
- * in the response, otherwise it returns -1 and the contents of response are
- * undefined.
- */
+* Attempt to obtain a lease from the root server.  This will bind to the given
+* interface if interface is not null.  If successful, it returns 0 and fills
+* in the response, otherwise it returns -1 and the contents of response are
+* undefined.
+*/
 static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
-        const char *request, int request_len, const char *interface,
-        char *response, int response_len)
+                          const char *request, int request_len, const char *interface,
+                          char *response, int response_len)
 { 
     int result;
 
@@ -299,7 +289,7 @@ err_out:
 }
 
 int request_pubkey(const char *wiroot_ip, unsigned short wiroot_port,
-        uint16_t remote_id, char *pub_key, int pub_key_len)
+                   uint16_t remote_id, char *pub_key, int pub_key_len)
 {
     char buffer[BUFSIZ];
     int offset = 0;
@@ -312,18 +302,18 @@ int request_pubkey(const char *wiroot_ip, unsigned short wiroot_port,
 }
 
 /*
- * Read cryptographic node_id from a file as a hexadecimal string.
- *
- * Returns the length of the string written to dst or a negative value if an
- * error occurred.
- *
- * If a whitespace character is encountered, the string is truncated at the
- * whitespace character, a null character is written in its place, and only the
- * length up to the whitespace character is returned.
- *
- * The result may not be null-terminated, so the caller must check the return
- * value.
- */
+* Read cryptographic node_id from a file as a hexadecimal string.
+*
+* Returns the length of the string written to dst or a negative value if an
+* error occurred.
+*
+* If a whitespace character is encountered, the string is truncated at the
+* whitespace character, a null character is written in its place, and only the
+* length up to the whitespace character is returned.
+*
+* The result may not be null-terminated, so the caller must check the return
+* value.
+*/
 int get_node_id_hex(char *dst, int dst_len)
 {
     FILE *file = fopen(NODE_ID_PATH, "r");
@@ -348,11 +338,11 @@ int get_node_id_hex(char *dst, int dst_len)
 }
 
 /*
- * Read the cryptographic node_id from a file.
- *
- * Returns the size of the node_id in bytes or a negative value if an error
- * occurred.
- */
+* Read the cryptographic node_id from a file.
+*
+* Returns the size of the node_id in bytes or a negative value if an error
+* occurred.
+*/
 int get_node_id_bin(char *dst, int dst_len)
 {
     char buffer[NODE_ID_MAX_HEX_LEN];
@@ -363,7 +353,7 @@ int get_node_id_bin(char *dst, int dst_len)
         return -1;
     } else if(hex_len > 2 * dst_len) {
         DEBUG_MSG("Length of node_id (0.5 * %d) is too large for buffer (%d)",
-                hex_len, dst_len);
+            hex_len, dst_len);
         return -1;
     }
 
@@ -372,7 +362,7 @@ int get_node_id_bin(char *dst, int dst_len)
         DEBUG_MSG("Error converting hexadecimal node_id (error code: %d)", bin_len);
         return -1;
     }
-    
+
     return bin_len;
 }
 
@@ -392,28 +382,21 @@ uint16_t get_unique_id()
 }
 
 /*
- * Returns controller's data port in host byte order.
- */
+* Returns controller's data port in host byte order.
+*/
 unsigned short get_controller_control_port()
 {
-    if(latest_lease.controllers > 0)
-        return ntohs(latest_lease.cinfo[0].control_port);
-    else
-        return 0;
+    return ntohs(latest_lease.cinfo.control_port);
 }
 
 /*
- * It is recommended that your buffer be at least INET6_ADDRSTRLEN bytes in
- * size.
- */
+* It is recommended that your buffer be at least INET6_ADDRSTRLEN bytes in
+* size.
+*/
 int get_controller_privip(char *dest, int dest_len)
 {
-    if(latest_lease.controllers > 0) {
-        ipaddr_to_string(&latest_lease.cinfo[0].priv_ip, dest, dest_len);
-        return 0;
-    } else {
-        return FAILURE;
-    }
+    ipaddr_to_string(&latest_lease.cinfo.priv_ip, dest, dest_len);
+    return SUCCESS;
 }
 
 struct interface *get_controller_ife()

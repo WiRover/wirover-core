@@ -119,17 +119,9 @@ int main(int argc, char* argv[])
                     continue;
                 }
 
-                if(lease.controllers <= 0) {
-                    DEBUG_MSG("Could not find any controllers, will retry in %u seconds",
-                        lease_retry_delay);
-                    lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
-                    continue;
-                }
-
                 char my_ip[INET6_ADDRSTRLEN];
                 ipaddr_to_string(&lease.priv_ip, my_ip, sizeof(my_ip));
                 DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease.unique_id);
-                DEBUG_MSG("There are %d controllers available.", lease.controllers);
 
                 write_node_id_file(lease.unique_id);
                 call_on_lease(lease.unique_id);
@@ -141,12 +133,12 @@ int main(int argc, char* argv[])
                     RENEW_BEFORE_EXPIRATION;
 
                 char cont_ip[INET6_ADDRSTRLEN];
-                ipaddr_to_string(&lease.cinfo[0].pub_ip, cont_ip, sizeof(cont_ip));
-                DEBUG_MSG("First controller is at: %s, requesting its public key", cont_ip);
+                ipaddr_to_string(&lease.cinfo.pub_ip, cont_ip, sizeof(cont_ip));
+                DEBUG_MSG("Controller is at: %s, requesting its public key", cont_ip);
 
                 char pub_key[BUFSIZ];
                 result = request_pubkey(wiroot_address, wiroot_port,
-                    lease.cinfo[0].unique_id, pub_key, BUFSIZ);
+                    lease.cinfo.unique_id, pub_key, BUFSIZ);
                 if(result == FAILURE)
                 {
                     DEBUG_MSG("Failed to obtain controller public key");
@@ -166,8 +158,8 @@ int main(int argc, char* argv[])
                 uint32_t priv_ip;
                 uint32_t pub_ip;
 
-                ipaddr_to_ipv4(&lease.cinfo[0].priv_ip, &priv_ip);
-                ipaddr_to_ipv4(&lease.cinfo[0].pub_ip, &pub_ip);
+                ipaddr_to_ipv4(&lease.cinfo.priv_ip, &priv_ip);
+                ipaddr_to_ipv4(&lease.cinfo.pub_ip, &pub_ip);
                 
                 result = tunnel_create(private_ip, 
                     private_netmask, get_mtu());
@@ -224,7 +216,7 @@ int main(int argc, char* argv[])
             state = GATEWAY_NOTIFICATION_SUCCEEDED;
 
             uint32_t pub_ip;
-            ipaddr_to_ipv4(&lease.cinfo[0].pub_ip, &pub_ip);
+            ipaddr_to_ipv4(&lease.cinfo.pub_ip, &pub_ip);
 
             struct bw_client_info bw_client;
             memset(&bw_client, 0, sizeof(bw_client));
