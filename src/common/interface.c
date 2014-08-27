@@ -63,13 +63,11 @@ int change_interface_state(struct interface *ife, enum if_state state)
     ife->state = state;
     if(state == INACTIVE)
     {
-        obtain_write_lock(&ife->rt_buffer.rwlock);
         DEBUG_MSG("Retransmitting %d unacked packets", ife->rt_buffer.length);
         while(ife->rt_buffer.length > 0) {
             send_packet(ife->rt_buffer.head->packet, ife->rt_buffer.head->size);
             pb_free_head(&ife->rt_buffer);
         }
-        release_write_lock(&ife->rt_buffer.rwlock);
     }
 #ifdef GATEWAY
     send_notification(1);

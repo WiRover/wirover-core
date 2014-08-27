@@ -88,6 +88,9 @@ int handlePackets()
     // The File Descriptor set to add sockets to
     fd_set read_set;
     sigset_t orig_set;
+    struct timespec timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_nsec = 100 * NSECS_PER_MSEC;
 
     while( 1 )
     {
@@ -107,7 +110,7 @@ int handlePackets()
         sigemptyset(&orig_set);
         sigaddset(&orig_set, SIGALRM);
 
-        int rtn = pselect(FD_SETSIZE, &read_set, NULL, NULL, NULL, &orig_set);
+        int rtn = pselect(FD_SETSIZE, &read_set, NULL, NULL, &timeout, &orig_set);
         // Make sure select didn't fail
         if( rtn < 0 && errno == EINTR) 
         {
@@ -338,8 +341,6 @@ int send_packet(char *orig_packet, int orig_size)
     if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
         int node_id = get_unique_id();
 
-        obtain_read_lock(&interface_list_lock);
-
         struct interface *src_ife = select_src_interface(ftd);
         if(src_ife != NULL) {
             ftd->local_link_id = src_ife->index;
@@ -350,8 +351,6 @@ int send_packet(char *orig_packet, int orig_size)
             ftd->remote_link_id = dst_ife->index;
             ftd->remote_node_id = dst_ife->node_id;
         }
-
-        release_read_lock(&interface_list_lock);
 
         return send_ife_packet(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
     }

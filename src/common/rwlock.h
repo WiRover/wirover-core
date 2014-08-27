@@ -10,18 +10,16 @@
  * bugs with my implementation, I decided just to call the pthreads functions. */
 
 struct rwlock {
-    pthread_rwlock_t lock;
+    pthread_mutex_t lock;
 };
 
 #define RWLOCK_INITIALIZER                          \
 {                                                   \
-    .lock = PTHREAD_RWLOCK_INITIALIZER,             \
+    .lock = PTHREAD_MUTEX_INITIALIZER,             \
 }
 
 void obtain_read_lock(struct rwlock* lock);
 void obtain_write_lock(struct rwlock* lock);
-void upgrade_read_lock(struct rwlock* lock);
-void downgrade_write_lock(struct rwlock* lock);
 void release_read_lock(struct rwlock* lock);
 void release_write_lock(struct rwlock* lock);
 

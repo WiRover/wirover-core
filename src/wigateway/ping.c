@@ -28,7 +28,7 @@
 
 static void* ping_thread_func(void* arg);
 static int send_second_response(struct interface *ife, 
-        const char *buffer, int len, struct interface *dst_ife);
+                                const char *buffer, int len, struct interface *dst_ife);
 
 static int          status_log_enabled = 0;
 static int          running = 0;
@@ -61,10 +61,10 @@ int start_ping_thread()
 }
 
 /*
- * PING ALL INTERFACES
- *
- * Locking: Assumes the calling thread does not have a lock on the interface list.
- */
+* PING ALL INTERFACES
+*
+* Locking: Assumes the calling thread does not have a lock on the interface list.
+*/
 int ping_all_interfaces()
 {
     int pings_sent = 0;
@@ -93,10 +93,10 @@ int ping_all_interfaces()
 }
 
 /*
- * SEND PING
- *
- * Locking: Assumes the calling thread has a read lock on the interface list.
- */
+* SEND PING
+*
+* Locking: Assumes the calling thread has a read lock on the interface list.
+*/
 int send_ping(struct interface* ife)
 {
     char *buffer = malloc(MAX_PING_PACKET_SIZE);
@@ -126,7 +126,7 @@ int send_ping(struct interface* ife)
         pkt->type = PING_REQUEST | PING_GPS_PAYLOAD;
         send_size = MIN_PING_PACKET_SIZE + sizeof(struct gps_payload);
     }
-   
+
     // Store a timestamp in the packet for calculating RTT.
     pkt->sender_ts = htonl(timeval_to_usec(0));
     pkt->receiver_ts = 0;
@@ -134,8 +134,8 @@ int send_ping(struct interface* ife)
 
     if(send_ife_packet(TUNTYPE_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife())) {
         /* We get an error ENETUNREACH if we try pinging out an interface which
-         * does not have an IP address.  That case is not interesting, so we
-         * suppress the error message. */
+        * does not have an IP address.  That case is not interesting, so we
+        * suppress the error message. */
         if(errno != ENETUNREACH)
             ERROR_MSG("sending ping packet on %s failed", ife->name);
         free(buffer);
@@ -165,35 +165,35 @@ static int should_send_ping(const struct interface *ife)
 
 void* ping_thread_func(void* arg)
 {   
-	const unsigned int ping_interval = get_ping_interval();
+    const unsigned int ping_interval = get_ping_interval();
     const unsigned int status_interval = 1;
     int stall_retry_interval = get_link_stall_retry_interval() * USECS_PER_MSEC;
 
-	// Initialize this so that the first ping will be sent immediately.
-	struct timeval last_ping_time = {
-		.tv_sec = time(0) - ping_interval, .tv_usec = 0};
+    // Initialize this so that the first ping will be sent immediately.
+    struct timeval last_ping_time = {
+        .tv_sec = time(0) - ping_interval, .tv_usec = 0};
     struct timeval last_status_time = {
-		.tv_sec = time(0) - status_interval, .tv_usec = 0};
+        .tv_sec = time(0) - status_interval, .tv_usec = 0};
 
-	int num_ifaces = 0;
-	int curr_iface_pos = 0;
+    int num_ifaces = 0;
+    int curr_iface_pos = 0;
 
-	unsigned ping_spacing = ping_interval * USEC_PER_SEC;
+    unsigned ping_spacing = ping_interval * USEC_PER_SEC;
 
-	struct timeval now;
+    struct timeval now;
 
-	while(1) {
-        
-		gettimeofday(&now, 0);
+    while(1) {
 
-		obtain_read_lock(&interface_list_lock);
-        
+        gettimeofday(&now, 0);
+
+        obtain_read_lock(&interface_list_lock);
+
         if(get_status_log_enabled())
         {
             dump_interfaces_to_file(interface_list, "/var/lib/wirover/ife_list");
         }
 
-		num_ifaces = count_all_interfaces(interface_list);
+        num_ifaces = count_all_interfaces(interface_list);
 
         //Send retry packets over inactive interfaces
         struct interface *inactive_interface = interface_list;
@@ -206,38 +206,38 @@ void* ping_thread_func(void* arg)
             inactive_interface = inactive_interface->next;
         }
 
-	    release_read_lock(&interface_list_lock);
+        release_read_lock(&interface_list_lock);
 
-		if(curr_iface_pos >= num_ifaces) {
-			curr_iface_pos = 0;
-		}
+        if(curr_iface_pos >= num_ifaces) {
+            curr_iface_pos = 0;
+        }
 
         if(num_ifaces > 0)
-			ping_spacing = ping_interval * USEC_PER_SEC / num_ifaces;
-		else
-			ping_spacing = ping_interval * USEC_PER_SEC;
+            ping_spacing = ping_interval * USEC_PER_SEC / num_ifaces;
+        else
+            ping_spacing = ping_interval * USEC_PER_SEC;
 
 
 
-		long time_diff = timeval_diff(&now, &last_ping_time);
-		if(time_diff >= ping_spacing) {
+        long time_diff = timeval_diff(&now, &last_ping_time);
+        if(time_diff >= ping_spacing) {
 
-			obtain_read_lock(&interface_list_lock);
-			struct interface *ife = find_interface_at_pos(
-				interface_list, curr_iface_pos);
+            obtain_read_lock(&interface_list_lock);
+            struct interface *ife = find_interface_at_pos(
+                interface_list, curr_iface_pos);
             if(ife && should_send_ping(ife)) {
                 send_ping(ife);
             }
-			release_read_lock(&interface_list_lock);
+            release_read_lock(&interface_list_lock);
 
-			memcpy(&last_ping_time, &now, sizeof(last_ping_time));
+            memcpy(&last_ping_time, &now, sizeof(last_ping_time));
 
-			curr_iface_pos++;
-		}
+            curr_iface_pos++;
+        }
 
         time_diff = timeval_diff(&now, &last_status_time);
         if(time_diff >= status_interval) {
-			memcpy(&last_status_time, &now, sizeof(last_status_time));
+            memcpy(&last_status_time, &now, sizeof(last_status_time));
             if(get_status_log_enabled())
             {
                 obtain_read_lock(&interface_list_lock);
@@ -247,17 +247,17 @@ void* ping_thread_func(void* arg)
         }
 
         safe_usleep(stall_retry_interval);
-	}
+    }
 
-	running = 0;
-	return 0;
+    running = 0;
+    return 0;
 }
 
 /*
- * HANDLE INCOMING
- *
- * Locking: Assumes the calling thread does not have a lock on the interface list.
- */
+* HANDLE INCOMING
+*
+* Locking: Assumes the calling thread does not have a lock on the interface list.
+*/
 int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv_time, struct interface *local_ife, struct interface *remote_ife, char *buffer, int size)
 {
     if(size < MIN_PING_PACKET_SIZE) {
@@ -270,15 +270,15 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
     // for a lock before sending the response packet
 
     /* Under normal circumstances, we will send a ping response back to the
-     * controller so that it can measure RTT.  The response will be suppressed
-     * if there is an error condition or a secret_word mismatch. */
+    * controller so that it can measure RTT.  The response will be suppressed
+    * if there is an error condition or a secret_word mismatch. */
     int send_response = 1;
 
     /*
-     * If the controller does not recognize our id (this can happen if the
-     * controller is restarted), then it responds with the error bit set.  We
-     * can re-establish state with the controller by sending a notification.
-     */
+    * If the controller does not recognize our id (this can happen if the
+    * controller is restarted), then it responds with the error bit set.  We
+    * can re-establish state with the controller by sending a notification.
+    */
     if(pkt->type == PING_RESPONSE_ERROR) {
         DEBUG_MSG("Controller responded with an error, will send a notification");
         send_response = 0;
@@ -316,27 +316,27 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
         ife->last_ping_seq_no = ntohl(pkt->seq_no);
 
         DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f", 
-                ife->name, ife->network, diff, ife->avg_rtt);
+            ife->name, ife->network, diff, ife->avg_rtt);
     }
 
     return 0;
 }
 
 /*
- * Send a response back to the controller.  This allows the controller
- * to measure RTT as well.
- *
- * Assumes the buffer is at least MIN_PING_PACKET_SIZE in length.
- */
+* Send a response back to the controller.  This allows the controller
+* to measure RTT as well.
+*
+* Assumes the buffer is at least MIN_PING_PACKET_SIZE in length.
+*/
 static int send_second_response(struct interface *ife, 
-        const char *buffer, int len, struct interface *dst_ife)
+                                const char *buffer, int len, struct interface *dst_ife)
 {
     assert(len >= MIN_PING_PACKET_SIZE);
 
     int send_size = MIN_PING_PACKET_SIZE + sizeof(struct passive_payload);
     char *response = malloc(send_size);
     if(!response) {
-    	DEBUG_MSG("out of memory");
+        DEBUG_MSG("out of memory");
         return -1;
     }
 
@@ -354,7 +354,7 @@ static int send_second_response(struct interface *ife,
     if(fill_passive_payload(ife->name, passive) < 0) {
         send_size = MIN_PING_PACKET_SIZE;
     }
-    
+
     fill_ping_digest(ping, response, send_size, private_key);
     int result = send_ife_packet(TUNTYPE_PING, response, send_size, get_unique_id(), ife, dst_ife);
     //int result = sendto(sockfd, response, send_size, 0, to, to_len);

@@ -19,6 +19,7 @@
 #include "ping.h"
 #include "rootchan.h"
 #include "rwlock.h"
+#include "util.h"
 #include "utlist.h"
 
 
@@ -180,14 +181,12 @@ int handle_netlink_message(const char* msg, int msg_len)
 
             DEBUG_MSG("Received RTM_NEWADDR for device %s (%d)", device, ifa->ifa_index);
 
-            obtain_read_lock(&interface_list_lock);
+            obtain_write_lock(&interface_list_lock);
             ife = find_interface_by_index(interface_list, ifa->ifa_index);
 
             if(ife) {
                 if(ife->state != INIT_INACTIVE) {
-                    upgrade_read_lock(&interface_list_lock);
                     change_interface_state(ife, INACTIVE);
-                    downgrade_write_lock(&interface_list_lock);
                 }
             } else {
                 int priority = get_interface_priority(device);
@@ -202,9 +201,7 @@ int handle_netlink_message(const char* msg, int msg_len)
 
                     ife->data_port = htons(get_data_port());
 
-                    upgrade_read_lock(&interface_list_lock);
                     add_interface(ife);
-                    downgrade_write_lock(&interface_list_lock);
                 }
             }
 
@@ -227,7 +224,7 @@ int handle_netlink_message(const char* msg, int msg_len)
                 send_ping(ife);
             }
 
-            release_read_lock(&interface_list_lock);
+            release_write_lock(&interface_list_lock);
         } else if(nh->nlmsg_type == RTM_DELADDR) {
             struct ifaddrmsg* ifa = (struct ifaddrmsg *)NLMSG_DATA(nh);
 
@@ -242,16 +239,14 @@ int handle_netlink_message(const char* msg, int msg_len)
 
             DEBUG_MSG("Received RTM_DELLINK for device %d", ifi->ifi_index);
             
-            obtain_read_lock(&interface_list_lock);
+            obtain_write_lock(&interface_list_lock);
             ife = find_interface_by_index(interface_list, ifi->ifi_index);
             if(ife)
             {
                 change_interface_state(ife, DEAD);
-                upgrade_read_lock(&interface_list_lock);
                 delete_interface(ife);
-                downgrade_write_lock(&interface_list_lock);
             }
-            release_read_lock(&interface_list_lock);
+            release_write_lock(&interface_list_lock);
 
         } else if(nh->nlmsg_type == RTM_NEWROUTE) {
             struct rtmsg *rtm = (struct rtmsg *)NLMSG_DATA(nh);

@@ -1,37 +1,28 @@
 #include <assert.h>
 #include <pthread.h>
 
+#include "debug.h"
+#include "netlink.h"
 #include "rwlock.h"
+#include <execinfo.h>
 
 void obtain_read_lock(struct rwlock* lock)
 {
-    pthread_rwlock_rdlock(&lock->lock);
+    pthread_mutex_lock(&lock->lock);
 }
 
 void obtain_write_lock(struct rwlock* lock)
 {
-    pthread_rwlock_wrlock(&lock->lock);
-}
-
-void upgrade_read_lock(struct rwlock* lock)
-{
-    pthread_rwlock_unlock(&lock->lock);
-    pthread_rwlock_wrlock(&lock->lock);
-}
-
-void downgrade_write_lock(struct rwlock* lock)
-{
-    pthread_rwlock_unlock(&lock->lock);
-    pthread_rwlock_rdlock(&lock->lock);
+    pthread_mutex_lock(&lock->lock);
 }
 
 void release_read_lock(struct rwlock* lock)
 {
-    pthread_rwlock_unlock(&lock->lock);
+    pthread_mutex_unlock(&lock->lock);
 }
 
 void release_write_lock(struct rwlock* lock)
 {
-    pthread_rwlock_unlock(&lock->lock);
+    pthread_mutex_unlock(&lock->lock);
 }
 
