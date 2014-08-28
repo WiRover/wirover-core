@@ -384,7 +384,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
             uint32_t priv_netmask = htonl(slash_to_netmask(32 - get_gateway_subnet_size()));
             //Don't add a route if the root server and controller are colocated
             if(ipv4 != htonl(0x7F000001)) {
-                if(add_route(priv_ipv4 & priv_netmask, ipv4, priv_netmask, 0) < 0)
+                if(add_route(priv_ipv4 & priv_netmask, ipv4, priv_netmask, 0, 0) < 0)
                 {
                     ERROR_MSG("Could not add route for new controller");
                 }
