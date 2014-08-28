@@ -245,7 +245,7 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
         return FAILURE;
     }
 
-    if(add_route(ip, 0, netmask, tun->name) < 0)
+    if(add_route(ip, 0, netmask, 0, tun->name) < 0)
     {
         ERROR_MSG("Could not add route for tunnel traffic");
         return FAILURE;

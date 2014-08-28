@@ -238,7 +238,7 @@ int handle_netlink_message(const char* msg, int msg_len)
             struct ifinfomsg* ifi = (struct ifinfomsg *)NLMSG_DATA(nh);
 
             DEBUG_MSG("Received RTM_DELLINK for device %d", ifi->ifi_index);
-            
+
             obtain_write_lock(&interface_list_lock);
             ife = find_interface_by_index(interface_list, ifi->ifi_index);
             if(ife)
@@ -256,8 +256,11 @@ int handle_netlink_message(const char* msg, int msg_len)
                 struct in_addr gwaddr = {.s_addr = 0};
                 int ifindex = 0;
 
-                int gwaddr_set = 0;
+                int dst_set = 0;
+                uint32_t dst = 0;
                 int ifindex_set = 0;
+                int metric_set = 0;
+                uint32_t metric = 0;
 
                 int rta_len;
                 for(rta_len = RTM_PAYLOAD(nh); rta_len > 0 && RTA_OK(rta, rta_len);
@@ -265,37 +268,36 @@ int handle_netlink_message(const char* msg, int msg_len)
                         switch(rta->rta_type) {
                         case RTA_GATEWAY:
                             memcpy(&gwaddr, RTA_DATA(rta), sizeof(gwaddr));
-                            gwaddr_set = 1;
                             break;
                         case RTA_OIF:
                             ifindex = *((int *)RTA_DATA(rta));
                             ifindex_set = 1;
                             break;
+                        case RTA_DST:
+                            memcpy(&dst, RTA_DATA(rta), sizeof(uint32_t));
+                            dst_set = 1;
+                            break;
+                        case RTA_PRIORITY:
+                            memcpy(&metric, RTA_DATA(rta), sizeof(uint32_t));
+                            metric_set = 1;
+                            break;
                         default:
                             break;
                         }
                 }
-
-                if(gwaddr_set && ifindex_set) {
-                    char gwaddr_p[INET_ADDRSTRLEN];
-                    inet_ntop(AF_INET, &gwaddr, gwaddr_p, sizeof(gwaddr_p));
-
+                if(ifindex_set) {
                     obtain_read_lock(&interface_list_lock);
-
                     struct interface *ife = find_interface_by_index(
                         interface_list, ifindex);
-                    if(ife && ife->priority >= 0) {
-                        DEBUG_MSG("RTM_NEWROUTE gw %s dev %s",
-                            gwaddr_p, ife->name);
-
-                        read_network_name(ife->name, ife->network, sizeof(ife->network));
-
-                        memcpy(&ife->gateway_ip, &gwaddr, 
-                            sizeof(ife->gateway_ip));
-
-                        send_ping(ife);
+                    if(!dst_set && ife)
+                    {
+                        DEBUG_MSG("Received RTM_NEWROUTE for default gw on %s", ife->name);
+                        if(!metric_set){
+                            DEBUG_MSG("Changing priority of new route");
+                            delete_route(0, gwaddr.s_addr, 0, ife->name);
+                            add_route(0, gwaddr.s_addr, 0, 100, ife->name);
+                        }
                     }
-
                     release_read_lock(&interface_list_lock);
                 }
             }

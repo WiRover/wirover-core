@@ -15,7 +15,7 @@
 #include "tunnel.h"
 #include "util.h"
 
-int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device)
+int add_route(__be32 dest, __be32 gateway, __be32 netmask, __be32 metric, const char *device)
 {
     struct rtentry rt;
     char dev_buf[IFNAMSIZ];
@@ -32,9 +32,9 @@ int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device)
     rt.rt_genmask.sa_family = AF_INET;
     struct in_addr *netmask_dst = &((struct sockaddr_in *)&rt.rt_genmask)->sin_addr;
     netmask_dst->s_addr = netmask;
+    rt.rt_metric = metric;
 
     if(gateway) {
-        DEBUG_MSG("Using gateway");
         rt.rt_flags |= RTF_GATEWAY;
 
         rt.rt_gateway.sa_family = AF_INET;
@@ -42,7 +42,6 @@ int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device)
         gw_dst->s_addr = gateway;
     }
     else if(dest){
-        DEBUG_MSG("Adding host route");
         rt.rt_flags |= RTF_HOST;
     }
 

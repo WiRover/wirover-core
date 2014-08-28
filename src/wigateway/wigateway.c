@@ -197,7 +197,7 @@ int main(int argc, char* argv[])
         }
 
         if(state == GATEWAY_LEASE_OBTAINED) {
-            result = add_route(0, 0, 0, TUN_DEVICE);
+            result = add_route(0, 0, 0, 0, TUN_DEVICE);
             if(find_active_interface(interface_list)) {
 
                 // EEXIST means the route was already present -> not a failure
