@@ -188,7 +188,7 @@ void* ping_thread_func(void* arg)
 
         obtain_read_lock(&interface_list_lock);
 
-        if(get_status_log_enabled())
+        if(status_log_enabled)
         {
             dump_interfaces_to_file(interface_list, "/var/lib/wirover/ife_list");
         }
@@ -238,7 +238,7 @@ void* ping_thread_func(void* arg)
         time_diff = timeval_diff(&now, &last_status_time);
         if(time_diff >= status_interval) {
             memcpy(&last_status_time, &now, sizeof(last_status_time));
-            if(get_status_log_enabled())
+            if(status_log_enabled)
             {
                 obtain_read_lock(&interface_list_lock);
                 dump_interfaces_to_file(interface_list, "/var/lib/wirover/ife_list");
