@@ -103,6 +103,7 @@ static int _send_notification(const char *ifname)
     memcpy(notif->key, private_key, sizeof(notif->key));
     memcpy(notif->hash, node_hash, sizeof(notif->hash));
     
+    obtain_read_lock(&interface_list_lock);
     struct interface* ife = interface_list;
     while(ife && space_left > sizeof(struct cchan_notification_v2)) {
         /* Avoid sending interfaces that have not passed the init state. */
@@ -125,6 +126,7 @@ static int _send_notification(const char *ifname)
 
         ife = ife->next;
     }
+    release_read_lock(&interface_list_lock);
 
     const size_t notification_len = offset;
 
