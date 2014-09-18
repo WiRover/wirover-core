@@ -188,11 +188,6 @@ void* ping_thread_func(void* arg)
 
         obtain_read_lock(&interface_list_lock);
 
-        if(status_log_enabled)
-        {
-            dump_interfaces_to_file(interface_list, "/var/lib/wirover/ife_list");
-        }
-
         num_ifaces = count_all_interfaces(interface_list);
 
         //Send retry packets over inactive interfaces

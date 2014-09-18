@@ -83,6 +83,10 @@ int main(int argc, char* argv[])
         DEBUG_MSG("Failed to initialize interface list");
         exit(1);
     }
+    if(get_status_log_enabled())
+    {
+        dump_interfaces_to_file(interface_list, "/var/lib/wirover/ife_list");
+    }
 
     if(init_gps_handler() == -1) {
         DEBUG_MSG("Failed to initialize gps handler");
