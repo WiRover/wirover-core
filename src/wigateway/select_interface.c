@@ -61,7 +61,7 @@ struct interface *select_src_interface(struct flow_entry *fe)
 }
 struct interface *select_dst_interface(struct flow_entry *fe)
 {
-    struct remote_node *controller = lookup_remote_node_by_id(get_lease_info()->cinfo[0].unique_id);
+    struct remote_node *controller = lookup_remote_node_by_id(get_lease_info()->cinfo.unique_id);
     if(controller == NULL){
         return NULL;
     }

@@ -45,7 +45,7 @@ int main(int argc, char* argv[])
     signal(SIGSEGV, segfault_handler);
 
     printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR, 
-            WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);
+        WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);
 
     const config_t *config = get_config();
 
@@ -61,7 +61,7 @@ int main(int argc, char* argv[])
     int retry_delay = MIN_LEASE_RETRY_DELAY;
     while(request_lease(NULL, &lease) < 0) {
         DEBUG_MSG("Failed to obtain a lease from root server, will retry in %u seconds",
-                retry_delay);
+            retry_delay);
         retry_delay = exp_delay(retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
     }
     lease_renewal_time = time(NULL) + lease.time_limit - RENEW_BEFORE_EXPIRATION;
@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
     DEBUG_MSG("Obtained lease of %s", p_ip);
 
     ipaddr_to_ipv4(&lease.priv_ip, &priv_ip);
-    priv_netmask = htonl(slash_to_netmask(lease.priv_subnet_size));
+    priv_netmask = htonl(slash_to_netmask(32 - lease.priv_subnet_size));
 
     result = tunnel_create(priv_ip, priv_netmask, get_mtu());
     if(result == -1) {
@@ -120,7 +120,7 @@ int main(int argc, char* argv[])
                 bw_server.port = tmp;
             } else {
                 DEBUG_MSG("Invalid value for bandwidth-port (%d): must be positive and at most %hu", 
-                        tmp, USHRT_MAX);
+                    tmp, USHRT_MAX);
             }
         }
 
@@ -130,7 +130,7 @@ int main(int argc, char* argv[])
                 bw_server.start_timeout = tmp * USECS_PER_SEC;
             } else {
                 DEBUG_MSG("Invalid value for bandwidth-start-timeout (%d): must be positive and at most %d",
-                        tmp, max_timeout);
+                    tmp, max_timeout);
             }
         }
 
@@ -140,7 +140,7 @@ int main(int argc, char* argv[])
                 bw_server.data_timeout = tmp * USECS_PER_SEC;
             } else {
                 DEBUG_MSG("Invalid value for bandwidth-data-timeout (%d): must be positive and at most %d",
-                        tmp, max_timeout);
+                    tmp, max_timeout);
             }
         }
 
@@ -230,25 +230,25 @@ static void server_loop(int cchan_sock)
                 lease_retry_delay = MIN_LEASE_RETRY_DELAY;
             } else {
                 DEBUG_MSG("Lease renewal failed, will retry in %u seconds",
-                        lease_retry_delay);
+                    lease_retry_delay);
                 lease_renewal_time = time(NULL) + lease_retry_delay;
                 lease_retry_delay = exp_inc(lease_retry_delay, 
-                        MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
+                    MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
             }
         }
     }
 }
 
 /*
- * Request a lease from root server.  If successful, the new lease is stored in
- * new_lease.  
- *
- * If old_lease is null or new_lease differs from old_lease (eg. received a
- * different IP address), this function will make the appropriate system
- * changes.
- *
- * Return 0 on success or a negative value on failure.
- */
+* Request a lease from root server.  If successful, the new lease is stored in
+* new_lease.  
+*
+* If old_lease is null or new_lease differs from old_lease (eg. received a
+* different IP address), this function will make the appropriate system
+* changes.
+*
+* Return 0 on success or a negative value on failure.
+*/
 static int request_lease(const struct lease_info *old_lease, struct lease_info *new_lease)
 {
     const char* wiroot_address = get_wiroot_address();
@@ -266,7 +266,7 @@ static int request_lease(const struct lease_info *old_lease, struct lease_info *
         reg_control_port = get_control_port();
 
     int result = register_controller(new_lease, wiroot_address, wiroot_port, 
-            reg_data_port, reg_control_port);
+        reg_data_port, reg_control_port);
     if(result == 0) {
         if(new_lease->unique_id == 0) {
             DEBUG_MSG("Lease request rejected");
@@ -277,12 +277,12 @@ static int request_lease(const struct lease_info *old_lease, struct lease_info *
         ipaddr_to_string(&new_lease->priv_ip, my_ip, sizeof(my_ip));
 
         if(!old_lease || ipaddr_cmp(&new_lease->priv_ip, &old_lease->priv_ip) != 0 ||
-                new_lease->priv_subnet_size != old_lease->priv_subnet_size) {
-            DEBUG_MSG("Obtained lease of %s/%hhu",
+            new_lease->priv_subnet_size != old_lease->priv_subnet_size) {
+                DEBUG_MSG("Obtained lease of %s/%hhu",
                     my_ip, new_lease->priv_subnet_size);
 
-            uint32_t priv_ip;
-            ipaddr_to_ipv4(&new_lease->priv_ip, &priv_ip);
+                uint32_t priv_ip;
+                ipaddr_to_ipv4(&new_lease->priv_ip, &priv_ip);
         }
 
         return 0;

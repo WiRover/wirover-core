@@ -9,37 +9,6 @@
 #include "debug.h"
 #include "rootchan.h"
 
-static const char CREATE_TABLE_PRIVILEGES[] = "                     \
-    create table if not exists privileges (                         \
-        id          int unsigned not null auto_increment,           \
-        node_id     varchar(128) not null,                          \
-        controller_priv boolean not null,                           \
-        gateway_priv    boolean not null,                           \
-        primary key (id),                                           \
-        unique key (node_id)                                        \
-    ) engine=InnoDB default charset=utf8                            \
-";
-
-static const char CREATE_TABLE_ACCESS_REQUESTS[] = "                \
-    create table if not exists access_requests (                    \
-        id          int unsigned not null auto_increment,           \
-        timestamp   timestamp not null default current_timestamp,   \
-        type        enum('CONTROLLER', 'GATEWAY') not null,         \
-        result      enum('SUCCESS', 'DENIED') not null,             \
-        node_id     varchar(128) not null,                          \
-        src_ip      varchar(46) not null,                           \
-        primary key (id)                                            \
-    ) engine=InnoDB default charset=utf8                            \
-";
-
-static const char *REQUIRED_TABLES[] = {
-    CREATE_TABLE_PRIVILEGES,
-    CREATE_TABLE_ACCESS_REQUESTS,
-    NULL,
-};
-
-static int create_tables();
-
 static MYSQL* database = 0;
 
 int db_connect()
@@ -79,9 +48,6 @@ int db_connect()
     if(result != 0) {
         DEBUG_MSG("Warning: mysql_option() failed: %s", mysql_error(database));
     }
-
-    if(create_tables() < 0)
-        DEBUG_MSG("Warning: create_tables failed");
 
     return 0;
 
@@ -149,7 +115,7 @@ int db_check_privilege(const char *node_id, int priv)
         return -1;
     mysql_real_escape_string(database, node_id_esc, node_id, node_id_len);
 
-    result = db_query("select id, controller_priv, gateway_priv from privileges where node_id='%s' limit 1", node_id_esc);
+    result = db_query("select id, controller_priv, gateway_priv from nodes where node_id='%s' limit 1", node_id_esc);
     free(node_id_esc);
 
     if(result < 0)
@@ -178,7 +144,7 @@ int db_check_privilege(const char *node_id, int priv)
  * Returns a positive ID if the privilege is to be granted, 0 if not, or
  * negative if there is an error.
  */
-int db_grant_privilege(const char *node_id, int priv)
+int db_grant_privilege(const char *node_id, int priv, const char *pub_key)
 {
     int result;
     int id = 0;
@@ -192,8 +158,8 @@ int db_grant_privilege(const char *node_id, int priv)
     const char *priv_str = (priv == PRIV_REG_CONTROLLER) ?
         "controller_priv" : "gateway_priv";
 
-    result = db_query("insert into privileges (node_id, %s) values ('%s', 1) on duplicate key update %s=1",
-            priv_str, node_id_esc, priv_str);
+    result = db_query("insert into nodes (node_id, %s, public_key) values ('%s', 1, '%s') on duplicate key update %s=1, public_key = '%s'",
+            priv_str, node_id_esc, pub_key, priv_str, pub_key);
     free(node_id_esc);
 
     if(result < 0)
@@ -202,6 +168,58 @@ int db_grant_privilege(const char *node_id, int priv)
     id = mysql_insert_id(database);
 
     return id;
+}
+
+/*
+ * Grant a privilege to the given node_id.
+ *
+ * Returns a positive ID if the privilege is to be granted, 0 if not, or
+ * negative if there is an error.
+ */
+int db_update_pub_key(const char *node_id, const char *pub_key)
+{
+    int result;
+    int id = 0;
+
+    int node_id_len = strlen(node_id);
+    char *node_id_esc = malloc(2 * node_id_len + 1);
+    if(!node_id_esc)
+        return -1;
+    mysql_real_escape_string(database, node_id_esc, node_id, node_id_len);
+
+    result = db_query("update nodes set public_key = '%s' where node_id = '%s'",
+            pub_key, node_id);
+    free(node_id_esc);
+
+    if(result < 0)
+        return -1;
+
+    id = mysql_insert_id(database);
+
+    return id;
+}
+int db_get_pub_key(int remote_id, char *pub_key)
+{
+    int result;
+
+    result = db_query("select public_key from nodes where id=%d limit 1", remote_id);
+
+    if(result < 0)
+        return FAILURE;
+
+    MYSQL_RES *qr = mysql_store_result(database);
+    if(!qr) {
+        DEBUG_MSG("mysql_store_result failed - %s", mysql_error(database));
+        return FAILURE;
+    }
+
+    MYSQL_ROW row = mysql_fetch_row(qr);
+    if(row) {
+        memcpy(pub_key, row[0], strlen(row[0]));
+    }
+
+    mysql_free_result(qr);
+    return strlen(pub_key);
 }
 
 /*
@@ -247,28 +265,6 @@ int db_add_access_request(int priv, const char *node_id, const char *src_ip, int
 
     if(ret < 0)
         return -1;
-
-    return 0;
-}
-
-/*
- * Create all of the required tables if they do not already exist.
- */
-static int create_tables()
-{
-    int res;
-
-    if(!database)
-        return -1;
-
-    const char **table = REQUIRED_TABLES;
-    while(*table) {
-        res = mysql_real_query(database, *table, strlen(*table));
-        if(res != 0)
-            DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
-    
-        table++;
-    }
 
     return 0;
 }

@@ -20,8 +20,7 @@ struct controller {
 
 void add_controller(uint16_t unique_id, const ipaddr_t* priv_ip, const ipaddr_t* pub_ip, uint16_t data_port,
                     uint16_t control_port, double latitude, double longitude);
-int assign_controllers(struct controller** node_list, int list_size,
-                       double latitude, double longitude);
+struct controller *assign_controller(double latitude, double longitude);
 
 #endif //_CONTROLLERS_H_
 

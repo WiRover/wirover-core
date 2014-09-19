@@ -37,6 +37,8 @@ static pthread_t            data_thread;
 struct tunnel *tun;
 static unsigned int         tunnel_mtu = 0;
 static unsigned int         outbound_mtu = 0;
+static FILE *               packet_log_file;
+static int                  packet_log_enabled = 0;
 
 int start_data_thread(struct tunnel *tun_in)
 {
@@ -44,6 +46,15 @@ int start_data_thread(struct tunnel *tun_in)
     tunnel_mtu = get_mtu();
     outbound_mtu =  1500;
     tun = tun_in;
+    if(get_packet_log_enabled()){
+        packet_log_file = fopen(get_packet_log_path(), "a");
+        if(packet_log_file == NULL) {
+            ERROR_MSG("Failed to open packet log file for writing %s", get_packet_log_path());
+        }
+        else{
+            packet_log_enabled = 1;
+        }
+    }
     if(running) {
         DEBUG_MSG("Data thread already running");
         return SUCCESS;
@@ -66,12 +77,20 @@ int start_data_thread(struct tunnel *tun_in)
     pthread_attr_destroy(&attr);
     return 0;
 }
-
+void logPacket(struct timeval *arrival_time, int size, const char *direction, struct interface *local_ife, struct interface *remote_ife)
+{
+    fprintf(packet_log_file, "%ld.%06ld, %s, %s, %d, %d, %s\n",arrival_time->tv_sec, arrival_time->tv_usec,
+        local_ife->name, remote_ife->name, remote_ife->node_id, size, direction);
+    fflush(packet_log_file);
+}
 int handlePackets()
 {
     // The File Descriptor set to add sockets to
     fd_set read_set;
     sigset_t orig_set;
+    struct timespec timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_nsec = 100 * NSECS_PER_MSEC;
 
     while( 1 )
     {
@@ -91,7 +110,7 @@ int handlePackets()
         sigemptyset(&orig_set);
         sigaddset(&orig_set, SIGALRM);
 
-        int rtn = pselect(FD_SETSIZE, &read_set, NULL, NULL, NULL, &orig_set);
+        int rtn = pselect(FD_SETSIZE, &read_set, NULL, NULL, &timeout, &orig_set);
         // Make sure select didn't fail
         if( rtn < 0 && errno == EINTR) 
         {
@@ -136,6 +155,8 @@ int handleInboundPacket(int tunfd, struct interface *ife)
         return FAILURE;
     }
 
+    ife->rx_bytes += bufSize;
+
     struct timeval arrival_time;
     if(ioctl(ife->sockfd, SIOCGSTAMP, &arrival_time) == -1) {
         ERROR_MSG("ioctl SIOCGSTAMP failed");
@@ -154,6 +175,11 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     unsigned int h_global_seq = ntohl(n_tun_hdr.global_seq);
     unsigned int h_link_seq = ntohl(n_tun_hdr.link_seq);
     unsigned int h_path_ack = ntohl(n_tun_hdr.path_ack);
+    unsigned int h_header_len = ntohs(n_tun_hdr.header_len);
+
+    if(h_header_len == 0)
+        h_header_len = sizeof(struct tunhdr);
+
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
     struct interface *remote_ife = NULL;
@@ -208,7 +234,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     }
     //Process the ping even though we may not have an entry in our remote_nodes
     if((n_tun_hdr.type == TUNTYPE_PING)){
-        handle_incoming_ping(&from, arrival_time, ife, remote_ife, &buffer[sizeof(struct tunhdr)], bufSize - sizeof(struct tunhdr));
+        handle_incoming_ping(&from, arrival_time, ife, remote_ife, &buffer[h_header_len], bufSize - h_header_len);
         return SUCCESS;
     }
 
@@ -233,10 +259,15 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     // the flags field, the next two byte (0800 are the protocol field, in this
     // case IP): http://www.mjmwired.net/kernel/Documentation/networking/tuntap.txt
 
-    struct iphdr *ip_hdr = (struct iphdr *)(buffer + sizeof(struct tunhdr));
+    struct iphdr *ip_hdr = (struct iphdr *)(buffer + h_header_len);
 
     struct flow_tuple *ft = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
-    struct tcphdr   *tcp_hdr = (struct tcphdr *)(buffer + sizeof(struct tunhdr) + (ip_hdr->ihl * 4));
+    struct tcphdr   *tcp_hdr = (struct tcphdr *)(buffer + h_header_len + (ip_hdr->ihl * 4));
+
+    if(packet_log_enabled && packet_log_file != NULL)
+    {
+        logPacket(&arrival_time, bufSize, "INGRESS", ife, remote_ife);
+    }
 
     // Policy and Flow table
     fill_flow_tuple(ip_hdr, tcp_hdr, ft, 1);
@@ -252,10 +283,10 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     unsigned short tun_info[2];
     tun_info[0] = 0; //flags
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
-    memcpy(&buffer[sizeof(struct tunhdr) - TUNTAP_OFFSET], tun_info, TUNTAP_OFFSET);
+    memcpy(&buffer[h_header_len - TUNTAP_OFFSET], tun_info, TUNTAP_OFFSET);
 
-    if( write(tunfd, &buffer[sizeof(struct tunhdr)-TUNTAP_OFFSET], 
-        (bufSize-sizeof(struct tunhdr)+TUNTAP_OFFSET)) < 0)
+    if( write(tunfd, &buffer[h_header_len - TUNTAP_OFFSET], 
+        (bufSize - h_header_len + TUNTAP_OFFSET)) < 0)
     {
         ERROR_MSG("write() failed");
         return FAILURE;
@@ -279,7 +310,6 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         //Ignore the tuntap header
         orig_packet = &buffer[TUNTAP_OFFSET];
         orig_size -= TUNTAP_OFFSET;
-
         return send_packet(orig_packet, orig_size);
     }
 
@@ -310,9 +340,7 @@ int send_packet(char *orig_packet, int orig_size)
     //Add a tunnel header to the packet
     if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
         int node_id = get_unique_id();
-
         obtain_read_lock(&interface_list_lock);
-
         struct interface *src_ife = select_src_interface(ftd);
         if(src_ife != NULL) {
             ftd->local_link_id = src_ife->index;
@@ -324,9 +352,9 @@ int send_packet(char *orig_packet, int orig_size)
             ftd->remote_node_id = dst_ife->node_id;
         }
 
+        int output = send_ife_packet(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
         release_read_lock(&interface_list_lock);
-
-        return send_ife_packet(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
+        return output;
     }
     return SUCCESS;
 }
@@ -336,6 +364,12 @@ int send_ife_packet(uint8_t type, char *packet, int size, uint16_t node_id, stru
     if(dst_ife == NULL || src_ife == NULL)
     {
         return FAILURE;
+    }
+    
+    if(type == TUNTYPE_DATA && packet_log_enabled && packet_log_file != NULL){
+        struct timeval tv;
+        gettimeofday(&tv, 0);
+        logPacket(&tv, size, "EGRESS", src_ife, dst_ife);
     }
     struct sockaddr_storage dst;
     build_data_sockaddr(dst_ife, &dst);
@@ -376,11 +410,12 @@ int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src
 
     if( (rtn = sendto(sockfd, new_packet, new_size, 0, (struct sockaddr *)dst, sizeof(struct sockaddr))) < 0)
     {
-        ERROR_MSG("sendto failed (%d), fd %d,  dst: %s, new_size: %d", rtn, sockfd, inet_ntoa(((struct sockaddr_in*)dst)->sin_addr), new_size);
+        ERROR_MSG("sendto failed (%d), fd %d (%s),  dst: %s, new_size: %d", rtn, sockfd, src_ife->name, inet_ntoa(((struct sockaddr_in*)dst)->sin_addr), new_size);
 
         return FAILURE;
     }
     src_ife->packets_since_ack++;
+    src_ife->tx_bytes += new_size;
 #ifdef GATEWAY
     struct timeval tv;
     gettimeofday(&tv, NULL);

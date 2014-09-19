@@ -25,6 +25,7 @@ static uint16_t remote_bw_port = 0;
 
 static int _send_notification(const char *ifname);
 
+//Requries a lock on the interface list
 int send_notification(int max_tries)
 {
     FILE *fp = fopen("/etc/wirover.d/node_id","r");
@@ -34,10 +35,8 @@ int send_notification(int max_tries)
 
     int i;
     for(i = 0; i < max_tries; i++) {
-        obtain_read_lock(&interface_list_lock);
         struct interface_copy *active_list = NULL;
         int num_active = copy_active_interfaces(interface_list, &active_list);
-        release_read_lock(&interface_list_lock);
 
         if(num_active <= 0) {
             if(num_active == 0)
@@ -104,9 +103,7 @@ static int _send_notification(const char *ifname)
 
     memcpy(notif->key, private_key, sizeof(notif->key));
     memcpy(notif->hash, node_hash, sizeof(notif->hash));
-
-    obtain_read_lock(&interface_list_lock);
-
+    
     struct interface* ife = interface_list;
     while(ife && space_left > sizeof(struct cchan_notification_v2)) {
         /* Avoid sending interfaces that have not passed the init state. */
@@ -129,8 +126,6 @@ static int _send_notification(const char *ifname)
 
         ife = ife->next;
     }
-    
-    release_read_lock(&interface_list_lock);
 
     const size_t notification_len = offset;
 

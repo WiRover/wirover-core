@@ -465,7 +465,7 @@ int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage*
         serv = serv_buffer;
     }
 
-    err = getaddrinfo(ip, serv, &build_sockaddr_hints, &results);
+    err = getaddrinfo(ip, serv, &build_sockaddr_hints_fallback, &results);
     if(err != 0) {
         DEBUG_ONCE("getaddrinfo failed - host: %s port: %hu reason: %s", 
                 ip, port, gai_strerror(err));

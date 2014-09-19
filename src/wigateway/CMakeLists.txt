@@ -34,5 +34,6 @@ add_executable(wigateway
 target_link_libraries(wigateway pthread config gps ssl crypto m)
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wigateway DESTINATION /usr/bin)
+install(FILES wigateway_upstart.conf DESTINATION /etc/init RENAME wigateway.conf)
 install(FILES wigateway.conf DESTINATION /etc)
 

@@ -11,9 +11,6 @@
 #include "netlink.h"
 #include "interface.h"
 
-// Root server will inform gateway of at most 3 controllers
-#define MAX_CONTROLLERS     3
-
 #define RCHAN_CONNECT_TIMEOUT_SEC  5
 
 struct controller_info {
@@ -30,9 +27,8 @@ struct rchan_response {
     uint8_t     priv_subnet_size;
     uint32_t    lease_time;
     uint16_t    unique_id;
-    uint8_t     controllers;
 
-    struct controller_info cinfo[MAX_CONTROLLERS];
+    struct controller_info cinfo;
 } __attribute__((__packed__));
 #define MIN_RESPONSE_LEN (offsetof(struct rchan_response, cinfo))
 
@@ -54,7 +50,8 @@ struct rchanhdr {
     uint8_t type;
     uint8_t flags;
     uint8_t id_len;
-    /* node_id follows */
+    uint16_t pub_key_len;
+    /* node_id/pub_key follows */
 } __attribute__((__packed__));
 
 /* If the address family is sent as 0, root server will use the connection
@@ -87,19 +84,18 @@ struct lease_info {
     uint32_t    time_limit;
     uint16_t    unique_id;
 
-    unsigned int    controllers;
-    struct controller_info cinfo[MAX_CONTROLLERS];
+    struct controller_info cinfo;
 };
 
 int register_controller(struct lease_info *lease, const char *wiroot_ip,
         unsigned short wiroot_port, unsigned short data_port, unsigned short control_port);
 int register_gateway(struct lease_info *lease, const char *wiroot_ip,
         unsigned short wiroot_port);
+int request_pubkey(const char *wiroot_ip, unsigned short wiroot_port,
+        uint16_t remote_id, char *pub_key, int pub_key_len);
 
 int get_node_id_hex(char *dst, int dst_len);
 int get_node_id_bin(char *dst, int dst_len);
-
-int get_device_mac(const char* __restrict__ device, uint8_t* __restrict__ dest, int destlen);
 
 uint16_t get_unique_id();
 

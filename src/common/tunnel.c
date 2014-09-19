@@ -245,7 +245,7 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
         return FAILURE;
     }
 
-    if(add_route(ip, 0, netmask, tun->name) < 0)
+    if(add_route(ip, 0, netmask, 0, tun->name) < 0)
     {
         ERROR_MSG("Could not add route for tunnel traffic");
         return FAILURE;
@@ -258,9 +258,10 @@ int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packe
 {
     // Getting a sequence number should be done as close to sending as possible
     struct tunhdr tun_hdr;
-    memset(&tun_hdr, 0, sizeof(tun_hdr));
+    memset(&tun_hdr, 0, sizeof(struct tunhdr));
 
     tun_hdr.type = type;
+    tun_hdr.header_len = htons(sizeof(struct tunhdr));
     //tun_hdr.client_id = 0; // TODO: Add a client ID.
     tun_hdr.node_id = htons(get_unique_id());
     tun_hdr.link_id = htons(src_ife->index);

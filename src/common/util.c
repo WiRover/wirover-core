@@ -15,7 +15,7 @@
 #include "tunnel.h"
 #include "util.h"
 
-int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device)
+int add_route(__be32 dest, __be32 gateway, __be32 netmask, __be32 metric, const char *device)
 {
     struct rtentry rt;
     char dev_buf[IFNAMSIZ];
@@ -32,9 +32,9 @@ int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device)
     rt.rt_genmask.sa_family = AF_INET;
     struct in_addr *netmask_dst = &((struct sockaddr_in *)&rt.rt_genmask)->sin_addr;
     netmask_dst->s_addr = netmask;
+    rt.rt_metric = metric;
 
     if(gateway) {
-        DEBUG_MSG("Using gateway");
         rt.rt_flags |= RTF_GATEWAY;
 
         rt.rt_gateway.sa_family = AF_INET;
@@ -42,7 +42,6 @@ int add_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device)
         gw_dst->s_addr = gateway;
     }
     else if(dest){
-        DEBUG_MSG("Adding host route");
         rt.rt_flags |= RTF_HOST;
     }
 
@@ -114,4 +113,44 @@ int delete_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device
 
     close(skfd);
     return 0;
+}
+
+int read_public_key(char *buffer, int size)
+{
+    FILE *fp = fopen("/home/wirover/.ssh/id_rsa.pub", "r");
+    if(fp == NULL)
+        return FAILURE;
+    buffer = fgets(buffer, size, fp);
+    char *stripped = strtok(buffer, "\n");
+    memcpy(buffer, stripped, size);
+    fclose(fp);
+    if(buffer == NULL)
+        return FAILURE;
+    return strlen(buffer);
+}
+int authorize_public_key(char *pub_key, int size)
+{
+    FILE *fp = fopen("/home/wirover/.ssh/authorized_keys", "a+");
+    if(fp == NULL)
+        return FAILURE;
+    char buffer[BUFSIZ];
+    int pub_key_already_authed = 0;
+    while (fgets(buffer, BUFSIZ, fp))
+    {
+        char *stripped = strtok(buffer, "\n");
+        memcpy(buffer, stripped, size);
+        if(strcmp(buffer, pub_key) == 0){
+            pub_key_already_authed = 1;
+            break;
+        }
+    }
+    if(pub_key_already_authed){
+        DEBUG_MSG("Pub key is already contained");
+        fclose(fp);
+        return SUCCESS;
+    }
+    DEBUG_MSG("Adding public key");
+    fprintf(fp, "%s\n",pub_key);
+    fclose(fp);
+    return SUCCESS;
 }
