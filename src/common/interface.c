@@ -381,9 +381,13 @@ int interface_to_string(const struct interface *ife, char *str, int size)
         state = "UNKNOWN";
         break;
     }
+    ipaddr_t addr;
+    char ip_string[INET6_ADDRSTRLEN];
+    ipv4_to_ipaddr(ife->public_ip.s_addr, &addr);
+    ipaddr_to_string(&addr, ip_string, INET6_ADDRSTRLEN);
 
-    return snprintf(str, size, "%-3d %-8s %-12s %-8s %-4hhd %-5hhd %-10d %-10d",
-        ife->index, ife->name, ife->network, state, ife->priority, ife->packets_since_ack, ife->tx_bytes, ife->rx_bytes);
+    return snprintf(str, size, "%-3d %-8s %-12s %-8s %-4hhd %-5hhd %-10d %-10d %-15s",
+        ife->index, ife->name, ife->network, state, ife->priority, ife->packets_since_ack, ife->tx_bytes, ife->rx_bytes, ip_string);
 }
 void dump_interface(const struct interface *ife, const char *prepend)
 {
@@ -397,7 +401,7 @@ int dump_interfaces_to_file(const struct interface *head, const char *filename)
     FILE *ife_file = fopen(filename, "w");
     if(ife_file == NULL)
         return FAILURE;
-    fprintf(ife_file, "%s\n", "ID  Name     Network      State    Prio Unack TX_Bytes   RX_Bytes  ");
+    fprintf(ife_file, "%s\n", "ID  Name     Network      State    Prio Unack TX_Bytes   RX_Bytes   IP        ");
     char buffer[128];
     while(head) {
         interface_to_string(head, buffer, sizeof(buffer));
@@ -413,8 +417,8 @@ void dump_interfaces(const struct interface *head, const char *prepend)
     if(!prepend)
         prepend = "";
 
-    /*           xxx xxxxxxxx xxxxxxxxxxxx xxxxxxxx xxxx xxxxx xxxxxxxxxx xxxxxxxxxx*/
-    DEBUG_MSG("%sID  Name     Network      State    Prio Unack TX Bytes   RX Bytes  ", prepend);
+    /*           xxx xxxxxxxx xxxxxxxxxxxx xxxxxxxx xxxx xxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxx*/
+    DEBUG_MSG("%sID  Name     Network      State    Prio Unack TX_Bytes   RX_Bytes   IP        ", prepend);
 
     while(head) {
         dump_interface(head, prepend);
