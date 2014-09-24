@@ -310,7 +310,11 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         //Ignore the tuntap header
         orig_packet = &buffer[TUNTAP_OFFSET];
         orig_size -= TUNTAP_OFFSET;
-        return send_packet(orig_packet, orig_size);
+        obtain_read_lock(&interface_list_lock);
+        int output = send_packet(orig_packet, orig_size);
+        release_read_lock(&interface_list_lock);
+
+        return output;
     }
 
     return SUCCESS;
@@ -340,7 +344,6 @@ int send_packet(char *orig_packet, int orig_size)
     //Add a tunnel header to the packet
     if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
         int node_id = get_unique_id();
-        obtain_read_lock(&interface_list_lock);
         struct interface *src_ife = select_src_interface(ftd);
         if(src_ife != NULL) {
             ftd->local_link_id = src_ife->index;
@@ -352,9 +355,7 @@ int send_packet(char *orig_packet, int orig_size)
             ftd->remote_node_id = dst_ife->node_id;
         }
 
-        int output = send_ife_packet(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
-        release_read_lock(&interface_list_lock);
-        return output;
+        return send_ife_packet(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
     }
     return SUCCESS;
 }
