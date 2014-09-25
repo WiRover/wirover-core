@@ -334,8 +334,9 @@ int copy_active_interfaces(const struct interface *head, struct interface_copy *
 long calc_bw_hint(struct interface *ife)
 {
     long bw_hint;
-
-    if(ife->meas_bw > 0 && ife->pred_bw > 0) {
+    
+    bw_hint = ife->pred_bw;
+    /*if(ife->meas_bw > 0 && ife->pred_bw > 0) {
         double w = exp(BANDWIDTH_MEASUREMENT_DECAY * 
             (time(NULL) - ife->meas_bw_time));
         bw_hint = (long)round(w * ife->meas_bw + (1.0 - w) * ife->pred_bw);
@@ -345,7 +346,7 @@ long calc_bw_hint(struct interface *ife)
         bw_hint = ife->pred_bw;
     } else {
         bw_hint = 0;
-    }
+    }*/
 
     return bw_hint;
 }

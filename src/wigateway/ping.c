@@ -33,9 +33,11 @@ static int send_second_response(struct interface *ife,
 static int          status_log_enabled = 0;
 static int          running = 0;
 static pthread_t    ping_thread;
+static int          mtu = 0;
 
 int start_ping_thread()
 {
+    mtu = get_mtu();
     if(running) {
         DEBUG_MSG("Ping thread already running");
         return 0;
@@ -99,7 +101,7 @@ int ping_all_interfaces()
 */
 int send_ping(struct interface* ife)
 {
-    char *buffer = malloc(MAX_PING_PACKET_SIZE);
+    char *buffer = malloc(mtu);
     if(!buffer) {
         DEBUG_MSG("out of memory");
         return FAILURE;
@@ -142,7 +144,7 @@ int send_ping(struct interface* ife)
         return -1;
     }
     pkt->type = PING_TAILGATE;
-    send_size = MAX_PING_PACKET_SIZE;
+    send_size = mtu;
     fill_ping_digest(pkt, buffer, send_size, private_key);
     //Send a tailgate packet
     if(send_ife_packet(TUNTYPE_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife())) {
