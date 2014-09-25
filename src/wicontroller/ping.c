@@ -186,6 +186,7 @@ static int ping_request_valid(char *buffer, int len)
     switch(PING_TYPE(ping->type)) {
         case PING_REQUEST:
         case PING_SECOND_RESPONSE:
+        case PING_TAILGATE:
             break;
         default:
             return PING_ERR_BAD_TYPE;
@@ -329,7 +330,7 @@ static void process_ping_request(char *buffer, int len,
         }
     }
 
-    ife->last_ping_time = time(0);
+    gettimeofday(&ife->last_ping_time, NULL);
 
     process_ping_payload(buffer, len, gw, ife);
 }
@@ -455,7 +456,7 @@ static void remove_stale_links(int link_timeout, int node_timeout)
         ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
 
         DL_FOREACH(gw->head_interface, ife) {
-            if((now - ife->last_ping_time) >= link_timeout) {
+            if((now - ife->last_ping_time.tv_sec) >= link_timeout) {
                 if(ife->state == ACTIVE) {
                     ife->state = INACTIVE;
                     gw->active_interfaces--;

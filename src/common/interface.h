@@ -9,6 +9,7 @@
 
 #include "uthash.h"
 #include "packet_buffer.h"
+#include "ipaddr.h"
 
 #define NETWORK_NAME_LENGTH 16
 
