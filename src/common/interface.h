@@ -57,6 +57,9 @@ struct interface {
     uint32_t            next_ping_seq_no;
     uint32_t            last_ping_seq_no;
 
+    double              est_downlink_bw;
+    double              est_uplink_bw;
+
     unsigned int        tx_bytes;
     unsigned int        rx_bytes;
 
