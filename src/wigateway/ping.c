@@ -322,13 +322,14 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
 
     // If the ping response is older than the ping interval we ignore it.
     if(diff < (get_ping_interval() * USEC_PER_SEC)) {
+        ife->est_uplink_bw = ewma_update(ife->est_uplink_bw, (double)int_to_bw(ntohl(pkt->est_bw)), BW_EWMA_WEIGHT);
         ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
 
         gettimeofday(&ife->last_ping_success, NULL);
         ife->last_ping_seq_no = ntohl(pkt->seq_no);
 
-        DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f", 
-            ife->name, ife->network, diff, ife->avg_rtt);
+        DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f bw %f",
+            ife->name, ife->network, diff, ife->avg_rtt, ife->est_uplink_bw);
     }
 
     return 0;

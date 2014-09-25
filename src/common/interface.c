@@ -335,7 +335,7 @@ long calc_bw_hint(struct interface *ife)
 {
     long bw_hint;
     
-    bw_hint = ife->pred_bw;
+    bw_hint = ife->est_uplink_bw * 1000000 + ife->est_downlink_bw * 1000000;
     /*if(ife->meas_bw > 0 && ife->pred_bw > 0) {
         double w = exp(BANDWIDTH_MEASUREMENT_DECAY * 
             (time(NULL) - ife->meas_bw_time));
