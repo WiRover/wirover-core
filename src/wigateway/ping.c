@@ -143,6 +143,7 @@ int send_ping(struct interface* ife)
     }
     pkt->type = PING_TAILGATE;
     send_size = MAX_PING_PACKET_SIZE;
+    fill_ping_digest(pkt, buffer, send_size, private_key);
     //Send a tailgate packet
     if(send_ife_packet(TUNTYPE_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife())) {
         /* We get an error ENETUNREACH if we try pinging out an interface which
