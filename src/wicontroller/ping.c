@@ -151,6 +151,9 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
                     (struct sockaddr *)from_addr, from_len);
 
             break;
+        case PING_TAILGATE:
+            DEBUG_MSG("Got a tailgate packet");
+            break;
         case PING_SECOND_RESPONSE:                    
             process_ping_response(buffer, bytes_recvd,
                     (struct sockaddr *)from_addr, from_len, &recv_time);

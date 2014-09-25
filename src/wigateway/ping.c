@@ -141,12 +141,25 @@ int send_ping(struct interface* ife)
         free(buffer);
         return -1;
     }
+    pkt->type = PING_TAILGATE;
+    send_size = MAX_PING_PACKET_SIZE;
+    //Send a tailgate packet
+    if(send_ife_packet(TUNTYPE_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife())) {
+        /* We get an error ENETUNREACH if we try pinging out an interface which
+        * does not have an IP address.  That case is not interesting, so we
+        * suppress the error message. */
+        if(errno != ENETUNREACH)
+            ERROR_MSG("sending ping packet on %s failed", ife->name);
+        free(buffer);
+        return -1;
+    }
 
     // This last_ping_time timestamp will be compared to the timestamp in the ping
     // response packet to make sure the response is for the most recent
     // request.
     //ife->last_ping_time = now.tv_sec;
-    ife->last_ping_time = time(NULL);
+
+    gettimeofday(&ife->last_ping_time, NULL);
 
     free(buffer);
     return 0;
@@ -156,8 +169,9 @@ static int should_send_ping(const struct interface *ife)
 {
     if(ife->state == DEAD)
         return 0;
-
-    if(time(NULL) >= ife->last_ping_time + ife->ping_interval)
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    if(now.tv_sec >= ife->last_ping_time.tv_sec + ife->ping_interval)
         return 1;
 
     return 0;
@@ -307,7 +321,7 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
     if(diff < (get_ping_interval() * USEC_PER_SEC)) {
         ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
 
-        ife->last_ping_success = time(NULL);
+        gettimeofday(&ife->last_ping_success, NULL);
         ife->last_ping_seq_no = ntohl(pkt->seq_no);
 
         DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f", 

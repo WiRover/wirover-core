@@ -11,6 +11,7 @@
 #define PING_RESPONSE           0x30
 #define PING_RESPONSE_ERROR     0x40
 #define PING_SECOND_RESPONSE    0x50
+#define PING_TAILGATE           0x60
 
 #define PING_NO_PAYLOAD         0x00
 #define PING_GPS_PAYLOAD        0x01

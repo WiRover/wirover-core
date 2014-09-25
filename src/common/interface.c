@@ -42,7 +42,8 @@ struct interface* alloc_interface(int node_id)
     ife->ping_timeout = get_ping_timeout();
 
     // Prevent early timeouts
-    time_t now = time(NULL);
+    struct timeval now;
+    gettimeofday(&now, NULL);
     ife->last_ping_time = now;
     ife->last_ping_success = now;
     struct rwlock lock = RWLOCK_INITIALIZER;
