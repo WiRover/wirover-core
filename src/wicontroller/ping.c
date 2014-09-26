@@ -49,9 +49,11 @@ static pthread_t    ping_thread;
 
 static int error_responses = 0;
 static time_t last_error_response = 0;
+static int mtu = 0;
 
 int start_ping_thread()
 {
+    mtu = get_mtu();
     if(running) {
         DEBUG_MSG("Ping thread already running");
         return FAILURE;
@@ -156,7 +158,6 @@ struct interface *remote_ife, char *buffer, int bytes_recvd)
                 ERROR_MSG("Failed to send ping response");
                 return 0;
         }
-        DEBUG_MSG("Got a tailgate packet with spacing: %d, size %d estimated BW: %f", time_diff, bytes_recvd, bw);
         break;
     case PING_SECOND_RESPONSE:                    
         process_ping_response(buffer, bytes_recvd,
@@ -237,7 +238,7 @@ static int ping_request_valid(char *buffer, int len)
 static int send_response(struct interface *local_ife, const struct remote_node *gw,
                          unsigned char type, struct sockaddr_storage *from, char *buffer, int len, float bw)
 {
-    char response_buffer[MIN_PING_PACKET_SIZE];
+    char response_buffer[mtu];
 
     if(len < sizeof(response_buffer)) {
         memset(response_buffer, 0, sizeof(response_buffer));
@@ -258,7 +259,19 @@ static int send_response(struct interface *local_ife, const struct remote_node *
     } else {
         memset(ping->digest, 0, sizeof(ping->digest));
     }
-    return send_sock_packet(TUNTYPE_PING, response_buffer, MIN_PING_PACKET_SIZE, interface_list, from, NULL, NULL);
+    if(send_sock_packet(TUNTYPE_PING, response_buffer, MIN_PING_PACKET_SIZE, interface_list, from, NULL, NULL) != SUCCESS)
+    {
+        return FAILURE;
+    }
+
+    //Send a tailgate packet for the client to measure bandwidth
+    ping->type = PING_TAILGATE;
+    if(gw) {
+        fill_ping_digest(ping, response_buffer, mtu, gw->private_key);
+    } else {
+        memset(ping->digest, 0, sizeof(ping->digest));
+    }
+    return send_sock_packet(TUNTYPE_PING, response_buffer, mtu, interface_list, from, NULL, NULL);
     //return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
 }
 
