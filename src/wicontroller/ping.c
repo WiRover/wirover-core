@@ -461,47 +461,18 @@ static void remove_stale_links(int link_timeout, int node_timeout)
 
     struct remote_node *gw;
     struct remote_node *tmp_gw;
+    while(1) {
+        obtain_write_lock(&remote_node_lock);
+        HASH_ITER(hh_id, remote_node_id_hash, gw, tmp_gw) {
 
-    HASH_ITER(hh_id, remote_node_id_hash, gw, tmp_gw) {
-        struct interface *ife;
-        struct interface *tmp_ife;
+            if((now - gw->last_ping_time) >= node_timeout) {
 
-        int num_ifaces = 0;
+                DEBUG_MSG("Removed node %hu due to timeout", gw->unique_id);
 
-        struct in_addr private_ip;
-        ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
-
-        DL_FOREACH(gw->head_interface, ife) {
-            if((now - ife->last_ping_time.tv_sec) >= link_timeout) {
-                if(ife->state == ACTIVE) {
-                    ife->state = INACTIVE;
-                    gw->active_interfaces--;
-
-                    db_update_link(gw, ife);
-
-                    DEBUG_MSG("Removed node %hu link %hu due to timeout",
-                        gw->unique_id, ife->index);
-                }
-            } else {
-                num_ifaces++;
+                remove_remote_node(gw);
             }
         }
-
-        if(num_ifaces == 0 && (now - gw->last_ping_time) >= node_timeout) {
-
-            DEBUG_MSG("Removed node %hu due to timeout", gw->unique_id);
-
-            gw->state = INACTIVE;
-            db_update_gateway(gw, 1);
-
-            DL_FOREACH_SAFE(gw->head_interface, ife, tmp_ife) {
-                DL_DELETE(gw->head_interface, ife);
-                free(ife);
-            }
-
-            HASH_DELETE(hh_id, remote_node_id_hash, gw);
-            free(gw);
-        }
+        release_write_lock(&remote_node_lock);
     }
 }
 

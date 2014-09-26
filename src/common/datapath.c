@@ -354,7 +354,7 @@ int send_packet(char *orig_packet, int orig_size)
             ftd->remote_link_id = dst_ife->index;
             ftd->remote_node_id = dst_ife->node_id;
         }
-
+        DEBUG_MSG("From send packet");
         return send_ife_packet(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
     }
     return SUCCESS;
