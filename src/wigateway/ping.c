@@ -300,7 +300,7 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
         send_response = 0;
     } else if(verify_ping_sender(pkt, buffer, size, private_key) != 0) {
         DEBUG_MSG("SHA hash mismatch, ping packet discarded");
-        return -1;
+        return FAILURE;
     }
 
     unsigned link_id = ntohl(pkt->link_id);
@@ -308,7 +308,13 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
     struct interface* ife = find_interface_by_index(interface_list, link_id);
     if(!ife) {
         DEBUG_MSG("Ping response for unknown interface %u", link_id);
-        return 0;
+        return SUCCESS;
+    }
+    if(pkt->type == PING_TAILGATE) {
+        long time_diff = timeval_diff(&recv_time, &local_ife->last_ping_success);
+        float bw = size * 1.0f / time_diff;
+        ife->est_downlink_bw = ewma_update(ife->est_downlink_bw, (double)bw, BW_EWMA_WEIGHT);
+        return SUCCESS;
     }
     if(send_response) {
         if(send_second_response(ife, buffer, size, get_controller_ife()) < 0) {
@@ -325,11 +331,11 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
         ife->est_uplink_bw = ewma_update(ife->est_uplink_bw, (double)int_to_bw(ntohl(pkt->est_bw)), BW_EWMA_WEIGHT);
         ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
 
-        gettimeofday(&ife->last_ping_success, NULL);
+        ife->last_ping_success = recv_time;
         ife->last_ping_seq_no = ntohl(pkt->seq_no);
 
         DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f bw %f",
-            ife->name, ife->network, diff, ife->avg_rtt, ife->est_uplink_bw);
+            ife->name, ife->network, diff, ife->avg_rtt, ife->est_downlink_bw);
     }
 
     return 0;
