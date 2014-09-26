@@ -9,6 +9,7 @@
 
 #include "uthash.h"
 #include "packet_buffer.h"
+#include "ipaddr.h"
 
 #define NETWORK_NAME_LENGTH 16
 
@@ -50,11 +51,14 @@ struct interface {
     time_t              ping_interval;
     time_t              ping_timeout;
 
-    time_t              last_ping_time;
-    time_t              last_ping_success;
+    struct timeval      last_ping_time;
+    struct timeval      last_ping_success;
 
     uint32_t            next_ping_seq_no;
     uint32_t            last_ping_seq_no;
+
+    double              est_downlink_bw;
+    double              est_uplink_bw;
 
     unsigned int        tx_bytes;
     unsigned int        rx_bytes;
