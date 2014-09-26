@@ -33,7 +33,7 @@ static int send_second_response(struct interface *ife,
 static int          status_log_enabled = 0;
 static int          running = 0;
 static pthread_t    ping_thread;
-static int          mtu = 0;
+static int          mtu = 1400;
 
 int start_ping_thread()
 {
@@ -101,13 +101,9 @@ int ping_all_interfaces()
 */
 int send_ping(struct interface* ife)
 {
-    char *buffer = malloc(mtu);
-    if(!buffer) {
-        DEBUG_MSG("out of memory");
-        return FAILURE;
-    }
+    char buffer[mtu];
 
-    memset(buffer, 0, MAX_PING_PACKET_SIZE);
+    memset(buffer, 0, mtu);
     unsigned send_size = MIN_PING_PACKET_SIZE;
 
     struct ping_packet *pkt = (struct ping_packet *)(buffer);
@@ -140,7 +136,6 @@ int send_ping(struct interface* ife)
         * suppress the error message. */
         if(errno != ENETUNREACH)
             ERROR_MSG("sending ping packet on %s failed", ife->name);
-        free(buffer);
         return -1;
     }
     pkt->type = PING_TAILGATE;
@@ -153,7 +148,6 @@ int send_ping(struct interface* ife)
         * suppress the error message. */
         if(errno != ENETUNREACH)
             ERROR_MSG("sending ping packet on %s failed", ife->name);
-        free(buffer);
         return -1;
     }
 
@@ -164,7 +158,6 @@ int send_ping(struct interface* ife)
 
     gettimeofday(&ife->last_ping_time, NULL);
 
-    free(buffer);
     return 0;
 }
 
