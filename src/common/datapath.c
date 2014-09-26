@@ -208,7 +208,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     remote_ife = find_interface_by_index(gw->head_interface, link_id);
     if(remote_ife == NULL)
     {
-        DEBUG_MSG("Sending error for bad link");
+        DEBUG_MSG("Sending error for bad link %d", link_id);
         char error[] = { TUNERROR_BAD_LINK };
         return send_sock_packet(TUNTYPE_ERROR, error, 1, ife, &from, NULL, NULL);
     }
