@@ -16,8 +16,8 @@ struct interface *select_src_interface(struct flow_entry *fe)
 
 struct interface *select_dst_interface(struct flow_entry *fe)
 {
-    struct remote_node *gw;
-    struct interface * dst_ife;
+    struct remote_node *gw = NULL;
+    struct interface * dst_ife = NULL;
     gw = lookup_remote_node_by_id(fe->remote_node_id);
     //Case where a flow isn't inititated by a gateway
     if(gw == NULL) 

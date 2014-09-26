@@ -292,7 +292,7 @@ static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len
         return -1;
     }
 
-    DEBUG_MSG("Received shutdown for remote_node %hhu", notif->unique_id);
+    DEBUG_MSG("Received shutdown for remote_node %hhu", gw->unique_id);
     remove_remote_node(gw);
 
     return 0;

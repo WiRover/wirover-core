@@ -461,18 +461,16 @@ static void remove_stale_links(int link_timeout, int node_timeout)
 
     struct remote_node *gw;
     struct remote_node *tmp_gw;
-    while(1) {
-        obtain_write_lock(&remote_node_lock);
-        HASH_ITER(hh_id, remote_node_id_hash, gw, tmp_gw) {
+    obtain_write_lock(&remote_node_lock);
+    HASH_ITER(hh_id, remote_node_id_hash, gw, tmp_gw) {
 
-            if((now - gw->last_ping_time) >= node_timeout) {
+        if((now - gw->last_ping_time) >= node_timeout) {
 
-                DEBUG_MSG("Removed node %hu due to timeout", gw->unique_id);
+            DEBUG_MSG("Removed node %hu due to timeout", gw->unique_id);
 
-                remove_remote_node(gw);
-            }
+            remove_remote_node(gw);
         }
-        release_write_lock(&remote_node_lock);
     }
+    release_write_lock(&remote_node_lock);
 }
 
