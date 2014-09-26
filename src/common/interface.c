@@ -404,7 +404,7 @@ int dump_interfaces_to_file(const struct interface *head, const char *filename)
     FILE *ife_file = fopen(filename, "w");
     if(ife_file == NULL)
         return FAILURE;
-    fprintf(ife_file, "%s\n", "ID  Name     Network      State    Prio Unack TX_Bytes   RX_Bytes   IP              BW Up      BW Down   ");
+    fprintf(ife_file, "%s\n", "ID  Name     Network      State    Prio Unack TX_Bytes   RX_Bytes   IP              BW_Up      BW_Down   ");
     char buffer[128];
     while(head) {
         interface_to_string(head, buffer, sizeof(buffer));
@@ -421,7 +421,7 @@ void dump_interfaces(const struct interface *head, const char *prepend)
         prepend = "";
 
     /*           xxx xxxxxxxx xxxxxxxxxxxx xxxxxxxx xxxx xxxxx xxxxxxxxxx xxxxxxxxxx xxxxxxxxxxxxxxx xxxxxxxxxx xxxxxxxxxx*/
-    DEBUG_MSG("%sID  Name     Network      State    Prio Unack TX_Bytes   RX_Bytes   IP              BW Up      BW Down   ", prepend);
+    DEBUG_MSG("%sID  Name     Network      State    Prio Unack TX_Bytes   RX_Bytes   IP              BW_Up      BW_Down   ", prepend);
 
     while(head) {
         dump_interface(head, prepend);
