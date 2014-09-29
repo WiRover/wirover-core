@@ -331,6 +331,8 @@ int send_packet(char *orig_packet, int orig_size)
 
     struct flow_entry *ftd = get_flow_entry(&ft);
 
+    update_flow_entry(ftd);
+
     // Check for drop
     if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
         return SUCCESS;

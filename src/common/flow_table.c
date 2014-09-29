@@ -117,7 +117,7 @@ int flow_entry_to_string(const struct flow_entry *fe, char *str, int size) {
     inet_ntop(AF_INET, &fe->id->sAddr,src_ip, INET6_ADDRSTRLEN);
     inet_ntop(AF_INET, &fe->id->dAddr,dst_ip, INET6_ADDRSTRLEN);
     return snprintf(str, size, "%s:%d -> %s:%d Proto: %d Action: %d remote: %d:%d Local link: %d hits: %d",
-        src_ip, fe->id->sPort, dst_ip, fe->id->dPort,
+        src_ip, ntohs(fe->id->sPort), dst_ip, ntohs(fe->id->dPort),
         fe->id->proto, fe->action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
     );
 }
