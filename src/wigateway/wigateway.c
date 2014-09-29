@@ -23,6 +23,7 @@
 #include "rootchan.h"
 #include "callback.h"
 #include "sockets.h"
+#include "status.h"
 #include "timing.h"
 #include "tunnel.h"
 #include "util.h"
@@ -83,9 +84,12 @@ int main(int argc, char* argv[])
         DEBUG_MSG("Failed to initialize interface list");
         exit(1);
     }
-    if(get_status_log_enabled())
+    
+
+    if(start_status_thread() == FAILURE)
     {
-        dump_interfaces_to_file(interface_list, "/var/lib/wirover/ife_list");
+        DEBUG_MSG("Failed to start status thread");
+        exit(1);
     }
 
     if(init_gps_handler() == -1) {

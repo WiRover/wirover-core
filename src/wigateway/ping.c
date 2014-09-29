@@ -176,14 +176,11 @@ static int should_send_ping(const struct interface *ife)
 void* ping_thread_func(void* arg)
 {   
     const unsigned int ping_interval = get_ping_interval();
-    const unsigned int status_interval = 1;
     int stall_retry_interval = get_link_stall_retry_interval() * USECS_PER_MSEC;
 
     // Initialize this so that the first ping will be sent immediately.
     struct timeval last_ping_time = {
         .tv_sec = time(0) - ping_interval, .tv_usec = 0};
-    struct timeval last_status_time = {
-        .tv_sec = time(0) - status_interval, .tv_usec = 0};
 
     int num_ifaces = 0;
     int curr_iface_pos = 0;
@@ -238,17 +235,6 @@ void* ping_thread_func(void* arg)
             memcpy(&last_ping_time, &now, sizeof(last_ping_time));
 
             curr_iface_pos++;
-        }
-
-        time_diff = timeval_diff(&now, &last_status_time);
-        if(time_diff >= status_interval) {
-            memcpy(&last_status_time, &now, sizeof(last_status_time));
-            if(status_log_enabled)
-            {
-                obtain_read_lock(&interface_list_lock);
-                dump_interfaces_to_file(interface_list, "/var/lib/wirover/ife_list");
-                release_read_lock(&interface_list_lock);
-            }
         }
 
         safe_usleep(stall_retry_interval);

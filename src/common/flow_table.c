@@ -111,17 +111,21 @@ int set_flow_table_timeout(int value) {
 }
 
 
-
-//All methods below here are for debugging purposes
-void print_flow_entry(struct flow_entry *fe) {
+int flow_entry_to_string(const struct flow_entry *fe, char *str, int size) {
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &fe->id->sAddr,src_ip, INET6_ADDRSTRLEN);
     inet_ntop(AF_INET, &fe->id->dAddr,dst_ip, INET6_ADDRSTRLEN);
-    DEBUG_MSG("%s:%d -> %s:%d Proto: %d Action: %d remote: %d:%d Local link: %d hits: %d",
+    return snprintf(str, size, "%s:%d -> %s:%d Proto: %d Action: %d remote: %d:%d Local link: %d hits: %d",
         src_ip, fe->id->sPort, dst_ip, fe->id->dPort,
         fe->id->proto, fe->action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
     );
+}
+//All methods below here are for debugging purposes
+void print_flow_entry(struct flow_entry *fe) {
+    char buffer[128];
+    flow_entry_to_string(fe, buffer, sizeof(buffer));
+    DEBUG_MSG("%s\n", buffer);
 }
 
 void print_flow_table() {
@@ -132,70 +136,17 @@ void print_flow_table() {
 }
 
 
-int record_message_to_file(char * file_name, char * msg) {
-    FILE *ofp;
-    ofp = fopen(file_name, "a");
-    if (ofp == NULL) {
-        ERROR_MSG("fopen() Failed");
-        return FILE_ERROR;
+int dump_flow_table_to_file(const char *filename)
+{
+    FILE *ft_file = fopen(filename, "w");
+    if(ft_file == NULL)
+        return FAILURE;
+    char buffer[128];
+    struct flow_entry *current_key, *tmp;
+    HASH_ITER(hh, flow_table, current_key, tmp) {
+        flow_entry_to_string(current_key, buffer, sizeof(buffer));
+        fprintf(ft_file, "%s\n", buffer);
     }
-
-    struct timeval now;
-    struct tm nowTm;
-
-    gettimeofday(&now, NULL);
-    localtime_r(&now.tv_sec, &nowTm);
-
-    char buff[MAX_DEBUG_LEN];
-    char *pbuff = buff;
-
-    snprintf(pbuff, sizeof(buff), "%02d/%02d/%04d %02d:%02d:%02d.%06d",
-            nowTm.tm_mon + 1, nowTm.tm_mday, nowTm.tm_year + 1900,
-            nowTm.tm_hour, nowTm.tm_min, nowTm.tm_sec, (int)now.tv_usec);
-
-    fprintf(ofp, "%s -- MSG: %s\n", pbuff, msg);
-
-    fclose(ofp);
-
-    return SUCCESS;
-}
-
-
-int record_data_to_file(char * file_name, 
-                        struct flow_tuple *ft, struct flow_entry *ftd) {
-    FILE *ofp;
-    ofp = fopen(file_name, "a");
-    if (ofp == NULL) {
-        ERROR_MSG("fopen() Failed");
-        return FILE_ERROR;
-    }
-
-    struct timeval now;
-    struct tm nowTm;
-
-    gettimeofday(&now, NULL);
-    localtime_r(&now.tv_sec, &nowTm);
-
-    char buff[MAX_DEBUG_LEN];
-    char *pbuff = buff;
-
-    snprintf(pbuff, sizeof(buff), "%02d/%02d/%04d %02d:%02d:%02d.%06d",
-            nowTm.tm_mon + 1, nowTm.tm_mday, nowTm.tm_year + 1900,
-            nowTm.tm_hour, nowTm.tm_min, nowTm.tm_sec, (int)now.tv_usec);
-
-    char sAddrString[20];
-    char dAddrString[20];
-
-    strcpy(sAddrString, inet_ntoa(*(struct in_addr*)&ft->sAddr));
-    strcpy(dAddrString, inet_ntoa(*(struct in_addr*)&ft->dAddr));
-
-    //fprintf(ofp, "%s -- THE COUNT IS: %d FROM: %" PRIu32 " TO: %" PRIu32 " PORTFROM: %" PRIu16 " PORTTO: %" PRIu16 ", NETPROTO: %" PRIu8 ", PROTO: %" PRIu8 "\n",
-            //pbuff, ftd->count, ft->sAddr, ft->dAddr, ft->sPort, ft->dPort, ft->net_proto, ft->proto);
-
-    fprintf(ofp, "%s -- THE COUNT IS: %d FROM: %s TO: %s PORTFROM: %" PRIu16 " PORTTO: %" PRIu16 " NETPROTO: %" PRIu8 " PROTO: %" PRIu8 "\n",
-            pbuff, ftd->count, sAddrString, dAddrString, ft->sPort, ft->dPort, ft->net_proto, ft->proto);
-
-    fclose(ofp);
-
+    fclose(ft_file);
     return SUCCESS;
 }
