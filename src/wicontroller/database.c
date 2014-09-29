@@ -98,8 +98,10 @@ int init_database()
     }
 
     char query[1024];
+    int res;
+
     snprintf(query,1024,"insert ignore into controllers (hash,name) values ('%s','%s') on duplicate key update name = '%s'",cont_hash,hostname,hostname);
-    int res = mysql_query(database, query);
+    res = mysql_query(database, query);
     if(res != 0){
         DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
         goto error_out;
@@ -120,6 +122,20 @@ int init_database()
         goto error_out;
     }
     cont_id = atoi(row[0]);
+
+    snprintf(query,1024,"update gateways set uptime = 0, state = 2, private_ip = null where conid = %d", cont_id);
+    res = mysql_query(database, query);
+    if(res != 0){
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto error_out;
+    }
+
+    snprintf(query,1024,"update links set state = 2 where (select conid from gateways where id = gatewayid) = %d", cont_id);
+    res = mysql_query(database, query);
+    if(res != 0){
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto error_out;
+    }
 
     if(pthread_create(&db_write_thr, NULL, &db_write_loop, NULL)) {
         DEBUG_MSG("Error: could not create database write thread");
