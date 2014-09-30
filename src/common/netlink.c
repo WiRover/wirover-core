@@ -9,6 +9,7 @@
 #include <net/if.h>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
+#include <sys/ioctl.h>
 
 #include "config.h"
 #include "contchan.h"
@@ -27,6 +28,7 @@ struct interface*   interface_list = 0;
 struct rwlock       interface_list_lock = RWLOCK_INITIALIZER;
 
 #ifdef GATEWAY
+static int get_interface_hwaddr(const char * ifname, int ifname_length, char *dest, int dest_length);
 static void* netlink_thread_func(void* arg);
 static void add_interface(struct interface* ife);
 static void delete_interface(struct interface* ife);
@@ -69,6 +71,7 @@ int init_interface_list()
 
                     ife->index = if_nametoindex(ifap->ifa_name);
                     strncpy(ife->name, ifap->ifa_name, sizeof(ife->name));
+                    get_interface_hwaddr(ife->name, sizeof(ife->name), ife->hwaddr, sizeof(ife->hwaddr));
                     read_network_name(ife->name, ife->network, sizeof(ife->network));
 
                     // Set to INIT_INACTIVE until connectivity is confirmed
@@ -196,6 +199,7 @@ int handle_netlink_message(const char* msg, int msg_len)
 
                     ife->index = ifa->ifa_index;
                     strncpy(ife->name, device, sizeof(ife->name));
+                    get_interface_hwaddr(ife->name, sizeof(ife->name), ife->hwaddr, sizeof(ife->hwaddr));
                     ife->state = INIT_INACTIVE;
                     ife->priority = priority;
 
@@ -399,6 +403,34 @@ void read_network_name(const char * __restrict__ ifname,
 }
 
 #ifdef GATEWAY
+static int get_interface_hwaddr(const char * ifname, int ifname_size, char *dest, int dest_size)
+{
+    struct ifreq ifreq;
+    int sck = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if(sck < 0)
+    {
+        ERROR_MSG("Failed to create socket");
+        return FAILURE;
+    }
+    memset(&ifreq, 0, sizeof(ifreq));
+    snprintf(ifreq.ifr_name, ifname_size, "%s", ifname);
+
+    if(ioctl(sck, SIOCGIFHWADDR, &ifreq) < 0) {
+      ERROR_MSG("Failed to get hwaddr for %s", ifname);
+      return FAILURE;
+    }
+
+    snprintf(dest, dest_size, " %02x:%02x:%02x:%02x:%02x:%02x", 
+    (unsigned char)ifreq.ifr_hwaddr.sa_data[0],
+    (unsigned char)ifreq.ifr_hwaddr.sa_data[1],
+    (unsigned char)ifreq.ifr_hwaddr.sa_data[2],
+    (unsigned char)ifreq.ifr_hwaddr.sa_data[3],
+    (unsigned char)ifreq.ifr_hwaddr.sa_data[4],
+    (unsigned char)ifreq.ifr_hwaddr.sa_data[5]);
+    DEBUG_MSG("%s has %s", ifname, dest);
+    return SUCCESS;
+}
+
 static void* netlink_thread_func(void* arg)
 {
     int sockfd;
