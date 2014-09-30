@@ -427,7 +427,7 @@ static int get_interface_hwaddr(const char * ifname, int ifname_size, char *dest
     (unsigned char)ifreq.ifr_hwaddr.sa_data[3],
     (unsigned char)ifreq.ifr_hwaddr.sa_data[4],
     (unsigned char)ifreq.ifr_hwaddr.sa_data[5]);
-    DEBUG_MSG("%s has %s", ifname, dest);
+
     return SUCCESS;
 }
 
