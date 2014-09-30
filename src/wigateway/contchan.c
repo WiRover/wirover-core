@@ -118,6 +118,7 @@ static int _send_notification(const char *ifname)
             dest->link_id = htonl(ife->index);
             strncpy(dest->ifname, ife->name, sizeof(dest->ifname));
             strncpy(dest->hwaddr, ife->hwaddr, sizeof(dest->hwaddr));
+            DEBUG_MSG("%s", dest->hwaddr);
             strncpy(dest->network, ife->network, sizeof(dest->network));
             dest->state = ife->state;
             dest->priority = ife->priority;
