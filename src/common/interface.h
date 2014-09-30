@@ -12,7 +12,6 @@
 #include "ipaddr.h"
 
 #define NETWORK_NAME_LENGTH 16
-#define HWADDR_LENGTH 20
 
 enum if_state {
     INIT_INACTIVE = 0,
@@ -30,7 +29,6 @@ struct interface {
     int                 node_id; //Unique node_id assigned by root server
     char                name[IFNAMSIZ];
     char                network[NETWORK_NAME_LENGTH];
-    char                hwaddr[HWADDR_LENGTH];
     enum if_state       state;
     int                 priority;
 
