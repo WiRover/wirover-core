@@ -130,7 +130,7 @@ int init_database()
         goto error_out;
     }
 
-    snprintf(query,1024,"update links set state = 2 where (select conid from gateways where id = gatewayid) = %d", cont_id);
+    snprintf(query,1024,"update links set state = 2 where (select conid from gateways where id = node_id) = %d", cont_id);
     res = mysql_query(database, query);
     if(res != 0){
         DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
@@ -283,7 +283,7 @@ int db_update_link(const struct remote_node *gw, const struct interface *ife)
 
     dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
     snprintf(req->query, 1024,
-            "insert into links (gatewayid, network, ip, avg_bw_down, avg_bw_up, "
+            "insert into links (node_id, network, ip, avg_bw_down, avg_bw_up, "
             "avg_rtt, state, updated) values "
             "(%s, '%s', '%s', '%f', '%f', '%f', %d, NOW()) "
             "on duplicate key update ip='%s', avg_bw_down='%f', avg_bw_up='%f', "
@@ -412,7 +412,7 @@ int db_update_passive(const struct remote_node *gw, struct interface *ife,
     snprintf(req->query, 1024,
             "update links set bytes_tx=bytes_tx+%llu, bytes_rx=bytes_rx+%llu, "
             "month_tx=month_tx+%llu, month_rx=month_rx+%llu, updated=NOW() "
-            "where gatewayid='%s' and network='%s'",
+            "where node_id='%s' and network='%s'",
             bytes_tx_diff, bytes_rx_diff, bytes_tx_diff, bytes_rx_diff,
             "%d", ife->network);
     req->gwid = gw->unique_id;
