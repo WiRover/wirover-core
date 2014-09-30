@@ -19,21 +19,25 @@ class WiRover:
         self.is_rootserver = False
         self.wiroot = None
         self.node_id = None
+        self.is_valid = False
 
 	if os.path.exists("/etc/wigateway.conf"):
 	    self.is_gateway = True
             self.wiroot = self._get_root_server("/etc/wigateway.conf")
+            self.is_valid = self.wiroot != None
 
 	if os.path.exists("/etc/wicontroller.conf"):
 	    self.is_controller = True
             self.wiroot = self._get_root_server("/etc/wicontroller.conf")
+            self.is_valid = self.wiroot != None
 
 	if os.path.exists("/etc/wiroot.conf"):
 	    self.is_rootserver = True
 
         try:
             with open("/etc/wirover.d/node_id",'r') as f:
-                self.hash = f.readline()
+                self.node_id = f.readline()
         except:
+            self.is_valid = False
             if self.debug:
                 print "Could not load node hash:", traceback.format_exc()
