@@ -78,7 +78,6 @@ struct interface_info_v2 {
     uint32_t    link_id;
     char        ifname[IFNAMSIZ];
     char        network[NETWORK_NAME_LENGTH];
-    char        hwaddr[HWADDR_LENGTH];
     uint8_t     state;
     int8_t      priority;
 

@@ -187,7 +187,6 @@ static void update_interface_v2(struct remote_node *gw, const struct interface_i
             return;
 
         strncpy(ife->name, ifinfo->ifname, sizeof(ife->name));
-        strncpy(ife->hwaddr, ifinfo->hwaddr, sizeof(ife->hwaddr));
         ife->public_ip.s_addr = ifinfo->local_ip;
         ife->data_port = ifinfo->data_port;
 
