@@ -21,6 +21,7 @@ add_executable(wicontroller
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
+    ${COMMON}/status.c
     ${COMMON}/timing.c
 	${COMMON}/tunnel.c
     ${COMMON}/format.c

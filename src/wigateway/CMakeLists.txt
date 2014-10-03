@@ -21,6 +21,7 @@ add_executable(wigateway
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
+    ${COMMON}/status.c
     ${COMMON}/timing.c
 	${COMMON}/packet_buffer
     ${COMMON}/tunnel.c

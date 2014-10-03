@@ -16,6 +16,7 @@
 #include "netlink.h"
 #include "rootchan.h"
 #include "sockets.h"
+#include "status.h"
 #include "utlist.h"
 #include "config.h"
 #include "timing.h"
@@ -104,6 +105,11 @@ int main(int argc, char* argv[])
 
     if(start_ping_thread() == FAILURE) {
         DEBUG_MSG("Failed to start ping thread");
+        exit(1);
+    }
+
+    if(start_status_thread() == FAILURE) {
+        DEBUG_MSG("Failed to start status thread");
         exit(1);
     }
 

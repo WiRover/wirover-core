@@ -50,9 +50,7 @@ int update_flow_entry(struct flow_entry *fe);
 int set_flow_table_timeout(int);
 
 //Debug Methods
-int record_data_to_file(char *, struct flow_tuple *, struct flow_entry *);
-
-int record_message_to_file(char *, char *);
+int dump_flow_table_to_file(const char *filename);
 void print_flow_entry(struct flow_entry *fe);
 void print_flow_table();
 

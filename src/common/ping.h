@@ -5,18 +5,20 @@
 #include <sys/time.h>
 #include <openssl/sha.h>
 
+#include "constants.h"
+
 #define PING_INVALID            0x00
 #define PING_REQUEST            0x10
 #define PING_REQUEST_ERROR      0x20
 #define PING_RESPONSE           0x30
 #define PING_RESPONSE_ERROR     0x40
 #define PING_SECOND_RESPONSE    0x50
+#define PING_TAILGATE           0x60
 
 #define PING_NO_PAYLOAD         0x00
 #define PING_GPS_PAYLOAD        0x01
 #define PING_PASSIVE_PAYLOAD    0x02
 
-#define USEC_PER_SEC            1000000
 #define PING_LOSS_THRESHOLD     4
 
 #define PROC_NET_DEV            "/proc/net/dev"
@@ -40,6 +42,7 @@ struct ping_packet {
     int8_t   link_state;
     uint16_t src_id;
     uint32_t link_id;
+    uint32_t est_bw;
     uint32_t sender_ts;
     uint32_t receiver_ts;
     uint8_t  digest[SHA256_DIGEST_LENGTH];
@@ -66,8 +69,8 @@ struct passive_payload {
 
 #define MIN_PING_PACKET_SIZE sizeof(struct ping_packet)
 #define MAX_PING_PACKET_SIZE (sizeof(struct ping_packet) + \
-        sizeof(struct gps_payload) + \
-        sizeof(struct ping_packet))
+    sizeof(struct gps_payload) + \
+    sizeof(struct ping_packet))
 
 #define PING_TYPE(x) (x & 0xF0)
 #define PING_NEXT(x) (x & 0x0F)
@@ -86,24 +89,33 @@ int send_ping(struct interface* ife);
 int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv_time, struct interface *local_ife, struct interface *remote_ife, char *buffer, int size);
 
 /*
- * Returns a 32-bit timestamp in microseconds.  This will wrap around once
- * every 71.58 minutes, so it should be sufficient for RTT measurements.
- */
+* Returns a 32-bit timestamp in microseconds.  This will wrap around once
+* every 71.58 minutes, so it should be sufficient for RTT measurements.
+*/
 static inline uint32_t timeval_to_usec(const struct timeval *tv)
 {
     if(tv) {
-        return (uint32_t)(tv->tv_sec * USEC_PER_SEC + tv->tv_usec);
+        return (uint32_t)(tv->tv_sec * USECS_PER_SEC + tv->tv_usec);
     } else {
         struct timeval now;
         gettimeofday(&now, 0);
-        return (uint32_t)(now.tv_sec * USEC_PER_SEC + now.tv_usec);
+        return (uint32_t)(now.tv_sec * USECS_PER_SEC + now.tv_usec);
     }
 }
 
+static inline uint32_t bw_to_int(float bw)
+{
+    return (uint32_t)(bw * 1000000);
+}
+static inline float int_to_bw(uint32_t bw)
+{
+    return bw / 1000000.0;
+}
+
 void fill_ping_digest(struct ping_packet *pkt, const char *data, int len, 
-        const unsigned char *key);
+                      const unsigned char *key);
 int verify_ping_sender(struct ping_packet *pkt, const char *data, int len, 
-        const unsigned char *key);
+                       const unsigned char *key);
 int iszero(const unsigned char *buffer, int len);
 
 const char *ping_err_str(int error);

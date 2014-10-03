@@ -17,7 +17,6 @@ static void remove_dead_interfaces(struct remote_node *gw);
 static int send_response_v2(int sockfd, const struct remote_node *gw, uint16_t bw_port);
 
 static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len);
-static int remove_remote_node(struct remote_node *gw);
 
 static int process_notification_v1(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port);
 static struct remote_node* make_remote_node_v1(const struct cchan_notification_v1* notif);
@@ -125,9 +124,6 @@ static int process_notification_v2(int sockfd, const char *packet, unsigned int 
 #ifdef WITH_DATABASE
     db_update_gateway(gw, gw_state_change);
 #endif
-
-    DEBUG_MSG("Interface list for node %d:", gw->unique_id);
-    dump_interfaces(gw->head_interface, "  ");
 
     return 0;
 }
@@ -296,54 +292,12 @@ static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len
         return -1;
     }
 
+    DEBUG_MSG("Received shutdown for remote_node %hhu", gw->unique_id);
     remove_remote_node(gw);
 
     return 0;
 }
 
-/*
- * This updates the remote_node state in the database and frees all of the
- * structures associated with the remote_node and its interfaces.
- *
- * As a result of this function call, the memory pointed to by gw will be
- * freed.
- */
-static int remove_remote_node(struct remote_node *gw)
-{
-    struct interface *ife;
-    struct interface *tmp_ife;
-
-    struct in_addr private_ip;
-    ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
-
-    DL_FOREACH_SAFE(gw->head_interface, ife, tmp_ife) {
-        if(ife->state != DEAD) {
-            ife->state = DEAD;
-
-#ifdef WITH_DATABASE
-            db_update_link(gw, ife);
-#endif
-
-            if(ife->state == ACTIVE) {
-                gw->active_interfaces--;
-            }
-        }
-
-        DL_DELETE(gw->head_interface, ife);
-        free(ife);
-    }
-                
-    gw->state = DEAD;
-
-#ifdef WITH_DATABASE
-    db_update_gateway(gw, 1);
-#endif
-
-    HASH_DELETE(hh_id, remote_node_id_hash, gw);
-    free(gw);
-
-    return 0;
-}
 
 
 static int process_notification_v1(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port)

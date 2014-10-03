@@ -98,8 +98,10 @@ int init_database()
     }
 
     char query[1024];
+    int res;
+
     snprintf(query,1024,"insert ignore into controllers (hash,name) values ('%s','%s') on duplicate key update name = '%s'",cont_hash,hostname,hostname);
-    int res = mysql_query(database, query);
+    res = mysql_query(database, query);
     if(res != 0){
         DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
         goto error_out;
@@ -120,6 +122,20 @@ int init_database()
         goto error_out;
     }
     cont_id = atoi(row[0]);
+
+    snprintf(query,1024,"update gateways set uptime = 0, state = 2, private_ip = null where conid = %d", cont_id);
+    res = mysql_query(database, query);
+    if(res != 0){
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto error_out;
+    }
+
+    snprintf(query,1024,"update links set state = 2 where (select conid from gateways where id = node_id) = %d", cont_id);
+    res = mysql_query(database, query);
+    if(res != 0){
+        DEBUG_MSG("mysql_query() failed: %s", mysql_error(database));
+        goto error_out;
+    }
 
     if(pthread_create(&db_write_thr, NULL, &db_write_loop, NULL)) {
         DEBUG_MSG("Error: could not create database write thread");
@@ -267,7 +283,7 @@ int db_update_link(const struct remote_node *gw, const struct interface *ife)
 
     dbqreq* req = (dbqreq*)malloc(sizeof(dbqreq));
     snprintf(req->query, 1024,
-            "insert into links (gatewayid, network, ip, avg_bw_down, avg_bw_up, "
+            "insert into links (node_id, network, ip, avg_bw_down, avg_bw_up, "
             "avg_rtt, state, updated) values "
             "(%s, '%s', '%s', '%f', '%f', '%f', %d, NOW()) "
             "on duplicate key update ip='%s', avg_bw_down='%f', avg_bw_up='%f', "
@@ -396,7 +412,7 @@ int db_update_passive(const struct remote_node *gw, struct interface *ife,
     snprintf(req->query, 1024,
             "update links set bytes_tx=bytes_tx+%llu, bytes_rx=bytes_rx+%llu, "
             "month_tx=month_tx+%llu, month_rx=month_rx+%llu, updated=NOW() "
-            "where gatewayid='%s' and network='%s'",
+            "where node_id='%s' and network='%s'",
             bytes_tx_diff, bytes_rx_diff, bytes_tx_diff, bytes_rx_diff,
             "%d", ife->network);
     req->gwid = gw->unique_id;

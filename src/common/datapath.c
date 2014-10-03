@@ -208,7 +208,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     remote_ife = find_interface_by_index(gw->head_interface, link_id);
     if(remote_ife == NULL)
     {
-        DEBUG_MSG("Sending error for bad link");
+        DEBUG_MSG("Sending error for bad link %d", link_id);
         char error[] = { TUNERROR_BAD_LINK };
         return send_sock_packet(TUNTYPE_ERROR, error, 1, ife, &from, NULL, NULL);
     }
@@ -331,6 +331,8 @@ int send_packet(char *orig_packet, int orig_size)
 
     struct flow_entry *ftd = get_flow_entry(&ft);
 
+    update_flow_entry(ftd);
+
     // Check for drop
     if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
         return SUCCESS;
@@ -354,7 +356,6 @@ int send_packet(char *orig_packet, int orig_size)
             ftd->remote_link_id = dst_ife->index;
             ftd->remote_node_id = dst_ife->node_id;
         }
-
         return send_ife_packet(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
     }
     return SUCCESS;

@@ -16,8 +16,8 @@ struct interface *select_src_interface(struct flow_entry *fe)
 
 struct interface *select_dst_interface(struct flow_entry *fe)
 {
-    struct remote_node *gw;
-    struct interface * dst_ife;
+    struct remote_node *gw = NULL;
+    struct interface * dst_ife = NULL;
     gw = lookup_remote_node_by_id(fe->remote_node_id);
     //Case where a flow isn't inititated by a gateway
     if(gw == NULL) 
@@ -25,12 +25,14 @@ struct interface *select_dst_interface(struct flow_entry *fe)
         ipaddr_t dst_ip;
         ipv4_to_ipaddr(fe->id->dAddr, &dst_ip);
         struct remote_node *node, *tmp;
+        obtain_read_lock(&remote_node_lock);
         HASH_ITER(hh_id, remote_node_id_hash, node, tmp) 
         {
             if(ipaddr_cmp(&node->private_ip, &dst_ip) == 0){
                 dst_ife = find_active_interface(node->head_interface);
             }
         }
+        release_read_lock(&remote_node_lock);
         if(dst_ife == NULL)
         {
             DEBUG_MSG("Dropping packet for uknown gateway");

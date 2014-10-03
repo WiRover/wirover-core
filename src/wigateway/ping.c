@@ -33,9 +33,11 @@ static int send_second_response(struct interface *ife,
 static int          status_log_enabled = 0;
 static int          running = 0;
 static pthread_t    ping_thread;
+static int          mtu = 1400;
 
 int start_ping_thread()
 {
+    mtu = get_mtu();
     if(running) {
         DEBUG_MSG("Ping thread already running");
         return 0;
@@ -99,13 +101,9 @@ int ping_all_interfaces()
 */
 int send_ping(struct interface* ife)
 {
-    char *buffer = malloc(MAX_PING_PACKET_SIZE);
-    if(!buffer) {
-        DEBUG_MSG("out of memory");
-        return FAILURE;
-    }
+    char buffer[mtu];
 
-    memset(buffer, 0, MAX_PING_PACKET_SIZE);
+    memset(buffer, 0, mtu);
     unsigned send_size = MIN_PING_PACKET_SIZE;
 
     struct ping_packet *pkt = (struct ping_packet *)(buffer);
@@ -138,7 +136,18 @@ int send_ping(struct interface* ife)
         * suppress the error message. */
         if(errno != ENETUNREACH)
             ERROR_MSG("sending ping packet on %s failed", ife->name);
-        free(buffer);
+        return -1;
+    }
+    pkt->type = PING_TAILGATE;
+    send_size = mtu;
+    fill_ping_digest(pkt, buffer, send_size, private_key);
+    //Send a tailgate packet
+    if(send_ife_packet(TUNTYPE_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife())) {
+        /* We get an error ENETUNREACH if we try pinging out an interface which
+        * does not have an IP address.  That case is not interesting, so we
+        * suppress the error message. */
+        if(errno != ENETUNREACH)
+            ERROR_MSG("sending ping packet on %s failed", ife->name);
         return -1;
     }
 
@@ -146,9 +155,9 @@ int send_ping(struct interface* ife)
     // response packet to make sure the response is for the most recent
     // request.
     //ife->last_ping_time = now.tv_sec;
-    ife->last_ping_time = time(NULL);
 
-    free(buffer);
+    gettimeofday(&ife->last_ping_time, NULL);
+
     return 0;
 }
 
@@ -156,8 +165,9 @@ static int should_send_ping(const struct interface *ife)
 {
     if(ife->state == DEAD)
         return 0;
-
-    if(time(NULL) >= ife->last_ping_time + ife->ping_interval)
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    if(now.tv_sec >= ife->last_ping_time.tv_sec + ife->ping_interval)
         return 1;
 
     return 0;
@@ -166,14 +176,11 @@ static int should_send_ping(const struct interface *ife)
 void* ping_thread_func(void* arg)
 {   
     const unsigned int ping_interval = get_ping_interval();
-    const unsigned int status_interval = 1;
     int stall_retry_interval = get_link_stall_retry_interval() * USECS_PER_MSEC;
 
     // Initialize this so that the first ping will be sent immediately.
     struct timeval last_ping_time = {
         .tv_sec = time(0) - ping_interval, .tv_usec = 0};
-    struct timeval last_status_time = {
-        .tv_sec = time(0) - status_interval, .tv_usec = 0};
 
     int num_ifaces = 0;
     int curr_iface_pos = 0;
@@ -230,17 +237,6 @@ void* ping_thread_func(void* arg)
             curr_iface_pos++;
         }
 
-        time_diff = timeval_diff(&now, &last_status_time);
-        if(time_diff >= status_interval) {
-            memcpy(&last_status_time, &now, sizeof(last_status_time));
-            if(status_log_enabled)
-            {
-                obtain_read_lock(&interface_list_lock);
-                dump_interfaces_to_file(interface_list, "/var/lib/wirover/ife_list");
-                release_read_lock(&interface_list_lock);
-            }
-        }
-
         safe_usleep(stall_retry_interval);
     }
 
@@ -283,7 +279,7 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
         send_response = 0;
     } else if(verify_ping_sender(pkt, buffer, size, private_key) != 0) {
         DEBUG_MSG("SHA hash mismatch, ping packet discarded");
-        return -1;
+        return FAILURE;
     }
 
     unsigned link_id = ntohl(pkt->link_id);
@@ -291,7 +287,13 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
     struct interface* ife = find_interface_by_index(interface_list, link_id);
     if(!ife) {
         DEBUG_MSG("Ping response for unknown interface %u", link_id);
-        return 0;
+        return SUCCESS;
+    }
+    if(pkt->type == PING_TAILGATE) {
+        long time_diff = timeval_diff(&recv_time, &local_ife->last_ping_success);
+        float bw = size * 1.0f / time_diff;
+        ife->est_downlink_bw = ewma_update(ife->est_downlink_bw, (double)bw, BW_EWMA_WEIGHT);
+        return SUCCESS;
     }
     if(send_response) {
         if(send_second_response(ife, buffer, size, get_controller_ife()) < 0) {
@@ -305,13 +307,14 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
 
     // If the ping response is older than the ping interval we ignore it.
     if(diff < (get_ping_interval() * USEC_PER_SEC)) {
+        ife->est_uplink_bw = ewma_update(ife->est_uplink_bw, (double)int_to_bw(ntohl(pkt->est_bw)), BW_EWMA_WEIGHT);
         ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
 
-        ife->last_ping_success = time(NULL);
+        ife->last_ping_success = recv_time;
         ife->last_ping_seq_no = ntohl(pkt->seq_no);
 
-        DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f", 
-            ife->name, ife->network, diff, ife->avg_rtt);
+        DEBUG_MSG("Ping on %s (%s) rtt %d avg_rtt %f bw %f",
+            ife->name, ife->network, diff, ife->avg_rtt, ife->est_downlink_bw);
     }
 
     return 0;
