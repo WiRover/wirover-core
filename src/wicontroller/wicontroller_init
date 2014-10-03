@@ -3,7 +3,7 @@
 
 case "$1" in
     start)
-        iptables -t nat -A POSTROUTING -o tun0 -j MASQUERADE
+        iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
         ;;
     stop)
 
