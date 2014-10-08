@@ -19,9 +19,6 @@
 
 #define MAX_POLICY_ENTRY_LENGTH 150
 
-#define POLICY_TBL_INPUT   0x01
-#define POLICY_TBL_OUTPUT  0x02
-
 #define POLICY_ROW_NONE    -1
 
 // actions
@@ -44,14 +41,7 @@
 #define POLICY_OP_MULTIPATH     0x0800
 #define POLICY_OP_MASK          0x0FF0
 
-enum policy_command {
-    POLICY_CMD_APPEND,
-    POLICY_CMD_DELETE,
-    POLICY_CMD_INSERT,
-    POLICY_CMD_REPLACE,
-    POLICY_CMD_FLUSH,  // flush a specific table
-    POLICY_CMD_MAX,
-};
+
 
 enum policy_type {
     POLICY_TYPE_DEFAULT,
@@ -62,9 +52,6 @@ enum policy_type {
 };
 
 struct policy_entry {
-    int command;
-    int row;
-
     uint32_t action;
     uint16_t table;
     int32_t type; //algo type
@@ -77,30 +64,20 @@ struct policy_entry {
     uint16_t proto;
     uint16_t src_port;
     uint16_t dst_port;
-    // app policy
-    //char app_name[POLICY_MAX_APP_NAME];
-    // dev policy
-    //char dev_name[IFNAMSIZ];
 
-    // rate limit params
-    //int max_rate;
+    char dev_name[IFNAMSIZ];
+    int max_rate;
 
-    // encrypt params
-    // compression params
-    // coding params
-
-    // algo params
     char alg_name[MAX_ALG_NAME_LEN];
-    //int slave_count;
-    //char slave_list[3][IFNAMSIZ];
-    //int slave_weight[3];
-
 };
 
-int appendPolicy(char *, struct policy_entry *);
-int deletePolicy(char *, struct policy_entry *);
-int insertPolicy(char *, struct policy_entry *);
-int getMatch(struct flow_tuple*, struct policy_entry*, int);
+int appendPolicy(int dir, struct policy_entry *policy);
+int deletePolicy(int dir, struct policy_entry *policy);
+int insertPolicy(int dir, struct policy_entry *policy);
+int flushTable(int dir);
+
+int get_policy_by_tuple(struct flow_tuple* ft, struct policy_entry *policy, int dir);
+int get_policy_by_index(int index, struct policy_entry *policy, int dir);
 
 
 

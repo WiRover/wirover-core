@@ -29,7 +29,7 @@ add_executable(wigateway
     ${COMMON}/format.c
     ${COMMON}/version.c
 	${COMMON}/util.c
-	${POLICY}/policyTable.c
+	${COMMON}/policyTable.c
 )
 
 target_link_libraries(wigateway pthread config gps ssl crypto m)

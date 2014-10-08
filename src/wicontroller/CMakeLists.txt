@@ -27,7 +27,7 @@ add_executable(wicontroller
     ${COMMON}/format.c
 	${COMMON}/packet_buffer.c
 	${COMMON}/util.c
-	${POLICY}/policyTable.c
+	${COMMON}/policyTable.c
 )
 
 target_link_libraries(wicontroller pthread config mysqlclient ssl crypto m)

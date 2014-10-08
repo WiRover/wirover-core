@@ -60,7 +60,7 @@ struct flow_entry *get_flow_entry(struct flow_tuple *ft) {
     HASH_FIND(hh, flow_table, ft, sizeof(struct flow_tuple), fe);
     if(fe == NULL) {
         struct policy_entry *pd = malloc(sizeof(struct policy_entry));
-        getMatch(ft, pd, EGRESS);
+        get_policy_by_tuple(ft, pd, EGRESS);
 
         fe = add_entry(ft);
         if(fe == NULL) { return NULL; }
