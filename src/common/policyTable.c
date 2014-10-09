@@ -34,5 +34,5 @@ int get_policy_by_tuple(struct flow_tuple *ft, struct policy_entry *pd, int dir)
 int get_policy_by_index(int index, struct policy_entry *policy, int dir) {
 
 
-    return index;
+    return NO_MATCH;
 }
