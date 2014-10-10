@@ -12,7 +12,7 @@
 #include "datapath.h"
 #include "flow_table.h"
 #include "interface.h"
-#include "policyTable.h"
+#include "policy_table.h"
 #include "packet_buffer.h"
 #include "netlink.h"
 #include "rwlock.h"

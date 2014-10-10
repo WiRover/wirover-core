@@ -1,21 +1,20 @@
 /*
- * policyFunctions.h
- */
+* policyFunctions.h
+*/
 
 #ifndef POLICY_FUNCTIONS_H
 #define POLICY_FUNCTIONS_H
 
 #include <stdint.h>
 #include "flow_table.h"
+#include "debug.h"
 
 #define POLICY_PATH "/var/lib/wirover/policy_tbl"
 
 #define INGRESS 0
 #define EGRESS 1
 
-#define SUCCESSFUL_MATCH 0
 #define NO_MATCH -1
-#define BAD_INPUT -2
 
 #define MAX_ALG_NAME_LEN   16
 
@@ -50,38 +49,33 @@ enum policy_type {
     POLICY_TYPE_DEV
 };
 
-struct policy_entry {
+typedef struct{
     uint32_t action;
     uint16_t table;
     int32_t type; //algo type
     uint16_t flags;
     // flow policy
-    uint16_t net_proto;
-    uint32_t src_addr;
-    uint32_t dst_addr;
+    struct flow_tuple ft;
     uint32_t src_netmask;
     uint32_t dst_netmask;
-    uint16_t proto;
-    uint16_t src_port;
-    uint16_t dst_port;
 
     char dev_name[IFNAMSIZ];
     int max_rate;
 
     char alg_name[MAX_ALG_NAME_LEN];
-};
+}policy_entry;
 
-int appendPolicy(int dir, struct policy_entry *policy);
-int deletePolicy(int dir, struct policy_entry *policy);
-int insertPolicy(int dir, struct policy_entry *policy);
-int flushTable(int dir);
+int init_policy_table();
 
-int get_policy_by_tuple(struct flow_tuple* ft, struct policy_entry *policy, int dir);
-int get_policy_by_index(int index, struct policy_entry *policy, int dir);
+int get_policy_by_tuple(struct flow_tuple* ft,  policy_entry *policy, int dir);
+int get_policy_by_index(int index,  policy_entry *policy, int dir);
+
+//---------DEBUG METHODS------------//
+
+void print_policy_entry(policy_entry * pe);
+void print_policies();
 
 
-
-    
 
 
 

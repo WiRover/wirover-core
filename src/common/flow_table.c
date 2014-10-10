@@ -12,7 +12,7 @@
 #include "flow_table.h"
 #include "uthash.h"
 #include "tunnel.h"
-#include "policyTable.h"
+#include "policy_table.h"
 
 #define TIME_BUFFER_SIZE 1024
 #define TIME_BETWEEN_EXPIRATION_CHECKS 5
@@ -25,12 +25,12 @@ time_t last_expiration_check = 0;
 int fill_flow_tuple(struct iphdr* ip_hdr, struct tcphdr* tcp_hdr, struct flow_tuple* ft, unsigned short reverse) {
     memset(ft, 0, sizeof(struct flow_tuple));
     ft->net_proto = ip_hdr->version;
-    ft->dAddr = reverse ? ip_hdr->saddr : ip_hdr->daddr;
-    ft->sAddr = reverse ? ip_hdr->daddr : ip_hdr->saddr;
+    ft->dst = reverse ? ip_hdr->saddr : ip_hdr->daddr;
+    ft->src = reverse ? ip_hdr->daddr : ip_hdr->saddr;
     ft->proto = ip_hdr->protocol;
     if(ft->proto == 6 || ft->proto == 17){
-        ft->dPort = reverse ? tcp_hdr->source : tcp_hdr->dest;
-        ft->sPort = reverse ? tcp_hdr->dest : tcp_hdr->source;
+        ft->dst_port = reverse ? tcp_hdr->source : tcp_hdr->dest;
+        ft->src_port = reverse ? tcp_hdr->dest : tcp_hdr->source;
     }
 
     return 0;
@@ -59,8 +59,8 @@ struct flow_entry *get_flow_entry(struct flow_tuple *ft) {
 
     HASH_FIND(hh, flow_table, ft, sizeof(struct flow_tuple), fe);
     if(fe == NULL) {
-        struct policy_entry *pd = malloc(sizeof(struct policy_entry));
-        get_policy_by_tuple(ft, pd, EGRESS);
+        policy_entry *pd = malloc(sizeof(policy_entry));
+        DEBUG_MSG("Policy lookup: %d", get_policy_by_tuple(ft, pd, EGRESS));
 
         fe = add_entry(ft);
         if(fe == NULL) { return NULL; }
@@ -114,10 +114,10 @@ int set_flow_table_timeout(int value) {
 int flow_entry_to_string(const struct flow_entry *fe, char *str, int size) {
     char src_ip[INET6_ADDRSTRLEN];
     char dst_ip[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET, &fe->id->sAddr,src_ip, INET6_ADDRSTRLEN);
-    inet_ntop(AF_INET, &fe->id->dAddr,dst_ip, INET6_ADDRSTRLEN);
+    inet_ntop(AF_INET, &fe->id->src,src_ip, INET6_ADDRSTRLEN);
+    inet_ntop(AF_INET, &fe->id->dst,dst_ip, INET6_ADDRSTRLEN);
     return snprintf(str, size, "%s:%d -> %s:%d Proto: %d Action: %d remote: %d:%d Local link: %d hits: %d",
-        src_ip, ntohs(fe->id->sPort), dst_ip, ntohs(fe->id->dPort),
+        src_ip, ntohs(fe->id->src_port), dst_ip, ntohs(fe->id->dst_port),
         fe->id->proto, fe->action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
     );
 }

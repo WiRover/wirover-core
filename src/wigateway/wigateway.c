@@ -27,6 +27,7 @@
 #include "timing.h"
 #include "tunnel.h"
 #include "util.h"
+#include "policy_table.h"
 
 // The virtual interface will use this IP address if we are unable to obtain a
 // private IP from the root server.
@@ -95,6 +96,9 @@ int main(int argc, char* argv[])
     if(init_gps_handler() == -1) {
         DEBUG_MSG("Failed to initialize gps handler");
     }
+
+    init_policy_table();
+
 
     uint32_t private_ip = 0;
     inet_pton(AF_INET, DEFAULT_TUN_ADDRESS, &private_ip);
