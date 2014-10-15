@@ -4,7 +4,8 @@
 #include "debug.h"
 #include "policy_table.h"
 
-static policy_entry *   default_policy;
+static policy_entry *   default_ingress_policy;
+static policy_entry *   default_egress_policy;
 static int              ingress_policy_count;
 static policy_entry **  ingress_policies;
 static int              egress_policy_count;
@@ -27,7 +28,10 @@ static void update_policies() {
 }
 
 int init_policy_table() {
-    default_policy = alloc_policy();
+    default_ingress_policy = alloc_policy();
+    default_egress_policy = alloc_policy();
+    default_ingress_policy->action = POLICY_ACT_DECAP;
+    default_egress_policy->action = POLICY_ACT_ENCAP;
     update_policies();
     init = 1;
     return SUCCESS;
@@ -135,6 +139,7 @@ failure_print:
 }
 
 int get_policy_by_tuple(struct flow_tuple *ft, policy_entry *policy, int dir) {
+    if(!init) { DEBUG_MSG("Policy table must be initialized"); return NO_MATCH; }
     policy_entry ** policies = dir == INGRESS ? ingress_policies : egress_policies;
     int count = dir == INGRESS ? ingress_policy_count : egress_policy_count;
     for(int i = 0; i < count; i++) {
@@ -145,14 +150,7 @@ int get_policy_by_tuple(struct flow_tuple *ft, policy_entry *policy, int dir) {
         return SUCCESS;
     }
 
-    *policy = *default_policy;
-    return NO_MATCH;
-}
-
-int get_policy_by_index(int index,  policy_entry *policy, int dir) {
-
-    
-    *policy = *default_policy;
+    *policy = dir == INGRESS ? *default_ingress_policy : *default_egress_policy;
     return NO_MATCH;
 }
 

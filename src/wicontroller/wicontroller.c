@@ -13,6 +13,7 @@
 #include "datapath.h"
 #include "debug.h"
 #include "ping.h"
+#include "policy_table.h"
 #include "netlink.h"
 #include "rootchan.h"
 #include "sockets.h"
@@ -97,6 +98,12 @@ int main(int argc, char* argv[])
 
     interface_list = alloc_interface(get_unique_id());
     interface_bind(interface_list, get_data_port());
+
+    if(init_policy_table() == FAILURE) {
+        DEBUG_MSG("Failed to init policy table");
+        exit(1);
+    }
+    
 
     if(start_data_thread(getTunnel()) == FAILURE) {
         DEBUG_MSG("Failed to start data thread");

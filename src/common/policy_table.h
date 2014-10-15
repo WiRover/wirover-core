@@ -68,7 +68,6 @@ typedef struct{
 int init_policy_table();
 
 int get_policy_by_tuple(struct flow_tuple* ft,  policy_entry *policy, int dir);
-int get_policy_by_index(int index,  policy_entry *policy, int dir);
 
 //---------DEBUG METHODS------------//
 
