@@ -401,11 +401,13 @@ int get_controller_privip(char *dest, int dest_len)
 
 struct interface *get_controller_ife()
 {
-    if(remote_node_id_hash != 0) {
-        return remote_node_id_hash->head_interface;
-    } else {
+    struct remote_node *controller = lookup_remote_node_by_id(get_lease_info()->cinfo.unique_id);
+    if(controller == NULL){
+        DEBUG_MSG("Returning null");
         return NULL;
     }
+    
+    return controller->head_interface;
 }
 
 

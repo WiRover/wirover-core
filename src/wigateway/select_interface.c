@@ -61,13 +61,5 @@ struct interface *select_src_interface(struct flow_entry *fe)
 }
 struct interface *select_dst_interface(struct flow_entry *fe)
 {
-    struct remote_node *controller = lookup_remote_node_by_id(get_lease_info()->cinfo.unique_id);
-    if(controller == NULL){
-        return NULL;
-    }
-    /*char cont_ip[INET6_ADDRSTRLEN];
-    ipaddr_to_string(&lease.cinfo.pub_ip, cont_ip, sizeof(cont_ip));
-    DEBUG_MSG("Controller ip %s", cont_ip);*/
-    //dump_interface(controller->head_interface, "");
-    return controller->head_interface;
+    return get_controller_ife();
 }
