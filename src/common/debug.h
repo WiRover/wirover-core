@@ -1,5 +1,6 @@
-#ifndef _DEBUG_H_
-#define _DEBUG_H_
+//json-c apparently has its own _DEBUG_H_
+#ifndef _WIROVER_DEBUG_H_
+#define _WIROVER_DEBUG_H_
 
 #include <assert.h>
 #include <stdio.h>

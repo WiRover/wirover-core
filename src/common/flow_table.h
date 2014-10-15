@@ -34,11 +34,11 @@ struct flow_entry {
 
 struct flow_tuple {
     uint8_t net_proto;
-    uint32_t dAddr;
-    uint32_t sAddr;
+    uint32_t dst;
+    uint32_t src;
     uint8_t proto;
-    uint16_t dPort;
-    uint16_t sPort;
+    uint16_t dst_port;
+    uint16_t src_port;
 };
 
 int fill_flow_tuple(struct iphdr*, struct tcphdr*, struct flow_tuple*, unsigned short reverse);
