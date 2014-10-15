@@ -60,7 +60,6 @@ struct flow_entry *get_flow_entry(struct flow_tuple *ft) {
     HASH_FIND(hh, flow_table, ft, sizeof(struct flow_tuple), fe);
     if(fe == NULL) {
         policy_entry *pd = malloc(sizeof(policy_entry));
-        DEBUG_MSG("Policy lookup: %d", get_policy_by_tuple(ft, pd, EGRESS));
 
         fe = add_entry(ft);
         if(fe == NULL) { return NULL; }
