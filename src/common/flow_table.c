@@ -59,15 +59,18 @@ struct flow_entry *get_flow_entry(struct flow_tuple *ft) {
 
     HASH_FIND(hh, flow_table, ft, sizeof(struct flow_tuple), fe);
     if(fe == NULL) {
-        policy_entry *pd = malloc(sizeof(policy_entry));
-
         fe = add_entry(ft);
         if(fe == NULL) { return NULL; }
-        fe->action = pd->action;
-        fe->type = pd->type;
-        strcpy(fe->alg_name, pd->alg_name);
+        policy_entry pd;
+        memset(&pd, 0, sizeof(policy_entry));
+        get_policy_by_tuple(ft,  &pd, INGRESS);
+        fe->ingress_action = pd.action;
+        strcpy(fe->ingress_alg_name, pd.alg_name);
+        memset(&pd, 0, sizeof(policy_entry));
+        get_policy_by_tuple(ft,  &pd, EGRESS);
+        fe->egress_action = pd.action;
+        strcpy(fe->egress_alg_name, pd.alg_name);
 
-        free(pd);
     }
     fe->last_visit_time = time(NULL);
 
@@ -115,9 +118,9 @@ int flow_entry_to_string(const struct flow_entry *fe, char *str, int size) {
     char dst_ip[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &fe->id->src,src_ip, INET6_ADDRSTRLEN);
     inet_ntop(AF_INET, &fe->id->dst,dst_ip, INET6_ADDRSTRLEN);
-    return snprintf(str, size, "%s:%d -> %s:%d Proto: %d Action: %d remote: %d:%d Local link: %d hits: %d",
+    return snprintf(str, size, "%s:%d -> %s:%d Proto: %d Action: I%dE%d remote: %d:%d Local link: %d hits: %d",
         src_ip, ntohs(fe->id->src_port), dst_ip, ntohs(fe->id->dst_port),
-        fe->id->proto, fe->action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
+        fe->id->proto, fe->ingress_action, fe->egress_action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
     );
 }
 //All methods below here are for debugging purposes

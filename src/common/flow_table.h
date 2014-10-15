@@ -27,9 +27,10 @@ struct flow_entry {
     uint16_t remote_link_id;
     uint16_t local_link_id;
     int count;
-    uint32_t action;
-    int32_t type;
-    char alg_name[MAX_ALG_NAME_LEN];
+    uint32_t ingress_action;
+    uint32_t egress_action;
+    char ingress_alg_name[MAX_ALG_NAME_LEN];
+    char egress_alg_name[MAX_ALG_NAME_LEN];
 };
 
 struct flow_tuple {

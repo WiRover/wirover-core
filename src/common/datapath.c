@@ -334,17 +334,17 @@ int send_packet(char *orig_packet, int orig_size)
     update_flow_entry(ftd);
 
     // Check for drop
-    if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
+    if((ftd->egress_action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
         return SUCCESS;
     }
 
     // Send on all interfaces
-    if((ftd->action & POLICY_OP_DUPLICATE) != 0) {
+    if((ftd->egress_action & POLICY_OP_DUPLICATE) != 0) {
         //sendAllInterfaces(orig_packet, orig_size);
         return SUCCESS;
     }
     //Add a tunnel header to the packet
-    if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
+    if((ftd->egress_action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
         int node_id = get_unique_id();
         struct interface *src_ife = select_src_interface(ftd);
         if(src_ife != NULL) {

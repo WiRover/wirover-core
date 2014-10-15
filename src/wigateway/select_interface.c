@@ -65,5 +65,9 @@ struct interface *select_dst_interface(struct flow_entry *fe)
     if(controller == NULL){
         return NULL;
     }
+    /*char cont_ip[INET6_ADDRSTRLEN];
+    ipaddr_to_string(&lease.cinfo.pub_ip, cont_ip, sizeof(cont_ip));
+    DEBUG_MSG("Controller ip %s", cont_ip);*/
+    //dump_interface(controller->head_interface, "");
     return controller->head_interface;
 }
