@@ -76,16 +76,30 @@ int change_interface_state(struct interface *ife, enum if_state state)
     return 0;
 }
 
-int interface_bind(struct interface *ife, int bind_port)
-{
-    struct sockaddr_in myAddr;
+static int set_sock_opts(int sock_type, int proto, const char * ife_name) {
     int sockfd;
-
-    if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) 
+    if((sockfd = socket(AF_INET, sock_type, proto)) < 0) 
     {
         ERROR_MSG("creating socket failed");
         return FAILURE;
     }
+
+    if(strlen(ife_name) != 0){
+        if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, ife_name, IFNAMSIZ) < 0) 
+        {
+            ERROR_MSG("setsockopt SO_BINDTODEVICE failed");
+            close(sockfd);
+            return FAILURE;
+        }
+    }
+    return sockfd;
+}
+
+int interface_bind(struct interface *ife, int bind_port)
+{
+    struct sockaddr_in myAddr;
+    int sockfd = set_sock_opts(SOCK_DGRAM, 0, ife->name);
+    if(sockfd == FAILURE) { return FAILURE; }
 
     memset(&myAddr, 0, sizeof(struct sockaddr_in));
     myAddr.sin_family      = AF_INET;
@@ -100,14 +114,7 @@ int interface_bind(struct interface *ife, int bind_port)
         return FAILURE;
     }
 
-    if(strlen(ife->name) != 0){
-        if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, ife->name, IFNAMSIZ) < 0) 
-        {
-            ERROR_MSG("setsockopt SO_BINDTODEVICE failed");
-            close(sockfd);
-            return FAILURE;
-        }
-    }
+
 
     if(bind(sockfd, (struct sockaddr *)&myAddr, sizeof(struct sockaddr_in)) < 0) 
     {
@@ -117,6 +124,9 @@ int interface_bind(struct interface *ife, int bind_port)
     }
 
     ife->sockfd = sockfd;
+
+    ife->raw_icmp_sockfd = set_sock_opts(SOCK_RAW, IPPROTO_ICMP, ife->name);
+    if(ife->raw_icmp_sockfd == FAILURE) { return FAILURE; }
 
     return sockfd;
 } // End function int interfaceBind()

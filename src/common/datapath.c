@@ -83,6 +83,23 @@ void logPacket(struct timeval *arrival_time, int size, const char *direction, st
         local_ife->name, remote_ife->name, remote_ife->node_id, size, direction);
     fflush(packet_log_file);
 }
+
+static int derp_receive(int sockfd) {
+    int     bufSize;
+    char    buffer[outbound_mtu];
+
+    struct sockaddr_storage     from;
+    unsigned    fromlen = sizeof(from);
+
+    bufSize = recvfrom(sockfd, buffer, sizeof(buffer), 0, 
+        (struct sockaddr *)&from, &fromlen);
+    if(bufSize < 0) {
+        ERROR_MSG("recvfrom() failed");
+        return FAILURE;
+    }
+    return SUCCESS;
+}
+
 int handlePackets()
 {
     // The File Descriptor set to add sockets to
@@ -101,6 +118,9 @@ int handlePackets()
         while (curr_ife) {
             if(curr_ife->sockfd > 0){
                 FD_SET(curr_ife->sockfd, &read_set);
+            }
+            if(curr_ife->raw_icmp_sockfd > 0){
+                FD_SET(curr_ife->raw_icmp_sockfd, &read_set);
             }
             curr_ife = curr_ife->next;
         }
@@ -124,6 +144,10 @@ int handlePackets()
             if( FD_ISSET(curr_ife->sockfd, &read_set) ) 
             {
                 handleInboundPacket(tun->tunnelfd, curr_ife);
+            }
+            if( FD_ISSET(curr_ife->raw_icmp_sockfd, &read_set) ) 
+            {
+                derp_receive(curr_ife->raw_icmp_sockfd);
             }
             curr_ife = curr_ife->next;
         }
@@ -358,7 +382,15 @@ int send_packet(char *orig_packet, int orig_size)
         }
         return send_ife_packet(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
     }
-    return SUCCESS;
+
+    if((ftd->egress_action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
+        struct interface *src_ife = select_src_interface(ftd);
+        if(src_ife != NULL) {
+            return send_nat_packet(orig_packet, orig_size, src_ife);
+        }
+    }
+
+    return FAILURE;
 }
 
 int send_ife_packet(uint8_t type, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife)
@@ -431,5 +463,23 @@ int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src
 #endif
     gettimeofday(&src_ife->tx_time, NULL);
     free(new_packet);
+    return SUCCESS;
+}
+
+int send_nat_packet(char *orig_packet, int orig_size, struct interface *src_ife) {
+    int sockfd = src_ife->raw_icmp_sockfd;
+    struct iphdr *ip_hdr = (struct iphdr*)orig_packet;
+    struct sockaddr_in dst;
+    memset(&dst, 0, sizeof(struct sockaddr_in));
+    dst.sin_family = AF_INET;
+    dst.sin_addr.s_addr = ip_hdr->daddr;
+    char * new_packet = &orig_packet[sizeof(struct iphdr)];
+    int new_size = orig_size - sizeof(struct iphdr);
+    if( (sendto(sockfd, new_packet, new_size, 0, (struct sockaddr *)&dst, sizeof(struct sockaddr))) < 0)
+    {
+        //ERROR_MSG("sendto failed (%d), fd %d (%s),  dst: %s, new_size: %d", rtn, sockfd, src_ife->name, inet_ntoa(((struct sockaddr_in*)dst)->sin_addr), new_size);
+
+        return FAILURE;
+    }
     return SUCCESS;
 }
