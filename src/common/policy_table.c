@@ -158,6 +158,7 @@ int get_policy_by_tuple(struct flow_tuple *ft, policy_entry *policy, int dir) {
     int count = policy_count;
     for(int i = 0; i < count; i++) {
         *policy = *policies[i];
+        if((policy->direction & dir) == 0) { continue; }
         if(policy->ft.local != (ft->local & policy->local_netmask)) { continue; }
         if(policy->ft.remote != (ft->remote & policy->remote_netmask)) { continue; }
         if((policy->ft.proto != 0) && policy->ft.proto != ft->proto) { continue; }
