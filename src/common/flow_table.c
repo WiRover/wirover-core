@@ -22,7 +22,10 @@ int flow_table_timeout = 10;
 time_t last_expiration_check = 0;
 
 
-int fill_flow_tuple(struct iphdr* ip_hdr, struct tcphdr* tcp_hdr, struct flow_tuple* ft, unsigned short reverse) {
+int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short reverse) {
+    struct iphdr *ip_hdr = (struct iphdr *)(packet);
+    struct tcphdr   *tcp_hdr = (struct tcphdr *)(packet + (ip_hdr->ihl * 4));
+
     memset(ft, 0, sizeof(struct flow_tuple));
     ft->net_proto = ip_hdr->version;
     ft->dst = reverse ? ip_hdr->saddr : ip_hdr->daddr;

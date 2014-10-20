@@ -28,6 +28,7 @@
 # define SIOCGSTAMP 0x8906
 #endif
 
+int write_to_tunnel(int tunfd, char *packet, int size);
 int handleInboundPacket(int tunfd, struct interface *ife);
 int handleOutboundPacket(int tunfd, struct tunnel *tun);
 int handlePackets();
@@ -39,12 +40,14 @@ static unsigned int         tunnel_mtu = 0;
 static unsigned int         outbound_mtu = 0;
 static FILE *               packet_log_file;
 static int                  packet_log_enabled = 0;
+static char *               send_buffer;
 
 int start_data_thread(struct tunnel *tun_in)
 {
     //The mtu in the config file accounts for the tunhdr, but we have that extra space in here
     tunnel_mtu = get_mtu();
     outbound_mtu =  1500;
+    send_buffer = (char *)malloc(sizeof(char)*1500);
     tun = tun_in;
     if(get_packet_log_enabled()){
         packet_log_file = fopen(get_packet_log_path(), "a");
@@ -93,6 +96,7 @@ static int derp_receive(int sockfd) {
 
     bufSize = recvfrom(sockfd, buffer, sizeof(buffer), 0, 
         (struct sockaddr *)&from, &fromlen);
+
     if(bufSize < 0) {
         ERROR_MSG("recvfrom() failed");
         return FAILURE;
@@ -274,6 +278,33 @@ int handleInboundPacket(int tunfd, struct interface *ife)
         return SUCCESS;
     }
 
+    if(packet_log_enabled && packet_log_file != NULL)
+    {
+        logPacket(&arrival_time, bufSize, "INGRESS", ife, remote_ife);
+    }
+
+    struct flow_tuple ft;
+    // Policy and Flow table
+    fill_flow_tuple(&buffer[h_header_len], &ft, 1);
+    struct flow_entry *ftd = get_flow_entry(&ft);
+
+    ftd->remote_node_id = node_id;
+    ftd->remote_link_id = link_id;
+    ftd->local_link_id = ife->index;
+
+    update_flow_entry(ftd);
+
+    return write_to_tunnel(tunfd, &buffer[h_header_len], bufSize - h_header_len);
+    
+} // End function int handleInboundPacket()
+
+int write_to_tunnel(int tunfd, char *packet, int size) {
+    
+    if(size + TUNTAP_OFFSET > outbound_mtu) { 
+        DEBUG_MSG("Tried to send packet larger than our send buffer %d", size);
+        return FAILURE;
+    }
+    
     // This is needed to notify tun0 we are passing an IP packet
     // Have to pass in the IP proto as last two bytes in ethernet header
     //
@@ -283,41 +314,23 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     // the flags field, the next two byte (0800 are the protocol field, in this
     // case IP): http://www.mjmwired.net/kernel/Documentation/networking/tuntap.txt
 
-    struct iphdr *ip_hdr = (struct iphdr *)(buffer + h_header_len);
-
-    struct flow_tuple *ft = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
-    struct tcphdr   *tcp_hdr = (struct tcphdr *)(buffer + h_header_len + (ip_hdr->ihl * 4));
-
-    if(packet_log_enabled && packet_log_file != NULL)
-    {
-        logPacket(&arrival_time, bufSize, "INGRESS", ife, remote_ife);
-    }
-
-    // Policy and Flow table
-    fill_flow_tuple(ip_hdr, tcp_hdr, ft, 1);
-    struct flow_entry *ftd = get_flow_entry(ft);
-    free(ft);
-
-    ftd->remote_node_id = node_id;
-    ftd->remote_link_id = link_id;
-    ftd->local_link_id = ife->index;
-
-    update_flow_entry(ftd);
-
+    struct iphdr *ip_hdr = (struct iphdr *)(packet);
     unsigned short tun_info[2];
     tun_info[0] = 0; //flags
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
-    memcpy(&buffer[h_header_len - TUNTAP_OFFSET], tun_info, TUNTAP_OFFSET);
+    memcpy(send_buffer, tun_info, TUNTAP_OFFSET);
 
-    if( write(tunfd, &buffer[h_header_len - TUNTAP_OFFSET], 
-        (bufSize - h_header_len + TUNTAP_OFFSET)) < 0)
+
+    memcpy( (char *)&send_buffer[TUNTAP_OFFSET], packet, size);
+
+    if( write(tunfd, send_buffer, size + TUNTAP_OFFSET) < 0)
     {
         ERROR_MSG("write() failed");
         return FAILURE;
     }
 
     return SUCCESS;
-} // End function int handleInboundPacket()
+}
 
 int handleOutboundPacket(int tunfd, struct tunnel * tun) 
 {
@@ -347,11 +360,9 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
 int send_packet(char *orig_packet, int orig_size)
 {
     struct flow_tuple ft;
-    struct iphdr    *ip_hdr = (struct iphdr *)(orig_packet);
-    struct tcphdr   *tcp_hdr = (struct tcphdr *)(orig_packet + (ip_hdr->ihl * 4));
 
     // Policy and Flow table
-    fill_flow_tuple(ip_hdr, tcp_hdr, &ft, 0);
+    fill_flow_tuple(orig_packet, &ft, 0);
 
     struct flow_entry *ftd = get_flow_entry(&ft);
 
@@ -477,8 +488,9 @@ int send_nat_packet(char *orig_packet, int orig_size, struct interface *src_ife)
     int new_size = orig_size - sizeof(struct iphdr);
     if( (sendto(sockfd, new_packet, new_size, 0, (struct sockaddr *)&dst, sizeof(struct sockaddr))) < 0)
     {
-        //ERROR_MSG("sendto failed (%d), fd %d (%s),  dst: %s, new_size: %d", rtn, sockfd, src_ife->name, inet_ntoa(((struct sockaddr_in*)dst)->sin_addr), new_size);
-
+        ERROR_MSG("Failed to send");
+        //ERROR_MSG("sendto failed (%d), fd %d (%s),  dst: %s, new_size: %d", rtn, sockfd, src_ife->name, inet_ntoa(((struct
+        
         return FAILURE;
     }
     return SUCCESS;

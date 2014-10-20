@@ -42,7 +42,7 @@ struct flow_tuple {
     uint16_t src_port;
 };
 
-int fill_flow_tuple(struct iphdr*, struct tcphdr*, struct flow_tuple*, unsigned short reverse);
+int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short reverse);
 
 struct flow_entry *get_flow_entry(struct flow_tuple *);
 
