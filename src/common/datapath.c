@@ -87,7 +87,7 @@ void logPacket(struct timeval *arrival_time, int size, const char *direction, st
     fflush(packet_log_file);
 }
 
-static int derp_receive(int sockfd) {
+static int nat_receive(int tunfd, int sockfd) {
     int     bufSize;
     char    buffer[outbound_mtu];
 
@@ -101,7 +101,15 @@ static int derp_receive(int sockfd) {
         ERROR_MSG("recvfrom() failed");
         return FAILURE;
     }
-    return SUCCESS;
+
+
+    struct iphdr * ip_hdr = (struct iphdr *)buffer;
+    inet_pton(AF_INET, "172.16.0.2", &ip_hdr->daddr);
+    char ip_str[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET, &ip_hdr->daddr, ip_str, sizeof(ip_str));
+    DEBUG_MSG("Got a packet %s", ip_str);
+    compute_ip_checksum(ip_hdr);
+    return write_to_tunnel(tunfd, buffer, bufSize);
 }
 
 int handlePackets()
@@ -151,7 +159,7 @@ int handlePackets()
             }
             if( FD_ISSET(curr_ife->raw_icmp_sockfd, &read_set) ) 
             {
-                derp_receive(curr_ife->raw_icmp_sockfd);
+                nat_receive(tun->tunnelfd, curr_ife->raw_icmp_sockfd);
             }
             curr_ife = curr_ife->next;
         }
@@ -447,7 +455,7 @@ int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src
     int rtn = 0;
     if ( sockfd == 0 )
     {
-        DEBUG_MSG("Tried to send packet over bad sockfd for interface %d", src_ife->name);
+        DEBUG_MSG("Tried to send packet over bad sockfd for interface %s", src_ife->name);
         return FAILURE;
     }
     char *new_packet = (char *)malloc(size + sizeof(struct tunhdr));
