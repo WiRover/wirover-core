@@ -107,8 +107,14 @@ static int nat_receive(int tunfd, int sockfd) {
     inet_pton(AF_INET, "172.16.0.2", &ip_hdr->daddr);
     char ip_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &ip_hdr->daddr, ip_str, sizeof(ip_str));
-    DEBUG_MSG("Got a packet %s", ip_str);
     compute_ip_checksum(ip_hdr);
+
+    struct flow_tuple ft;
+    fill_flow_tuple(buffer, &ft, 1);
+
+    struct flow_entry *fe = get_flow_entry(&ft);
+    if(fe->ingress_action != POLICY_ACT_NAT) { return SUCCESS; }
+
     return write_to_tunnel(tunfd, buffer, bufSize);
 }
 
@@ -134,6 +140,12 @@ int handlePackets()
             if(curr_ife->raw_icmp_sockfd > 0){
                 FD_SET(curr_ife->raw_icmp_sockfd, &read_set);
             }
+            if(curr_ife->raw_tcp_sockfd > 0){
+                FD_SET(curr_ife->raw_tcp_sockfd, &read_set);
+            }
+            if(curr_ife->raw_udp_sockfd > 0){
+                FD_SET(curr_ife->raw_udp_sockfd, &read_set);
+            }
             curr_ife = curr_ife->next;
         }
         release_read_lock(&interface_list_lock);
@@ -153,13 +165,17 @@ int handlePackets()
         obtain_read_lock(&interface_list_lock);
         curr_ife = interface_list;
         while (curr_ife) {
-            if( FD_ISSET(curr_ife->sockfd, &read_set) ) 
-            {
+            if( FD_ISSET(curr_ife->sockfd, &read_set) ) {
                 handleInboundPacket(tun->tunnelfd, curr_ife);
             }
-            if( FD_ISSET(curr_ife->raw_icmp_sockfd, &read_set) ) 
-            {
+            if( FD_ISSET(curr_ife->raw_icmp_sockfd, &read_set) ) {
                 nat_receive(tun->tunnelfd, curr_ife->raw_icmp_sockfd);
+            }
+            if( FD_ISSET(curr_ife->raw_tcp_sockfd, &read_set) ) {
+                nat_receive(tun->tunnelfd, curr_ife->raw_tcp_sockfd);
+            }
+            if( FD_ISSET(curr_ife->raw_udp_sockfd, &read_set) ) {
+                nat_receive(tun->tunnelfd, curr_ife->raw_udp_sockfd);
             }
             curr_ife = curr_ife->next;
         }
@@ -486,19 +502,29 @@ int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src
 }
 
 int send_nat_packet(char *orig_packet, int orig_size, struct interface *src_ife) {
-    int sockfd = src_ife->raw_icmp_sockfd;
-    struct iphdr *ip_hdr = (struct iphdr*)orig_packet;
+    int sockfd = 0;
+    int proto = ((struct iphdr*)orig_packet)->protocol;
+    if(proto == 1)
+        sockfd = src_ife->raw_icmp_sockfd;
+    else if(proto == 6)
+        sockfd = src_ife->raw_tcp_sockfd;
+    else if(proto == 17)
+        sockfd = src_ife->raw_udp_sockfd;
+
+    if(sockfd <= 0) { return FAILURE; }
+
+    //Determine the destination
     struct sockaddr_in dst;
     memset(&dst, 0, sizeof(struct sockaddr_in));
     dst.sin_family = AF_INET;
-    dst.sin_addr.s_addr = ip_hdr->daddr;
+    dst.sin_addr.s_addr = ((struct iphdr*)orig_packet)->daddr;
+
+    //Don't send the IP header, the kernel will take care of this
     char * new_packet = &orig_packet[sizeof(struct iphdr)];
     int new_size = orig_size - sizeof(struct iphdr);
     if( (sendto(sockfd, new_packet, new_size, 0, (struct sockaddr *)&dst, sizeof(struct sockaddr))) < 0)
     {
-        ERROR_MSG("Failed to send");
-        //ERROR_MSG("sendto failed (%d), fd %d (%s),  dst: %s, new_size: %d", rtn, sockfd, src_ife->name, inet_ntoa(((struct
-        
+        ERROR_MSG("Failed to send NAT packet on %s", src_ife->name);        
         return FAILURE;
     }
     return SUCCESS;
