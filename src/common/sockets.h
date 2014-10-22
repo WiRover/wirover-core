@@ -3,7 +3,7 @@
 
 #include <sys/select.h>
 #include "interface.h"
-#include <linux/ip.h>
+
 // For the set_nonblock function
 #define BLOCKING 0
 #define NONBLOCKING 1
@@ -37,8 +37,6 @@ int set_nonblock(int sockfd, int enable);
 int build_sockaddr(const char *host, unsigned short port, struct sockaddr_storage* dest);
 int build_data_sockaddr(struct interface *dst_ife, struct sockaddr_storage* dest);
 int build_control_sockaddr(struct interface *dst_ife, struct sockaddr_storage* dest);
-
-void compute_ip_checksum(struct iphdr *ip_hdr);
 
 // Some generic TCP server functions
 void fdset_add_clients(const struct client* head, fd_set* set, int* max_fd);

@@ -13,6 +13,7 @@ add_executable(wigateway
     ${COMMON}/debug.c
 	${COMMON}/datapath.c
 	${COMMON}/flow_table.c
+    ${COMMON}/headers.c
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
     ${COMMON}/netlink.c

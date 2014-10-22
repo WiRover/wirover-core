@@ -4,6 +4,7 @@
 #include <sys/ioctl.h>
 #include <unistd.h>
 #include <signal.h>
+#include <netinet/udp.h>
 
 #include "configuration.h"
 #include "constants.h"
@@ -12,6 +13,7 @@
 #include "datapath.h"
 #include "flow_table.h"
 #include "interface.h"
+#include "headers.h"
 #include "policy_table.h"
 #include "packet_buffer.h"
 #include "netlink.h"
@@ -108,12 +110,16 @@ static int nat_receive(int tunfd, int sockfd) {
     char ip_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &ip_hdr->daddr, ip_str, sizeof(ip_str));
     compute_ip_checksum(ip_hdr);
+    if(ip_hdr->protocol == 6) { 
+        compute_tcp_checksum(&buffer[sizeof(struct iphdr)], bufSize - sizeof(struct iphdr), ip_hdr->saddr, ip_hdr->daddr);
+    }
 
     struct flow_tuple ft;
     fill_flow_tuple(buffer, &ft, 1);
 
     struct flow_entry *fe = get_flow_entry(&ft);
     if(fe->ingress_action != POLICY_ACT_NAT) { return SUCCESS; }
+    DEBUG_MSG("Herp");
 
     return write_to_tunnel(tunfd, buffer, bufSize);
 }
@@ -504,12 +510,22 @@ int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src
 int send_nat_packet(char *orig_packet, int orig_size, struct interface *src_ife) {
     int sockfd = 0;
     int proto = ((struct iphdr*)orig_packet)->protocol;
+
+    //Don't send the IP header, the kernel will take care of this
+    char * new_packet = &orig_packet[sizeof(struct iphdr)];
+    int new_size = orig_size - sizeof(struct iphdr);
+
     if(proto == 1)
         sockfd = src_ife->raw_icmp_sockfd;
-    else if(proto == 6)
+    else if(proto == 6) {
         sockfd = src_ife->raw_tcp_sockfd;
-    else if(proto == 17)
+        compute_tcp_checksum(new_packet, new_size, src_ife->public_ip.s_addr, ((struct iphdr*)orig_packet)->daddr);
+
+    }
+    else if(proto == 17) {
         sockfd = src_ife->raw_udp_sockfd;
+        ((struct udphdr *)new_packet)->check = 0;
+    }
 
     if(sockfd <= 0) { return FAILURE; }
 
@@ -519,9 +535,6 @@ int send_nat_packet(char *orig_packet, int orig_size, struct interface *src_ife)
     dst.sin_family = AF_INET;
     dst.sin_addr.s_addr = ((struct iphdr*)orig_packet)->daddr;
 
-    //Don't send the IP header, the kernel will take care of this
-    char * new_packet = &orig_packet[sizeof(struct iphdr)];
-    int new_size = orig_size - sizeof(struct iphdr);
     if( (sendto(sockfd, new_packet, new_size, 0, (struct sockaddr *)&dst, sizeof(struct sockaddr))) < 0)
     {
         ERROR_MSG("Failed to send NAT packet on %s", src_ife->name);        

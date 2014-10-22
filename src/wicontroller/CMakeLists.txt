@@ -15,6 +15,7 @@ add_executable(wicontroller
 	${COMMON}/flow_table.c
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
+    ${COMMON}/headers.c
     ${COMMON}/netlink.c
     ${COMMON}/ping.c
 	${COMMON}/remote_node.c
