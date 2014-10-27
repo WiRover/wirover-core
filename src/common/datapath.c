@@ -119,7 +119,6 @@ static int nat_receive(int tunfd, int sockfd) {
 
     struct flow_entry *fe = get_flow_entry(&ft);
     if(fe->ingress_action != POLICY_ACT_NAT) { return SUCCESS; }
-    DEBUG_MSG("Herp");
 
     return write_to_tunnel(tunfd, buffer, bufSize);
 }
