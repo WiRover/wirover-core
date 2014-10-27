@@ -60,7 +60,7 @@ int main(int argc, char* argv[])
     signal(SIGINT, shutdown_handler);
     signal(SIGTERM, shutdown_handler);
 
-    printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR, 
+    printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR,
         WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);
 
     srand(time(0));
@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
 
     if(!(wiroot_address && wiroot_port && data_port)) {
         exit(1);
-    } 
+    }
 
     if(create_netlink_thread() == -1) {
         DEBUG_MSG("Failed to create netlink thread");
@@ -85,7 +85,7 @@ int main(int argc, char* argv[])
         DEBUG_MSG("Failed to initialize interface list");
         exit(1);
     }
-    
+
 
     if(start_status_thread() == FAILURE)
     {
@@ -172,8 +172,8 @@ int main(int argc, char* argv[])
 
                 ipaddr_to_ipv4(&lease.cinfo.priv_ip, &priv_ip);
                 ipaddr_to_ipv4(&lease.cinfo.pub_ip, &pub_ip);
-                
-                result = tunnel_create(private_ip, 
+
+                result = tunnel_create(private_ip,
                     private_netmask, get_mtu());
                 if(result == FAILURE) {
                     DEBUG_MSG("Failed to bring up tunnel interface");
@@ -193,14 +193,16 @@ int main(int argc, char* argv[])
                 state = GATEWAY_LEASE_OBTAINED;
                 lease_retry_delay = MIN_LEASE_RETRY_DELAY;
             }
-        } else if(time(NULL) >= lease_renewal_time) {
+        }
+        else if(time(NULL) >= lease_renewal_time) {
             struct lease_info new_lease;
             if(renew_lease(&lease, &new_lease) == 0) {
                 memcpy(&lease, &new_lease, sizeof(lease));
                 lease_renewal_time = time(NULL) + lease.time_limit -
                     RENEW_BEFORE_EXPIRATION;
                 lease_retry_delay = MIN_LEASE_RETRY_DELAY;
-            } else {
+            }
+            else {
                 DEBUG_MSG("Lease renewal failed, will retry in %u seconds",
                     lease_retry_delay);
                 lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
@@ -251,7 +253,8 @@ int main(int argc, char* argv[])
                 if(found == CONFIG_TRUE) {
                     if(tmp > 0 && tmp <= max_timeout) {
                         bw_client.start_timeout = tmp * USECS_PER_SEC;
-                    } else {
+                    }
+                    else {
                         DEBUG_MSG("Invalid value for bandwidth-start-timeout (%d): must be positive and at most %d",
                             tmp, max_timeout);
                     }
@@ -261,7 +264,8 @@ int main(int argc, char* argv[])
                 if(found == CONFIG_TRUE) {
                     if(tmp > 0 && tmp <= max_timeout) {
                         bw_client.data_timeout = tmp * USECS_PER_SEC;
-                    } else {
+                    }
+                    else {
                         DEBUG_MSG("Invalid value for bandwidth-data-timeout (%d): must be positive and at most %d",
                             tmp, max_timeout);
                     }
@@ -321,22 +325,23 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
 
         if(ipaddr_cmp(&new_lease->priv_ip, &old_lease->priv_ip) != 0 ||
             new_lease->priv_subnet_size != old_lease->priv_subnet_size) {
-                DEBUG_MSG("Obtained lease of %s/%hhu", 
-                    my_ip, new_lease->priv_subnet_size);
+            DEBUG_MSG("Obtained lease of %s/%hhu",
+                my_ip, new_lease->priv_subnet_size);
 
-                uint32_t private_ip;
-                ipaddr_to_ipv4(&new_lease->priv_ip, &private_ip);
+            uint32_t private_ip;
+            ipaddr_to_ipv4(&new_lease->priv_ip, &private_ip);
 
-                uint32_t private_netmask = htonl(slash_to_netmask(new_lease->priv_subnet_size));
+            uint32_t private_netmask = htonl(slash_to_netmask(new_lease->priv_subnet_size));
 
-                result = tunnel_create(private_ip, private_netmask, get_mtu());
-                if(result == -1) {
-                    DEBUG_MSG("Failed to bring up virtual interface");
-                    exit(1);
-                }
+            result = tunnel_create(private_ip, private_netmask, get_mtu());
+            if(result == -1) {
+                DEBUG_MSG("Failed to bring up virtual interface");
+                exit(1);
+            }
 
-        } else {
-            DEBUG_MSG("Renewed lease of %s/%hhu", 
+        }
+        else {
+            DEBUG_MSG("Renewed lease of %s/%hhu",
                 my_ip, new_lease->priv_subnet_size);
         }
 
@@ -349,13 +354,15 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
         /* TODO: Handle potential change of controller */
 
         return 0;
-    } else {
+    }
+    else {
         return -1;
     }
 }
 
 static void shutdown_handler(int signo)
 {
+    stop_netlink_thread();
     send_shutdown_notification();
     exit(0);
 }

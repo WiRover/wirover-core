@@ -20,6 +20,7 @@
 #include "packet_buffer.h"
 #ifdef GATEWAY
 #include "contchan.h"
+#include "util.h"
 #endif
 
 /*
@@ -136,6 +137,11 @@ int interface_bind(struct interface *ife, int bind_port)
     ife->raw_tcp_sockfd = configure_socket(SOCK_RAW, IPPROTO_TCP, ife->name, 0, 0);
     if(ife->raw_tcp_sockfd == FAILURE) { return FAILURE; }
 
+#ifdef GATEWAY
+	if (drop_tcp_rst(ife->name) == FAILURE) {
+		DEBUG_MSG("Couldn't drop RST packets for device");
+	}
+#endif
     return SUCCESS;
 } // End function int interfaceBind()
 
@@ -149,6 +155,9 @@ void free_interface(struct interface* ife)
 {
     if(ife) {
         free(ife);
+#ifdef GATEWAY
+		remove_drop_tcp_rst(ife->name);
+#endif
     }
 }
 

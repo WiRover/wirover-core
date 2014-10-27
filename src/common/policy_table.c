@@ -78,7 +78,7 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         goto failure_print;
     }
     //--PROTOCOL--//
-    value = json_object_object_get(jobj_policy, "proto");
+    value = json_object_object_get(jobj_policy, "protocol");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
         const char * proto_str = json_object_get_string(value);
         if (strcmp(proto_str, "tcp") == 0) {
@@ -123,7 +123,7 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
     }
 
     //--LOCAL NETMASK--//
-    value = json_object_object_get(jobj_policy, "local_net");
+    value = json_object_object_get(jobj_policy, "local_netmask");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
         const char * src_net_str = json_object_get_string(value);
         inet_pton(AF_INET, src_net_str, &pe->local_netmask);
@@ -139,7 +139,7 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
     }
 
     //--REMOTE NETMASK--//
-    value = json_object_object_get(jobj_policy, "remote_net");
+    value = json_object_object_get(jobj_policy, "remote_netmask");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
         const char * remote_net_str = json_object_get_string(value);
         inet_pton(AF_INET, remote_net_str, &pe->remote_netmask);
