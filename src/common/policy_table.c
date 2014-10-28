@@ -6,13 +6,11 @@
 
 static policy_entry *   default_ingress_policy;
 static policy_entry *   default_egress_policy;
-static int              ingress_policy_count;
-static policy_entry **  ingress_policies;
-static int              egress_policy_count;
-static policy_entry **  egress_policies;
+static int              policy_count;
+static policy_entry **  policies;
 static int              init = 0;
 
-static policy_entry** load_policies(int dir, int * count);
+static policy_entry** load_policies(int * count);
 
 static policy_entry * alloc_policy() {
     policy_entry * output = ( policy_entry *)malloc(sizeof( policy_entry));
@@ -22,8 +20,7 @@ static policy_entry * alloc_policy() {
 }
 
 static void update_policies() {
-    ingress_policies = load_policies(INGRESS, &ingress_policy_count);
-    egress_policies = load_policies(EGRESS, &egress_policy_count);
+    policies = load_policies(&policy_count);
     print_policies();
 }
 
@@ -37,7 +34,7 @@ int init_policy_table() {
     return SUCCESS;
 }
 
-static json_object * get_table(int dir) {
+static json_object * get_table() {
     char * buffer = 0;
     long length;
     FILE * f = fopen (POLICY_PATH, "rb");
@@ -52,8 +49,8 @@ static json_object * get_table(int dir) {
         fread (buffer, 1, length, f);
     }
     fclose (f);
-    json_object * tables = json_tokener_parse(buffer);
-    return json_object_object_get(tables, dir == 0 ? "ingress" : "egress");
+    json_object * table = json_tokener_parse(buffer);
+    return table;
 }
 
 static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
@@ -81,7 +78,7 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         goto failure_print;
     }
     //--PROTOCOL--//
-    value = json_object_object_get(jobj_policy, "proto");
+    value = json_object_object_get(jobj_policy, "protocol");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
         const char * proto_str = json_object_get_string(value);
         if (strcmp(proto_str, "tcp") == 0) {
@@ -98,37 +95,55 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         }
     }
 
+    //--DIRECTION--//
+    value = json_object_object_get(jobj_policy, "direction");
+    if(value != NULL && json_object_is_type(value, json_type_string)) {
+        const char * dir_str = json_object_get_string(value);
+        if (strcmp(dir_str, "ingress") == 0) {
+            pe->direction = DIR_INGRESS;
+        }
+        else if (strcmp(dir_str, "egress") == 0) {
+            pe->direction = DIR_EGRESS;
+        }
+        else if (strcmp(dir_str, "both") == 0) {
+            pe->direction = DIR_BOTH;
+        }
+        else {
+            goto failure_print;
+        }
+    }
+    else { pe->direction = DIR_BOTH; }
 
-    //--SOURCE--//
-    value = json_object_object_get(jobj_policy, "src");
+    //--LOCAL--//
+    value = json_object_object_get(jobj_policy, "local");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
         const char * src_str = json_object_get_string(value);
-        inet_pton(AF_INET, src_str, &pe->ft.src);
-        inet_pton(AF_INET, "255.255.255.255", &pe->src_netmask);
+        inet_pton(AF_INET, src_str, &pe->ft.local);
+        inet_pton(AF_INET, "255.255.255.255", &pe->local_netmask);
     }
 
-    //--SOURCE NETMASK--//
-    value = json_object_object_get(jobj_policy, "src_net");
+    //--LOCAL NETMASK--//
+    value = json_object_object_get(jobj_policy, "local_netmask");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
         const char * src_net_str = json_object_get_string(value);
-        inet_pton(AF_INET, src_net_str, &pe->src_netmask);
-        pe->ft.src &= pe->src_netmask;
+        inet_pton(AF_INET, src_net_str, &pe->local_netmask);
+        pe->ft.local &= pe->local_netmask;
     }
 
-    //--DESTINATION--//
-    value = json_object_object_get(jobj_policy, "dst");
+    //--REMOTE--//
+    value = json_object_object_get(jobj_policy, "remote");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
-        const char * dst_str = json_object_get_string(value);
-        inet_pton(AF_INET, dst_str, &pe->ft.dst);
-        inet_pton(AF_INET, "255.255.255.255", &pe->dst_netmask);
+        const char * remote_str = json_object_get_string(value);
+        inet_pton(AF_INET, remote_str, &pe->ft.remote);
+        inet_pton(AF_INET, "255.255.255.255", &pe->remote_netmask);
     }
 
-    //--DESTINATION NETMASK--//
-    value = json_object_object_get(jobj_policy, "dst_net");
+    //--REMOTE NETMASK--//
+    value = json_object_object_get(jobj_policy, "remote_netmask");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
-        const char * dst_net_str = json_object_get_string(value);
-        inet_pton(AF_INET, dst_net_str, &pe->dst_netmask);
-        pe->ft.dst &= pe->dst_netmask;
+        const char * remote_net_str = json_object_get_string(value);
+        inet_pton(AF_INET, remote_net_str, &pe->remote_netmask);
+        pe->ft.remote &= pe->remote_netmask;
     }
 
 
@@ -140,23 +155,23 @@ failure_print:
 
 int get_policy_by_tuple(struct flow_tuple *ft, policy_entry *policy, int dir) {
     if(!init) { DEBUG_MSG("Policy table must be initialized"); return NO_MATCH; }
-    policy_entry ** policies = dir == INGRESS ? ingress_policies : egress_policies;
-    int count = dir == INGRESS ? ingress_policy_count : egress_policy_count;
+    int count = policy_count;
     for(int i = 0; i < count; i++) {
         *policy = *policies[i];
-        if(policy->ft.src != (ft->src & policy->src_netmask)) { continue; }
-        if(policy->ft.dst != (ft->dst & policy->dst_netmask)) { continue; }
+        if((policy->direction & dir) == 0) { continue; }
+        if(policy->ft.local != (ft->local & policy->local_netmask)) { continue; }
+        if(policy->ft.remote != (ft->remote & policy->remote_netmask)) { continue; }
         if((policy->ft.proto != 0) && policy->ft.proto != ft->proto) { continue; }
         return SUCCESS;
     }
 
-    *policy = dir == INGRESS ? *default_ingress_policy : *default_egress_policy;
+    *policy = dir == DIR_INGRESS ? *default_ingress_policy : *default_egress_policy;
     return NO_MATCH;
 }
 
-static policy_entry** load_policies(int dir, int * count) {
+static policy_entry** load_policies(int * count) {
     *count = 0;
-    json_object * table = get_table(dir);
+    json_object * table = get_table();
     if(table == 0) { return 0; }
     if(!json_object_is_type(table, json_type_array)) {
         DEBUG_MSG("Policy table is formatted incorrectly");
@@ -187,24 +202,24 @@ default_return:
 //---------DEBUG METHODS------------//
 
 void print_policy_entry(policy_entry * pe) {
-    char src_str[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET, &pe->ft.src, src_str, sizeof(src_str));
-    char src_net_str[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET, &pe->src_netmask, src_net_str, sizeof(src_net_str));
-    char dst_str[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET, &pe->ft.dst, dst_str, sizeof(dst_str));
-    char dst_net_str[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET, &pe->dst_netmask, dst_net_str, sizeof(dst_net_str));
-    DEBUG_MSG("src: %s src_net: %s dst: %s dst_net: %s proto: %d act: %d", src_str, src_net_str, dst_str, dst_net_str, pe->ft.proto, pe->action);
+    char l_str[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET, &pe->ft.local, l_str, sizeof(l_str));
+    char l_net_str[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET, &pe->local_netmask, l_net_str, sizeof(l_net_str));
+    char r_str[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET, &pe->ft.remote, r_str, sizeof(r_str));
+    char r_net_str[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET, &pe->remote_netmask, r_net_str, sizeof(r_net_str));
+    char *dir_str;
+    if(pe->direction == DIR_INGRESS) { dir_str = "I"; }
+    if(pe->direction == DIR_EGRESS) { dir_str = "O"; }
+    if(pe->direction == DIR_BOTH) { dir_str = "*"; }
+    DEBUG_MSG("direction: %s local: %s local_net: %s remote: %s remote_net: %s proto: %d act: %d", dir_str, l_str, l_net_str, r_str, r_net_str, pe->ft.proto, pe->action);
 }
 
 void print_policies() {
-    DEBUG_MSG("Ingress policies(%d):", ingress_policy_count);
-    for(int i = 0; i < ingress_policy_count; i++){
-        print_policy_entry(ingress_policies[i]);
-    }
-    DEBUG_MSG("Egress policies(%d):", egress_policy_count);
-    for(int i = 0; i < egress_policy_count; i++){
-        print_policy_entry(egress_policies[i]);
+    DEBUG_MSG("Policies(%d):", policy_count);
+    for(int i = 0; i < policy_count; i++){
+        print_policy_entry(policies[i]);
     }
 }

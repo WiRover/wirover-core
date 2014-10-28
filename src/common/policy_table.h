@@ -11,8 +11,9 @@
 
 #define POLICY_PATH "/var/lib/wirover/policy_tbl"
 
-#define INGRESS 0
-#define EGRESS 1
+#define DIR_INGRESS   0x1
+#define DIR_EGRESS    0x2
+#define DIR_BOTH      (DIR_INGRESS | DIR_EGRESS)
 
 #define NO_MATCH -1
 
@@ -51,13 +52,14 @@ enum policy_type {
 
 typedef struct{
     uint32_t action;
+    uint32_t direction;
     uint16_t table;
     int32_t type; //algo type
     uint16_t flags;
     // flow policy
     struct flow_tuple ft;
-    uint32_t src_netmask;
-    uint32_t dst_netmask;
+    uint32_t local_netmask;
+    uint32_t remote_netmask;
 
     char dev_name[IFNAMSIZ];
     int max_rate;

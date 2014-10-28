@@ -14,6 +14,7 @@
 #include <sys/time.h>
 #include <linux/if.h>
 #include <linux/if_ether.h>
+#include <linux/ip.h>
 #include <netdb.h>
 
 #include "debug.h"

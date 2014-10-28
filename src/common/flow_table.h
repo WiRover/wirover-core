@@ -35,14 +35,14 @@ struct flow_entry {
 
 struct flow_tuple {
     uint8_t net_proto;
-    uint32_t dst;
-    uint32_t src;
+    uint32_t remote;
+    uint32_t local;
     uint8_t proto;
-    uint16_t dst_port;
-    uint16_t src_port;
+    uint16_t remote_port;
+    uint16_t local_port;
 };
 
-int fill_flow_tuple(struct iphdr*, struct tcphdr*, struct flow_tuple*, unsigned short reverse);
+int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short reverse);
 
 struct flow_entry *get_flow_entry(struct flow_tuple *);
 
