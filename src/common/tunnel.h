@@ -7,8 +7,6 @@
 #include "tunnel.h"
 #include "interface.h"
 
-#define SEC_TO_USEC 1000000
-
 #define TUNTAP_OFFSET 4
 
 #define TUNHDR_NO_TIMESTAMP 0xFFFFFFFF

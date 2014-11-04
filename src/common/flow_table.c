@@ -12,7 +12,7 @@
 #include "flow_table.h"
 #include "uthash.h"
 #include "tunnel.h"
-#include "policyTable.h"
+#include "policy_table.h"
 
 #define TIME_BUFFER_SIZE 1024
 #define TIME_BETWEEN_EXPIRATION_CHECKS 5
@@ -22,15 +22,18 @@ int flow_table_timeout = 10;
 time_t last_expiration_check = 0;
 
 
-int fill_flow_tuple(struct iphdr* ip_hdr, struct tcphdr* tcp_hdr, struct flow_tuple* ft, unsigned short reverse) {
+int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress) {
+    struct iphdr *ip_hdr = (struct iphdr *)(packet);
+    struct tcphdr   *tcp_hdr = (struct tcphdr *)(packet + (ip_hdr->ihl * 4));
+
     memset(ft, 0, sizeof(struct flow_tuple));
     ft->net_proto = ip_hdr->version;
-    ft->dAddr = reverse ? ip_hdr->saddr : ip_hdr->daddr;
-    ft->sAddr = reverse ? ip_hdr->daddr : ip_hdr->saddr;
+    ft->remote = ingress ? ip_hdr->saddr : ip_hdr->daddr;
+    ft->local = ingress ? ip_hdr->daddr : ip_hdr->saddr;
     ft->proto = ip_hdr->protocol;
     if(ft->proto == 6 || ft->proto == 17){
-        ft->dPort = reverse ? tcp_hdr->source : tcp_hdr->dest;
-        ft->sPort = reverse ? tcp_hdr->dest : tcp_hdr->source;
+        ft->remote_port = ingress ? tcp_hdr->source : tcp_hdr->dest;
+        ft->local_port = ingress ? tcp_hdr->dest : tcp_hdr->source;
     }
 
     return 0;
@@ -59,16 +62,18 @@ struct flow_entry *get_flow_entry(struct flow_tuple *ft) {
 
     HASH_FIND(hh, flow_table, ft, sizeof(struct flow_tuple), fe);
     if(fe == NULL) {
-        struct policy_entry *pd = malloc(sizeof(struct policy_entry));
-        getMatch(ft, pd, EGRESS);
-
         fe = add_entry(ft);
         if(fe == NULL) { return NULL; }
-        fe->action = pd->action;
-        fe->type = pd->type;
-        strcpy(fe->alg_name, pd->alg_name);
+        policy_entry pd;
+        memset(&pd, 0, sizeof(policy_entry));
+        get_policy_by_tuple(ft,  &pd, DIR_INGRESS);
+        fe->ingress_action = pd.action;
+        strcpy(fe->ingress_alg_name, pd.alg_name);
+        memset(&pd, 0, sizeof(policy_entry));
+        get_policy_by_tuple(ft,  &pd, DIR_EGRESS);
+        fe->egress_action = pd.action;
+        strcpy(fe->egress_alg_name, pd.alg_name);
 
-        free(pd);
     }
     fe->last_visit_time = time(NULL);
 
@@ -112,13 +117,13 @@ int set_flow_table_timeout(int value) {
 
 
 int flow_entry_to_string(const struct flow_entry *fe, char *str, int size) {
-    char src_ip[INET6_ADDRSTRLEN];
-    char dst_ip[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET, &fe->id->sAddr,src_ip, INET6_ADDRSTRLEN);
-    inet_ntop(AF_INET, &fe->id->dAddr,dst_ip, INET6_ADDRSTRLEN);
-    return snprintf(str, size, "%s:%d -> %s:%d Proto: %d Action: %d remote: %d:%d Local link: %d hits: %d",
-        src_ip, ntohs(fe->id->sPort), dst_ip, ntohs(fe->id->dPort),
-        fe->id->proto, fe->action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
+    char local_ip[INET6_ADDRSTRLEN];
+    char remote_ip[INET6_ADDRSTRLEN];
+    inet_ntop(AF_INET, &fe->id->local, local_ip, INET6_ADDRSTRLEN);
+    inet_ntop(AF_INET, &fe->id->remote, remote_ip, INET6_ADDRSTRLEN);
+    return snprintf(str, size, "%s:%d -> %s:%d Proto: %d Action: I%dE%d remote: %d:%d Local link: %d hits: %d",
+        local_ip, ntohs(fe->id->local_port), remote_ip, ntohs(fe->id->remote_port),
+        fe->id->proto, fe->ingress_action, fe->egress_action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
     );
 }
 //All methods below here are for debugging purposes

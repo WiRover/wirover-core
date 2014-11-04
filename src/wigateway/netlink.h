@@ -10,7 +10,7 @@ struct rwlock;
 int init_interface_list();
 
 int create_netlink_thread();
-int wait_for_netlink_thread();
+int stop_netlink_thread();
 
 int open_netlink_socket();
 int handle_netlink_message(const char* msg, int msg_len);

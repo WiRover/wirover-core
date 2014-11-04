@@ -3,6 +3,11 @@
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <linux/if_packet.h>
+#include <linux/if_ether.h>
+#include <linux/if.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -15,7 +20,11 @@
 #include "packet_buffer.h"
 #ifdef GATEWAY
 #include "contchan.h"
+#include "util.h"
 #endif
+
+struct interface*   interface_list = 0;
+struct rwlock       interface_list_lock = RWLOCK_INITIALIZER;
 
 /*
 * ALLOC INTERFACE
@@ -76,38 +85,37 @@ int change_interface_state(struct interface *ife, enum if_state state)
     return 0;
 }
 
-int interface_bind(struct interface *ife, int bind_port)
-{
-    struct sockaddr_in myAddr;
+static int configure_socket(int sock_type, int proto, const char * ife_name, int bind_port, int reuse) {
     int sockfd;
-
-    if((sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) 
+    if((sockfd = socket(AF_INET, sock_type, proto)) < 0) 
     {
         ERROR_MSG("creating socket failed");
         return FAILURE;
     }
-
-    memset(&myAddr, 0, sizeof(struct sockaddr_in));
-    myAddr.sin_family      = AF_INET;
-    myAddr.sin_port        = htons((unsigned short)bind_port);
-    myAddr.sin_addr.s_addr = htonl(INADDR_ANY);
-
-    int on = 1;
-    if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0 )
-    {
-        ERROR_MSG("setsockopt SO_REUSEADDR failed");
-        close(sockfd);
-        return FAILURE;
+    if(reuse) {
+        int on = 1;
+        if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0 )
+        {
+            ERROR_MSG("setsockopt SO_REUSEADDR failed");
+            close(sockfd);
+            return FAILURE;
+        }
     }
-
-    if(strlen(ife->name) != 0){
-        if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, ife->name, IFNAMSIZ) < 0) 
+    if(strlen(ife_name) != 0){
+        if(setsockopt(sockfd, SOL_SOCKET, SO_BINDTODEVICE, ife_name, IFNAMSIZ) < 0) 
         {
             ERROR_MSG("setsockopt SO_BINDTODEVICE failed");
             close(sockfd);
             return FAILURE;
         }
+        DEBUG_MSG("Bound to device");
     }
+    
+    struct sockaddr_in myAddr;
+    memset(&myAddr, 0, sizeof(struct sockaddr_in));
+    myAddr.sin_family      = AF_INET;
+    myAddr.sin_port        = htons((unsigned short)bind_port);
+    myAddr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if(bind(sockfd, (struct sockaddr *)&myAddr, sizeof(struct sockaddr_in)) < 0) 
     {
@@ -115,10 +123,29 @@ int interface_bind(struct interface *ife, int bind_port)
         close(sockfd);
         return FAILURE;
     }
-
-    ife->sockfd = sockfd;
-
     return sockfd;
+}
+
+int interface_bind(struct interface *ife, int bind_port)
+{
+    ife->sockfd = configure_socket(SOCK_DGRAM, 0, ife->name, bind_port, 1);
+    if(ife->sockfd == FAILURE) { return FAILURE; }
+
+    ife->raw_icmp_sockfd = configure_socket(SOCK_RAW, IPPROTO_ICMP, ife->name, 0, 0);
+    if(ife->raw_icmp_sockfd == FAILURE) { return FAILURE; }
+    
+    ife->raw_udp_sockfd = configure_socket(SOCK_RAW, IPPROTO_UDP, ife->name, 0, 0);
+    if(ife->raw_udp_sockfd == FAILURE) { return FAILURE; }
+
+    ife->raw_tcp_sockfd = configure_socket(SOCK_RAW, IPPROTO_TCP, ife->name, 0, 0);
+    if(ife->raw_tcp_sockfd == FAILURE) { return FAILURE; }
+
+#ifdef GATEWAY
+	if (drop_tcp_rst(ife->name) == FAILURE) {
+		DEBUG_MSG("Couldn't drop RST packets for device");
+	}
+#endif
+    return SUCCESS;
 } // End function int interfaceBind()
 
 /*
@@ -131,6 +158,9 @@ void free_interface(struct interface* ife)
 {
     if(ife) {
         free(ife);
+#ifdef GATEWAY
+		remove_drop_tcp_rst(ife->name);
+#endif
     }
 }
 
@@ -334,18 +364,18 @@ int copy_active_interfaces(const struct interface *head, struct interface_copy *
 long calc_bw_hint(struct interface *ife)
 {
     long bw_hint;
-    
+
     bw_hint = ife->est_uplink_bw * 1000000 + ife->est_downlink_bw * 1000000;
     /*if(ife->meas_bw > 0 && ife->pred_bw > 0) {
-        double w = exp(BANDWIDTH_MEASUREMENT_DECAY * 
-            (time(NULL) - ife->meas_bw_time));
-        bw_hint = (long)round(w * ife->meas_bw + (1.0 - w) * ife->pred_bw);
+    double w = exp(BANDWIDTH_MEASUREMENT_DECAY * 
+    (time(NULL) - ife->meas_bw_time));
+    bw_hint = (long)round(w * ife->meas_bw + (1.0 - w) * ife->pred_bw);
     } else if(ife->meas_bw > 0) {
-        bw_hint = ife->meas_bw;
+    bw_hint = ife->meas_bw;
     } else if(ife->pred_bw > 0) {
-        bw_hint = ife->pred_bw;
+    bw_hint = ife->pred_bw;
     } else {
-        bw_hint = 0;
+    bw_hint = 0;
     }*/
 
     return bw_hint;

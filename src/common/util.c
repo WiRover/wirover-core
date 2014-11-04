@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <linux/if.h>
 #include <linux/sockios.h>
+#include <linux/netfilter.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -113,6 +114,21 @@ int delete_route(__be32 dest, __be32 gateway, __be32 netmask, const char *device
 
     close(skfd);
     return 0;
+}
+
+int drop_tcp_rst(char *device) {
+	char buffer[1024];
+	snprintf(buffer, sizeof(buffer), "iptables -I OUTPUT -o %s -p tcp --tcp-flags RST RST -j DROP", device);
+	if (system(buffer) == FAILURE) { return FAILURE; }
+	return SUCCESS;
+}
+int remove_drop_tcp_rst(char *device) {
+	int remove_count = 0;
+	char buffer[1024];
+	snprintf(buffer, sizeof(buffer), "iptables -D OUTPUT -o %s -p tcp --tcp-flags RST RST -j DROP", device);
+	//We'll try to remove a few in case there are duplicates but stop after 10
+	while (system(buffer) == SUCCESS && remove_count < 10) { remove_count ++;}
+	return SUCCESS;
 }
 
 int read_public_key(char *buffer, int size)

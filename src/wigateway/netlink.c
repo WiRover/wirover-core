@@ -9,6 +9,7 @@
 #include <net/if.h>
 #include <ifaddrs.h>
 #include <arpa/inet.h>
+#include <errno.h>
 
 #include "config.h"
 #include "contchan.h"
@@ -22,15 +23,11 @@
 #include "util.h"
 #include "utlist.h"
 
-
-struct interface*   interface_list = 0;
-struct rwlock       interface_list_lock = RWLOCK_INITIALIZER;
-
-#ifdef GATEWAY
 static void* netlink_thread_func(void* arg);
 static void add_interface(struct interface* ife);
 static void delete_interface(struct interface* ife);
 static int  update_interface_gateways();
+static volatile int running = 0;
 
 static pthread_t    netlink_thread;
 
@@ -55,40 +52,40 @@ int init_interface_list()
     while(ifap) {
         if((ifap->ifa_flags & IFF_UP) && (ifap->ifa_flags & IFF_RUNNING) &&
             !(ifap->ifa_flags & IFF_LOOPBACK)) {
-                struct interface *ife;
+            struct interface *ife;
 
-                ife = find_interface_by_name(interface_list, ifap->ifa_name);
-                if(!ife) {
-                    int priority = get_interface_priority(ifap->ifa_name);
-                    if(priority < 0)
-                        goto next_ifap;
+            ife = find_interface_by_name(interface_list, ifap->ifa_name);
+            if(!ife) {
+                int priority = get_interface_priority(ifap->ifa_name);
+                if(priority < 0)
+                    goto next_ifap;
 
-                    ife = alloc_interface(get_unique_id());
-                    if(!ife)
-                        goto next_ifap;
+                ife = alloc_interface(get_unique_id());
+                if(!ife)
+                    goto next_ifap;
 
-                    ife->index = if_nametoindex(ifap->ifa_name);
-                    strncpy(ife->name, ifap->ifa_name, sizeof(ife->name));
-                    read_network_name(ife->name, ife->network, sizeof(ife->network));
+                ife->index = if_nametoindex(ifap->ifa_name);
+                strncpy(ife->name, ifap->ifa_name, sizeof(ife->name));
+                read_network_name(ife->name, ife->network, sizeof(ife->network));
 
-                    // Set to INIT_INACTIVE until connectivity is confirmed
-                    ife->state = INIT_INACTIVE;
+                // Set to INIT_INACTIVE until connectivity is confirmed
+                ife->state = INIT_INACTIVE;
 
-                    ife->data_port = htons(get_data_port());
-                    ife->priority = priority;
+                ife->data_port = htons(get_data_port());
+                ife->priority = priority;
 
-                    add_interface(ife);
-                }
+                add_interface(ife);
+            }
 
-                // TODO: Keep IPv6 address(es) as well
-                // It seems ifap->ifa_addr can be null, not sure why.
-                if(ifap->ifa_addr && ifap->ifa_addr->sa_family == AF_INET) {
-                    struct sockaddr_in *sin = (struct sockaddr_in *)ifap->ifa_addr;
-                    memcpy(&ife->public_ip, &sin->sin_addr, sizeof(struct sockaddr_in));
-                }
+            // TODO: Keep IPv6 address(es) as well
+            // It seems ifap->ifa_addr can be null, not sure why.
+            if(ifap->ifa_addr && ifap->ifa_addr->sa_family == AF_INET) {
+                struct sockaddr_in *sin = (struct sockaddr_in *)ifap->ifa_addr;
+                memcpy(&ife->public_ip, &sin->sin_addr, sizeof(struct sockaddr_in));
+            }
         }
 
-next_ifap:
+    next_ifap:
         ifap = ifap->ifa_next;
     }
 
@@ -115,6 +112,7 @@ int create_netlink_thread()
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
     int result;
+    running = 1;
     result = pthread_create(&netlink_thread, &attr, netlink_thread_func, 0);
     if(result != 0) {
         ERROR_MSG("creating thread failed");
@@ -128,8 +126,9 @@ int create_netlink_thread()
 /*
 * WAIT FOR NETLINK THREAD
 */
-int wait_for_netlink_thread()
+int stop_netlink_thread()
 {
+    running = 0;
     return pthread_join(netlink_thread, 0);
 }
 
@@ -146,11 +145,18 @@ int open_netlink_socket()
         return -1;
     }
 
+    struct timeval timeout;
+    timeout.tv_sec = 0;
+    timeout.tv_usec = 500 * USECS_PER_MSEC;
+
+    if(setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&timeout, sizeof(timeout)) < 0)
+        ERROR_MSG("setsockopt failed");
+
     // Make the nladdr structure to use for the netlink structure
     struct sockaddr_nl nladdr;
     memset(&nladdr, 0, sizeof(nladdr));
     nladdr.nl_family = AF_NETLINK;
-    nladdr.nl_pid    = 0;
+    nladdr.nl_pid = 0;
     nladdr.nl_groups = RTMGRP_LINK | RTMGRP_IPV4_IFADDR | RTMGRP_IPV4_ROUTE;
 
     int result;
@@ -188,7 +194,8 @@ int handle_netlink_message(const char* msg, int msg_len)
                 if(ife->state != INIT_INACTIVE) {
                     change_interface_state(ife, INACTIVE);
                 }
-            } else {
+            }
+            else {
                 int priority = get_interface_priority(device);
                 if(priority >= 0) {
                     ife = alloc_interface(get_unique_id());
@@ -209,14 +216,14 @@ int handle_netlink_message(const char* msg, int msg_len)
                 struct rtattr *rth = IFA_RTA(ifa);
                 int rth_len;
 
-                for(rth_len = IFA_PAYLOAD(nh); rth_len && RTA_OK(rth, rth_len); 
+                for(rth_len = IFA_PAYLOAD(nh); rth_len && RTA_OK(rth, rth_len);
                     rth = RTA_NEXT(rth, rth_len)) {
-                        if(rth->rta_type == IFA_LOCAL) {
-                            // Copy the new IP address if it appears valid (non-zero)
-                            uint32_t new_ip = *(uint32_t *)RTA_DATA(rth);
-                            if(new_ip != 0)
-                                ife->public_ip.s_addr = new_ip;
-                        }
+                    if(rth->rta_type == IFA_LOCAL) {
+                        // Copy the new IP address if it appears valid (non-zero)
+                        uint32_t new_ip = *(uint32_t *)RTA_DATA(rth);
+                        if(new_ip != 0)
+                            ife->public_ip.s_addr = new_ip;
+                    }
                 }
 
                 read_network_name(ife->name, ife->network, sizeof(ife->network));
@@ -225,7 +232,8 @@ int handle_netlink_message(const char* msg, int msg_len)
             }
 
             release_write_lock(&interface_list_lock);
-        } else if(nh->nlmsg_type == RTM_DELADDR) {
+        }
+        else if(nh->nlmsg_type == RTM_DELADDR) {
             struct ifaddrmsg* ifa = (struct ifaddrmsg *)NLMSG_DATA(nh);
 
             DEBUG_MSG("Received RTM_DELADDR for device %d", ifa->ifa_index);
@@ -234,7 +242,8 @@ int handle_netlink_message(const char* msg, int msg_len)
             if(ife)
                 change_interface_state(ife, INACTIVE);
             release_read_lock(&interface_list_lock);
-        } else if(nh->nlmsg_type == RTM_DELLINK) {
+        }
+        else if(nh->nlmsg_type == RTM_DELLINK) {
             struct ifinfomsg* ifi = (struct ifinfomsg *)NLMSG_DATA(nh);
 
             DEBUG_MSG("Received RTM_DELLINK for device %d", ifi->ifi_index);
@@ -248,12 +257,13 @@ int handle_netlink_message(const char* msg, int msg_len)
             }
             release_write_lock(&interface_list_lock);
 
-        } else if(nh->nlmsg_type == RTM_NEWROUTE) {
+        }
+        else if(nh->nlmsg_type == RTM_NEWROUTE) {
             struct rtmsg *rtm = (struct rtmsg *)NLMSG_DATA(nh);
             struct rtattr *rta = RTM_RTA(rtm);
 
             if(rtm->rtm_family == AF_INET && rtm->rtm_table == RT_TABLE_MAIN) {
-                struct in_addr gwaddr = {.s_addr = 0};
+                struct in_addr gwaddr = { .s_addr = 0 };
                 int ifindex = 0;
 
                 int dst_set = 0;
@@ -265,25 +275,25 @@ int handle_netlink_message(const char* msg, int msg_len)
                 int rta_len;
                 for(rta_len = RTM_PAYLOAD(nh); rta_len > 0 && RTA_OK(rta, rta_len);
                     rta = RTA_NEXT(rta, rta_len)) {
-                        switch(rta->rta_type) {
-                        case RTA_GATEWAY:
-                            memcpy(&gwaddr, RTA_DATA(rta), sizeof(gwaddr));
-                            break;
-                        case RTA_OIF:
-                            ifindex = *((int *)RTA_DATA(rta));
-                            ifindex_set = 1;
-                            break;
-                        case RTA_DST:
-                            memcpy(&dst, RTA_DATA(rta), sizeof(uint32_t));
-                            dst_set = 1;
-                            break;
-                        case RTA_PRIORITY:
-                            memcpy(&metric, RTA_DATA(rta), sizeof(uint32_t));
-                            metric_set = 1;
-                            break;
-                        default:
-                            break;
-                        }
+                    switch(rta->rta_type) {
+                    case RTA_GATEWAY:
+                        memcpy(&gwaddr, RTA_DATA(rta), sizeof(gwaddr));
+                        break;
+                    case RTA_OIF:
+                        ifindex = *((int *)RTA_DATA(rta));
+                        ifindex_set = 1;
+                        break;
+                    case RTA_DST:
+                        memcpy(&dst, RTA_DATA(rta), sizeof(uint32_t));
+                        dst_set = 1;
+                        break;
+                    case RTA_PRIORITY:
+                        memcpy(&metric, RTA_DATA(rta), sizeof(uint32_t));
+                        metric_set = 1;
+                        break;
+                    default:
+                        break;
+                    }
                 }
                 if(ifindex_set) {
                     obtain_read_lock(&interface_list_lock);
@@ -301,35 +311,36 @@ int handle_netlink_message(const char* msg, int msg_len)
                     release_read_lock(&interface_list_lock);
                 }
             }
-        } else if(nh->nlmsg_type == RTM_DELROUTE) {
+        }
+        else if(nh->nlmsg_type == RTM_DELROUTE) {
             struct rtmsg *rtm = (struct rtmsg *)NLMSG_DATA(nh);
             struct rtattr *rta = RTM_RTA(rtm);
 
             if(rtm->rtm_family == AF_INET && rtm->rtm_table == RT_TABLE_MAIN) {
-                struct in_addr dstaddr = {.s_addr = 0};
+                struct in_addr dstaddr = { .s_addr = 0 };
                 int ifindex = 0;
                 int ifindex_set = 0;
 
                 int rta_len;
                 for(rta_len = RTM_PAYLOAD(nh); rta_len > 0 && RTA_OK(rta, rta_len);
                     rta = RTA_NEXT(rta, rta_len)) {
-                        switch(rta->rta_type) {
-                        case RTA_DST:
-                            memcpy(&dstaddr, RTA_DATA(rta), sizeof(dstaddr));
-                            break;
-                        case RTA_OIF:
-                            ifindex = *((int *)RTA_DATA(rta));
-                            ifindex_set = 1;
-                            break;
-                        default:
-                            break;
-                        }
+                    switch(rta->rta_type) {
+                    case RTA_DST:
+                        memcpy(&dstaddr, RTA_DATA(rta), sizeof(dstaddr));
+                        break;
+                    case RTA_OIF:
+                        ifindex = *((int *)RTA_DATA(rta));
+                        ifindex_set = 1;
+                        break;
+                    default:
+                        break;
+                    }
                 }
 
                 /* If a default route for one of our slave devices was deleted,
                 * then this is a signal that the interface should be marked
-                * INACTIVE. 
-                * 
+                * INACTIVE.
+                *
                 * For anything other than a default route, dstaddr will be set
                 * to a non-zero value. */
                 if(ifindex_set && dstaddr.s_addr == 0) {
@@ -358,9 +369,6 @@ int handle_netlink_message(const char* msg, int msg_len)
     return 0;
 }
 
-#endif /* GATEWAY */
-
-
 
 /*
 * The network name is a descriptive name for an interface such as "verizon" or
@@ -370,8 +378,8 @@ int handle_netlink_message(const char* msg, int msg_len)
 * /var/lib/wirover/networks).  If successful, the network name is copied into
 * dest, otherwise ifname is copied into dest.
 */
-void read_network_name(const char * __restrict__ ifname, 
-                       char * __restrict__ dest, int destlen)
+void read_network_name(const char * __restrict__ ifname,
+    char * __restrict__ dest, int destlen)
 {
     char filename[256];
     snprintf(filename, sizeof(filename), NETWORK_NAME_PATH "/%s", ifname);
@@ -398,7 +406,6 @@ void read_network_name(const char * __restrict__ ifname,
     }
 }
 
-#ifdef GATEWAY
 static void* netlink_thread_func(void* arg)
 {
     int sockfd;
@@ -417,33 +424,44 @@ static void* netlink_thread_func(void* arg)
 
     struct iovec iov;
     iov.iov_base = buffer;
-    iov.iov_len  = NETLINK_BUFFER_SIZE;
+    iov.iov_len = NETLINK_BUFFER_SIZE;
 
     struct sockaddr_nl sa;
     memset(&sa, 0, sizeof(sa));
     sa.nl_family = AF_NETLINK;
-    sa.nl_pid    = 0;
+    sa.nl_pid = 0;
     sa.nl_groups = 0;
 
     struct msghdr msg;
-    msg.msg_name       = &sa;
-    msg.msg_namelen    = sizeof(sa);
-    msg.msg_iov        = &iov;
-    msg.msg_iovlen     = 1;
-    msg.msg_control    = 0;
+    msg.msg_name = &sa;
+    msg.msg_namelen = sizeof(sa);
+    msg.msg_iov = &iov;
+    msg.msg_iovlen = 1;
+    msg.msg_control = 0;
     msg.msg_controllen = 0;
-    msg.msg_flags      = 0;
+    msg.msg_flags = 0;
 
-    while(1) {
+    while(running) {
         int length;
 
         length = recvmsg(sockfd, &msg, 0);
         if(length < 0) {
+            if(errno == EAGAIN) { continue; }
             ERROR_MSG("Receiving message failed");
-        } else {
+        }
+        else {
             handle_netlink_message(buffer, length);
         }
     }
+
+    obtain_write_lock(&interface_list_lock);
+    struct interface *current, *tmp;
+
+    DL_FOREACH_SAFE(interface_list, current, tmp) {
+        delete_interface(current);
+    }
+
+    release_write_lock(&interface_list_lock);
 
     close(sockfd);
     free(buffer);
@@ -462,7 +480,7 @@ static void delete_interface(struct interface* ife)
 {
     DEBUG_MSG("Deleting interface %s", ife->name);
     DL_DELETE(interface_list, ife);
-    free(ife);
+    free_interface(ife);
 }
 
 /*
@@ -502,7 +520,7 @@ static int update_interface_gateways()
         if(!gateway)
             continue;
 
-        uint32_t dest_ip    = (uint32_t)strtoul(dest, 0, 16);
+        uint32_t dest_ip = (uint32_t)strtoul(dest, 0, 16);
         uint32_t gateway_ip = (uint32_t)strtoul(gateway, 0, 16);
 
         struct interface *ife = find_interface_by_name(interface_list, device);
@@ -515,5 +533,4 @@ static int update_interface_gateways()
     fclose(file);
     return 0;
 }
-#endif /* GATEWAY */
 

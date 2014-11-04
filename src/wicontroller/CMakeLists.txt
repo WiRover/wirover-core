@@ -15,7 +15,7 @@ add_executable(wicontroller
 	${COMMON}/flow_table.c
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
-    ${COMMON}/netlink.c
+    ${COMMON}/headers.c
     ${COMMON}/ping.c
 	${COMMON}/remote_node.c
     ${COMMON}/rootchan.c
@@ -27,10 +27,10 @@ add_executable(wicontroller
     ${COMMON}/format.c
 	${COMMON}/packet_buffer.c
 	${COMMON}/util.c
-	${POLICY}/policyTable.c
+	${COMMON}/policy_table.c
 )
 
-target_link_libraries(wicontroller pthread config mysqlclient ssl crypto m)
+target_link_libraries(wicontroller pthread config mysqlclient ssl crypto m json)
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wicontroller DESTINATION /usr/bin)
 install(FILES wicontroller_upstart.conf DESTINATION /etc/init RENAME wicontroller.conf)
