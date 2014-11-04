@@ -5,6 +5,7 @@ add_executable(wigateway
     bandwidth.c
     contchan.c
     gps_handler.c
+	netlink.c
     ping.c
     arguments.c
 	select_interface.c
@@ -16,7 +17,6 @@ add_executable(wigateway
     ${COMMON}/headers.c
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
-    ${COMMON}/netlink.c
     ${COMMON}/ping.c
 	${COMMON}/remote_node.c
     ${COMMON}/rootchan.c

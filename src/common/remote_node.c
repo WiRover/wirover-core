@@ -4,9 +4,9 @@
 #include "config.h"
 #include "debug.h"
 #include "remote_node.h"
-#include "netlink.h"
 #include "packet_buffer.h"
 #include "utlist.h"
+#include "interface.h"
 #ifdef CONTROLLER
 #include "database.h"
 #endif

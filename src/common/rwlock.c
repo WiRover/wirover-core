@@ -2,7 +2,6 @@
 #include <pthread.h>
 
 #include "debug.h"
-#include "netlink.h"
 #include "rwlock.h"
 #include <execinfo.h>
 

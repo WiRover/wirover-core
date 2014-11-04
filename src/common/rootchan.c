@@ -12,7 +12,6 @@
 #include "configuration.h"
 #include "debug.h"
 #include "interface.h"
-#include "netlink.h"
 #include "remote_node.h"
 #include "rootchan.h"
 #include "rwlock.h"

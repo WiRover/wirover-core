@@ -23,6 +23,9 @@
 #include "util.h"
 #endif
 
+struct interface*   interface_list = 0;
+struct rwlock       interface_list_lock = RWLOCK_INITIALIZER;
+
 /*
 * ALLOC INTERFACE
 *

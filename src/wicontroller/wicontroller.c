@@ -14,7 +14,6 @@
 #include "debug.h"
 #include "ping.h"
 #include "policy_table.h"
-#include "netlink.h"
 #include "rootchan.h"
 #include "sockets.h"
 #include "status.h"

@@ -20,7 +20,6 @@
 #include "debug.h"
 #include "remote_node.h"
 #include "interface.h"
-#include "netlink.h"
 #include "ping.h"
 #include "rootchan.h"
 #include "rwlock.h"

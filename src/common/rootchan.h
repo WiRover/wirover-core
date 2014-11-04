@@ -8,7 +8,6 @@
 #include <linux/if_ether.h>
 
 #include "ipaddr.h"
-#include "netlink.h"
 #include "interface.h"
 
 #define RCHAN_CONNECT_TIMEOUT_SEC  5

@@ -16,7 +16,6 @@ add_executable(wicontroller
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
     ${COMMON}/headers.c
-    ${COMMON}/netlink.c
     ${COMMON}/ping.c
 	${COMMON}/remote_node.c
     ${COMMON}/rootchan.c
