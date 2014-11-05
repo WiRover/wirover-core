@@ -32,6 +32,9 @@ struct tunhdr {
     uint16_t    node_id;
     __be32      path_ack;
 
+    __be32      send_ts;
+    __be32      recv_ts;
+
 } __attribute__((__packed__));
 
 struct tunnel {
