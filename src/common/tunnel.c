@@ -33,24 +33,6 @@
 #include "util.h"
 
 static struct tunnel *tun = NULL;
-    
-/*
- * D U M P  T U N  H D R 
- *
- * Returns (void)
- */
-void dumpTunHdr(struct tunhdr *tun_hdr)
-{
-    DEBUG_MSG("TUN_HDR");
-    //printf("\tseq_no:       %u\n", ntohl(tun_hdr->seq_no));
-    //printf("\tsend_ts:      %u\n", ntohl(tun_hdr->send_ts));
-    //printf("\trecv_ts:      %u\n", ntohl(tun_hdr->recv_ts));
-    //printf("\tservice:      %u\n", ntohl(tun_hdr->service));
-    //printf("\tclient_id:    %u\n", ntohs(tun_hdr->client_id));
-    //printf("\tnode_id:      %u\n", ntohs(tun_hdr->node_id));
-    //printf("\tlink_id:      %u\n", ntohs(tun_hdr->link_id));
-    //printf("\tlocal_seq_no: %u\n\n", ntohs(tun_hdr->local_seq_no));
-} // End function void dumpTunHdr()
 
 /*
  * G E T  T U N N E L 
@@ -272,11 +254,6 @@ int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packe
     if(update_ife != NULL){
         tun_hdr.link_seq = htonl(update_ife->local_seq++);
         tun_hdr.path_ack = htonl(update_ife->remote_seq);
-
-        struct timeval tv;
-        gettimeofday(&tv,NULL);
-        tun_hdr.send_ts = htonl(tv.tv_sec * USEC_PER_SEC + tv.tv_usec);
-        tun_hdr.recv_ts = htonl(update_ife->rx_time.tv_sec * USEC_PER_SEC + update_ife->rx_time.tv_usec);
     }
 
     memcpy(dst_packet, &tun_hdr, sizeof(struct tunhdr));
