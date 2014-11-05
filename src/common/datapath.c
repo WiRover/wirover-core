@@ -539,15 +539,18 @@ int send_nat_packet(char *orig_packet, int orig_size, struct interface *src_ife)
 int send_ife_packet(char *packet, int size, struct interface *ife, int sockfd, struct sockaddr * dst)
 {
     if(sockfd == 0) {
-        DEBUG_MSG("Tried to send packet over bad sockfd on interface %s", ife->name);
+        if(ife != NULL)
+            DEBUG_MSG("Tried to send packet over bad sockfd on interface %s", ife->name);
         return FAILURE;
     }
     if((sendto(sockfd, packet, size, 0, (struct sockaddr *)dst, sizeof(struct sockaddr))) < 0)
     {
-        ERROR_MSG("sendto failed fd %d %d (%s),  dst: %s, new_size: %d", sockfd, ife->sockfd, ife->name, inet_ntoa(((struct sockaddr_in*)dst)->sin_addr), size);
+        if(ife != NULL)
+            ERROR_MSG("sendto failed fd %d (%s),  dst: %s, new_size: %d", sockfd, ife->name, inet_ntoa(((struct sockaddr_in*)dst)->sin_addr), size);
 
         return FAILURE;
     }
-    ife->tx_bytes += size;
+    if(ife != NULL)
+        ife->tx_bytes += size;
     return SUCCESS;
 }
