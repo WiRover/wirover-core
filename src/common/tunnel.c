@@ -33,24 +33,6 @@
 #include "util.h"
 
 static struct tunnel *tun = NULL;
-    
-/*
- * D U M P  T U N  H D R 
- *
- * Returns (void)
- */
-void dumpTunHdr(struct tunhdr *tun_hdr)
-{
-    DEBUG_MSG("TUN_HDR");
-    //printf("\tseq_no:       %u\n", ntohl(tun_hdr->seq_no));
-    //printf("\tsend_ts:      %u\n", ntohl(tun_hdr->send_ts));
-    //printf("\trecv_ts:      %u\n", ntohl(tun_hdr->recv_ts));
-    //printf("\tservice:      %u\n", ntohl(tun_hdr->service));
-    //printf("\tclient_id:    %u\n", ntohs(tun_hdr->client_id));
-    //printf("\tnode_id:      %u\n", ntohs(tun_hdr->node_id));
-    //printf("\tlink_id:      %u\n", ntohs(tun_hdr->link_id));
-    //printf("\tlocal_seq_no: %u\n\n", ntohs(tun_hdr->local_seq_no));
-} // End function void dumpTunHdr()
 
 /*
  * G E T  T U N N E L 
@@ -58,8 +40,7 @@ void dumpTunHdr(struct tunhdr *tun_hdr)
 struct tunnel *getTunnel()
 {
     return tun;
-} // End functionstruct tunnel *getTunnel()
-
+}
 
 /*
  * T U N N E L  A L L O C
@@ -114,7 +95,7 @@ static int tunnelAlloc(struct tunnel *tun, uint32_t netmask, int mtu)
 
     ifr.ifr_addr.sa_family = AF_INET;
     strncpy(ifr.ifr_name, tun->name, sizeof(ifr.ifr_name));
-    ifr.ifr_mtu = mtu; 
+    ifr.ifr_mtu = mtu;
     
     if( (err = ioctl(sock, SIOCSIFMTU, &ifr)) < 0) 
     {
@@ -254,7 +235,7 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
 } // End function tunnelCreate()
 
 int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packet, 
-    struct interface *src_ife, struct interface *update_ife, uint32_t *global_seq)
+    struct interface *src_ife, struct interface *update_ife, uint32_t *global_seq, uint32_t *remote_ts)
 {
     // Getting a sequence number should be done as close to sending as possible
     struct tunhdr tun_hdr;
@@ -275,9 +256,11 @@ int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packe
 
         struct timeval tv;
         gettimeofday(&tv,NULL);
-        tun_hdr.send_ts = htonl(tv.tv_sec * USEC_PER_SEC + tv.tv_usec);
-        tun_hdr.recv_ts = htonl(update_ife->rx_time.tv_sec * USEC_PER_SEC + update_ife->rx_time.tv_usec);
+        tun_hdr.local_ts = htonl(tv.tv_sec * USEC_PER_SEC + tv.tv_usec);
     }
+
+    if(remote_ts != NULL)
+        tun_hdr.remote_ts = htonl(*remote_ts);
 
     memcpy(dst_packet, &tun_hdr, sizeof(struct tunhdr));
     memcpy(&dst_packet[sizeof(struct tunhdr)], orig_packet, size);

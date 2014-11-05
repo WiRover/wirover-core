@@ -258,7 +258,7 @@ static int send_response(struct interface *local_ife, const struct remote_node *
     } else {
         memset(ping->digest, 0, sizeof(ping->digest));
     }
-    if(send_sock_packet(TUNTYPE_PING, response_buffer, MIN_PING_PACKET_SIZE, interface_list, from, NULL, NULL) != SUCCESS)
+    if(send_encap_packet_dst_noinfo(TUNTYPE_PING, response_buffer, MIN_PING_PACKET_SIZE, interface_list, from) != SUCCESS)
     {
         return FAILURE;
     }
@@ -270,7 +270,7 @@ static int send_response(struct interface *local_ife, const struct remote_node *
     } else {
         memset(ping->digest, 0, sizeof(ping->digest));
     }
-    return send_sock_packet(TUNTYPE_PING, response_buffer, mtu, interface_list, from, NULL, NULL);
+    return send_encap_packet_dst_noinfo(TUNTYPE_PING, response_buffer, mtu, interface_list, from);
     //return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
 }
 
