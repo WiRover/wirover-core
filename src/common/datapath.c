@@ -223,18 +223,29 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     ife->packets_since_ack = 0;
     change_interface_state(ife, ACTIVE);
 
+    unsigned int h_header_len = ntohs(((struct tunhdr *)buffer)->header_len);
+
+    if(h_header_len == 0)
+        h_header_len = sizeof(struct tunhdr);
+
     // Get the tunhdr (should be the first n bytes in the packet)
     // store network format in temporary struct
-    memcpy(&n_tun_hdr, buffer, sizeof(struct tunhdr));
+    memcpy(&n_tun_hdr, buffer, h_header_len);
 
     // Copy temporary to host format
     unsigned int h_global_seq = ntohl(n_tun_hdr.global_seq);
     unsigned int h_link_seq = ntohl(n_tun_hdr.link_seq);
     unsigned int h_path_ack = ntohl(n_tun_hdr.path_ack);
-    unsigned int h_header_len = ntohs(n_tun_hdr.header_len);
+    unsigned int h_remote_ts = ntohl(n_tun_hdr.remote_ts);
+    unsigned int h_local_ts = ntohl(n_tun_hdr.local_ts);
 
-    if(h_header_len == 0)
-        h_header_len = sizeof(struct tunhdr);
+    //Remote_ts is the remote send time in our local clock domain
+    if(h_remote_ts != 0) {
+        uint32_t recv_ts = timeval_to_usec(&arrival_time);
+        long diff = (long)recv_ts - (long)h_remote_ts;
+
+        ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
+    }
 
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
@@ -252,7 +263,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     {
         DEBUG_MSG("Sending error for bad node");
         char error[] = { TUNERROR_BAD_NODE };
-        return send_sock_packet(TUNTYPE_ERROR, error, 1, ife, &from, NULL, NULL);
+        return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, &from);
     }
     
     if(pb_add_seq_num(gw->rec_seq_buffer, h_global_seq) == DUPLICATE) {
@@ -266,7 +277,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     {
         DEBUG_MSG("Sending error for bad link %d", link_id);
         char error[] = { TUNERROR_BAD_LINK };
-        return send_sock_packet(TUNTYPE_ERROR, error, 1, ife, &from, NULL, NULL);
+        return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, &from);
     }
 
     struct interface *update_ife;
@@ -301,7 +312,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     }
 
     //Send an ack and return if the packet was only requesting an ack
-    send_ife_packet(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife);
+    send_encap_packet_ife(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife, &h_local_ts);
     if((n_tun_hdr.type == TUNTYPE_ACKREQ)){
         return SUCCESS;
     }
@@ -419,7 +430,7 @@ int send_packet(char *orig_packet, int orig_size)
             ftd->remote_link_id = dst_ife->index;
             ftd->remote_node_id = dst_ife->node_id;
         }
-        return send_ife_packet(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife);
+        return send_encap_packet_ife(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife, NULL);
     }
 
     if((ftd->egress_action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
@@ -432,7 +443,7 @@ int send_packet(char *orig_packet, int orig_size)
     return FAILURE;
 }
 
-int send_ife_packet(uint8_t type, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife)
+int send_encap_packet_ife(uint8_t type, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife, uint32_t *remote_ts)
 {
     if(dst_ife == NULL || src_ife == NULL)
     {
@@ -465,11 +476,16 @@ int send_ife_packet(uint8_t type, char *packet, int size, uint16_t node_id, stru
         pb_add_packet(&update_ife->rt_buffer, update_ife->local_seq, packet, size);
         release_write_lock(&update_ife->rt_buffer.rwlock);
     }
-    return send_sock_packet(type, packet, size, src_ife, &dst, update_ife, &remote_node->global_seq);
+    return send_encap_packet_dst(type, packet, size, src_ife, &dst, update_ife, &remote_node->global_seq, remote_ts);
 }
 
-int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src_ife,
-    struct sockaddr_storage *dst, struct interface *update_ife, uint32_t *global_seq)
+int send_encap_packet_dst_noinfo(uint8_t type, char *packet, int size, struct interface *src_ife,
+    struct sockaddr_storage *dst)
+{
+    return send_encap_packet_dst(type, packet, size, src_ife, dst, NULL, NULL, NULL);
+}
+int send_encap_packet_dst(uint8_t type, char *packet, int size, struct interface *src_ife,
+    struct sockaddr_storage *dst, struct interface *update_ife, uint32_t *global_seq, uint32_t *remote_ts)
 {
     int sockfd = src_ife->sockfd;
     int rtn = 0;
@@ -479,7 +495,7 @@ int send_sock_packet(uint8_t type, char *packet, int size, struct interface *src
         return FAILURE;
     }
     char *new_packet = (char *)malloc(size + sizeof(struct tunhdr));
-    int new_size = add_tunnel_header(type, packet, size, new_packet, src_ife, update_ife, global_seq);
+    int new_size = add_tunnel_header(type, packet, size, new_packet, src_ife, update_ife, global_seq, remote_ts);
 
     if( (rtn = sendto(sockfd, new_packet, new_size, 0, (struct sockaddr *)dst, sizeof(struct sockaddr))) < 0)
     {

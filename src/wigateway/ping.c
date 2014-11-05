@@ -130,7 +130,7 @@ int send_ping(struct interface* ife)
     pkt->receiver_ts = 0;
     fill_ping_digest(pkt, buffer, send_size, private_key);
 
-    if(send_ife_packet(TUNTYPE_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife())) {
+    if(send_encap_packet_ife(TUNTYPE_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife(), NULL)) {
         /* We get an error ENETUNREACH if we try pinging out an interface which
         * does not have an IP address.  That case is not interesting, so we
         * suppress the error message. */
@@ -142,7 +142,7 @@ int send_ping(struct interface* ife)
     send_size = mtu;
     fill_ping_digest(pkt, buffer, send_size, private_key);
     //Send a tailgate packet
-    if(send_ife_packet(TUNTYPE_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife())) {
+    if(send_encap_packet_ife(TUNTYPE_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife(), NULL)) {
         /* We get an error ENETUNREACH if we try pinging out an interface which
         * does not have an IP address.  That case is not interesting, so we
         * suppress the error message. */
@@ -203,7 +203,7 @@ void* ping_thread_func(void* arg)
         while(inactive_interface)
         {
             if(inactive_interface->state != ACTIVE && timeval_diff(&now, &inactive_interface->tx_time) >= stall_retry_interval){
-                send_ife_packet(TUNTYPE_ACKREQ, "", 0, get_unique_id(), inactive_interface, get_controller_ife());
+                send_encap_packet_ife(TUNTYPE_ACKREQ, "", 0, get_unique_id(), inactive_interface, get_controller_ife(), NULL);
             }
             inactive_interface = inactive_interface->next;
         }
@@ -308,7 +308,6 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
     // If the ping response is older than the ping interval we ignore it.
     if(diff < (get_ping_interval() * USEC_PER_SEC)) {
         ife->est_uplink_bw = ewma_update(ife->est_uplink_bw, (double)int_to_bw(ntohl(pkt->est_bw)), BW_EWMA_WEIGHT);
-        ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
 
         ife->last_ping_success = recv_time;
         ife->last_ping_seq_no = ntohl(pkt->seq_no);
@@ -354,7 +353,7 @@ static int send_second_response(struct interface *ife,
     }
 
     fill_ping_digest(ping, response, send_size, private_key);
-    int result = send_ife_packet(TUNTYPE_PING, response, send_size, get_unique_id(), ife, dst_ife);
+    int result = send_encap_packet_ife(TUNTYPE_PING, response, send_size, get_unique_id(), ife, dst_ife, NULL);
     //int result = sendto(sockfd, response, send_size, 0, to, to_len);
 
     free(response);
