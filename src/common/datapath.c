@@ -36,7 +36,7 @@ int handlePackets();
 
 static int                  running = 0;
 static pthread_t            data_thread;
-struct tunnel *tun;
+struct tunnel *             tun;
 static unsigned int         tunnel_mtu = 0;
 static unsigned int         outbound_mtu = 0;
 static FILE *               packet_log_file;
@@ -105,9 +105,7 @@ static int nat_receive(int tunfd, int sockfd) {
 
 
     struct iphdr * ip_hdr = (struct iphdr *)buffer;
-    inet_pton(AF_INET, "172.16.0.2", &ip_hdr->daddr);
-    char ip_str[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET, &ip_hdr->daddr, ip_str, sizeof(ip_str));
+    ip_hdr->daddr = tun->n_private_ip;
     compute_ip_checksum(ip_hdr);
     if(ip_hdr->protocol == 6) { 
         compute_tcp_checksum(&buffer[sizeof(struct iphdr)], bufSize - sizeof(struct iphdr), ip_hdr->saddr, ip_hdr->daddr);
@@ -487,24 +485,13 @@ int send_encap_packet_dst_noinfo(uint8_t type, char *packet, int size, struct in
 int send_encap_packet_dst(uint8_t type, char *packet, int size, struct interface *src_ife,
     struct sockaddr_storage *dst, struct interface *update_ife, uint32_t *global_seq, uint32_t *remote_ts)
 {
-    int sockfd = src_ife->sockfd;
-    int rtn = 0;
-    if ( sockfd == 0 )
-    {
-        DEBUG_MSG("Tried to send packet over bad sockfd for interface %s", src_ife->name);
-        return FAILURE;
-    }
-    char *new_packet = (char *)malloc(size + sizeof(struct tunhdr));
+    int output = FAILURE;
+    char new_packet[size + sizeof(struct tunhdr)];
+    memset(new_packet, 0, sizeof(new_packet));
     int new_size = add_tunnel_header(type, packet, size, new_packet, src_ife, update_ife, global_seq, remote_ts);
-
-    if( (rtn = sendto(sockfd, new_packet, new_size, 0, (struct sockaddr *)dst, sizeof(struct sockaddr))) < 0)
-    {
-        ERROR_MSG("sendto failed (%d), fd %d (%s),  dst: %s, new_size: %d", rtn, sockfd, src_ife->name, inet_ntoa(((struct sockaddr_in*)dst)->sin_addr), new_size);
-
-        return FAILURE;
-    }
+    output = send_ife_packet(new_packet, new_size, update_ife, src_ife->sockfd, (struct sockaddr *)dst);
+    if(output == FAILURE) { return FAILURE; }
     src_ife->packets_since_ack++;
-    src_ife->tx_bytes += new_size;
 #ifdef GATEWAY
     struct timeval tv;
     gettimeofday(&tv, NULL);
@@ -517,7 +504,6 @@ int send_encap_packet_dst(uint8_t type, char *packet, int size, struct interface
     }
 #endif
     gettimeofday(&src_ife->tx_time, NULL);
-    free(new_packet);
     return SUCCESS;
 }
 
@@ -541,18 +527,27 @@ int send_nat_packet(char *orig_packet, int orig_size, struct interface *src_ife)
         ((struct udphdr *)new_packet)->check = 0;
     }
 
-    if(sockfd <= 0) { return FAILURE; }
-
     //Determine the destination
     struct sockaddr_in dst;
     memset(&dst, 0, sizeof(struct sockaddr_in));
     dst.sin_family = AF_INET;
     dst.sin_addr.s_addr = ((struct iphdr*)orig_packet)->daddr;
 
-    if( (sendto(sockfd, new_packet, new_size, 0, (struct sockaddr *)&dst, sizeof(struct sockaddr))) < 0)
-    {
-        ERROR_MSG("Failed to send NAT packet on %s", src_ife->name);        
+    return send_ife_packet(new_packet, new_size, src_ife, sockfd, (struct sockaddr *)&dst);
+}
+
+int send_ife_packet(char *packet, int size, struct interface *ife, int sockfd, struct sockaddr * dst)
+{
+    if(sockfd == 0) {
+        DEBUG_MSG("Tried to send packet over bad sockfd on interface %s", ife->name);
         return FAILURE;
     }
+    if((sendto(sockfd, packet, size, 0, (struct sockaddr *)dst, sizeof(struct sockaddr))) < 0)
+    {
+        ERROR_MSG("sendto failed fd %d %d (%s),  dst: %s, new_size: %d", sockfd, ife->sockfd, ife->name, inet_ntoa(((struct sockaddr_in*)dst)->sin_addr), size);
+
+        return FAILURE;
+    }
+    ife->tx_bytes += size;
     return SUCCESS;
 }

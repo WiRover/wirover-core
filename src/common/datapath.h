@@ -12,5 +12,6 @@ int send_encap_packet_dst(uint8_t type, char *packet, int size, struct interface
 int send_encap_packet_dst_noinfo(uint8_t type, char *packet, int size, struct interface *src_ife,
     struct sockaddr_storage *dst);
 int send_nat_packet(char *orig_packet, int orig_size, struct interface *src_ife);
+int send_ife_packet(char *packet, int size, struct interface *ife, int sockfd, struct sockaddr *dst);
 
 #endif
