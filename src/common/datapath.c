@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <errno.h>
 #include <linux/if_ether.h>
 #include <sys/ioctl.h>
@@ -23,6 +24,7 @@
 #include "timing.h"
 #include "tunnel.h"
 #include "ping.h"
+#include "rateinfer.h"
 #include "remote_node.h"
 
 #ifndef SIOCGSTAMP
@@ -238,8 +240,8 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     unsigned int h_local_ts = ntohl(n_tun_hdr.local_ts);
 
     //Remote_ts is the remote send time in our local clock domain
+    uint32_t recv_ts = timeval_to_usec(&arrival_time);
     if(h_remote_ts != 0) {
-        uint32_t recv_ts = timeval_to_usec(&arrival_time);
         long diff = (long)recv_ts - (long)h_remote_ts;
 
         ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
@@ -293,6 +295,15 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     pb_free_packets(&update_ife->rt_buffer, h_path_ack);
     release_write_lock(&update_ife->rt_buffer.rwlock);
 
+    DEBUG_MSG("Receive: %s,%u,%u,%u,%u",
+            update_ife->name,
+            recv_ts,
+            h_local_ts,
+            h_link_seq,
+            bufSize);
+
+    update_burst(&update_ife->burst, recv_ts, h_local_ts, h_link_seq, bufSize);
+    
     //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
     if((n_tun_hdr.type == TUNTYPE_ACK)) {
         return SUCCESS;

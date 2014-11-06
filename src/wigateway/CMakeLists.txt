@@ -18,6 +18,7 @@ add_executable(wigateway
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
     ${COMMON}/ping.c
+    ${COMMON}/rateinfer.c
 	${COMMON}/remote_node.c
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c

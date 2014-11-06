@@ -17,6 +17,7 @@
 #define TUNTYPE_ACK         0x03
 #define TUNTYPE_ACKREQ      0x04
 #define TUNTYPE_ERROR       0x05
+#define TUNTYPE_RXREPORT    0x06
 
 #define TUNERROR_BAD_NODE   0x01
 #define TUNERROR_BAD_LINK   0x02

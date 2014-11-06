@@ -17,6 +17,7 @@ add_executable(wicontroller
     ${COMMON}/ipaddr.c
     ${COMMON}/headers.c
     ${COMMON}/ping.c
+    ${COMMON}/rateinfer.c
 	${COMMON}/remote_node.c
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c

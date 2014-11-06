@@ -108,7 +108,7 @@ static int configure_socket(int sock_type, int proto, const char * ife_name, int
             close(sockfd);
             return FAILURE;
         }
-        DEBUG_MSG("Bound to device");
+        DEBUG_MSG("Bound socket %d to device %s", sockfd, ife_name);
     }
     
     struct sockaddr_in myAddr;
