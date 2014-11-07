@@ -174,7 +174,7 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
     int lease_obtained = _all_ife_rchan_message(wiroot_ip, wiroot_port, buffer, offset,
         (char *)&response, sizeof(struct rchan_response));
 
-    if(!lease_obtained) {
+    if(lease_obtained == FAILURE) {
         DEBUG_MSG("Failed to obtain lease");
         goto free_and_err_out;
     }
@@ -217,18 +217,18 @@ static int _all_ife_rchan_message(const char *wiroot_ip, unsigned short wiroot_p
 
     if(num_ifaces <= 0) {
         DEBUG_MSG("Cannot request lease, no interfaces available");
-        return 0;
+        return FAILURE;
     }
 
     int i;
-    int lease_obtained = 0;
+    int rtn = FAILURE;
 
     for(i = 0; i < num_ifaces; i++) {
         const char *ifname = iface_list[i].name;
 
         if(_rchan_message(wiroot_ip, wiroot_port, request, request_len, 
-            ifname, response, response_len) == 0) {
-                lease_obtained = 1;
+            ifname, response, response_len) == SUCCESS) {
+                rtn = SUCCESS;
                 break;
         }
     }
@@ -236,7 +236,7 @@ static int _all_ife_rchan_message(const char *wiroot_ip, unsigned short wiroot_p
     if(iface_list) {
         free(iface_list);
     }
-    return lease_obtained;
+    return rtn;
 }
 /*
 * Attempt to obtain a lease from the root server.  This will bind to the given
@@ -259,6 +259,11 @@ static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
     if(sockfd == -1) {
         DEBUG_MSG("failed to connect to wiroot server");
         goto err_out;
+    }
+
+    if(setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(struct timeval))) {
+        ERROR_MSG("Could not set timeout");
+        goto close_and_err_out;
     }
 
     result = send(sockfd, request, request_len, 0);

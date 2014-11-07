@@ -123,7 +123,7 @@ int main(int argc, char* argv[])
     while(1) {
         if(state == GATEWAY_START) {
             result = register_gateway(&lease, wiroot_address, wiroot_port);
-            if(result == 0) {
+            if(result == SUCCESS) {
                 if(lease.unique_id == 0) {
                     DEBUG_MSG("Lease request rejected, will retry in %u seconds",
                         lease_retry_delay);
