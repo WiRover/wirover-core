@@ -458,6 +458,10 @@ static void handle_access_request(struct client *client, const char *packet, int
     char pub_key[1024];
     result = db_get_pub_key(*remote_id, pub_key);
     if(result != FAILURE){
+        if(result == 0) {
+            pub_key[0] = -1;
+            result = 1;
+        }
         int bytes = send(client->fd, pub_key, result, 0);
         if(bytes < result) {
             DEBUG_MSG("Failed to send lease response");
