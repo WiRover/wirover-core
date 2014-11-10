@@ -180,6 +180,8 @@ int main(int argc, char* argv[])
                     exit(1);
                 }
 
+                tcp_mtu_clamp();
+
                 if(start_data_thread(getTunnel()) == FAILURE) {
                     DEBUG_MSG("Failed to start data thread");
                     exit(1);
@@ -362,6 +364,7 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
 
 static void shutdown_handler(int signo)
 {
+    remove_tcp_mtu_clamp();
     stop_netlink_thread();
     send_shutdown_notification();
     exit(0);
