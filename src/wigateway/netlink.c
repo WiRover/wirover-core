@@ -446,7 +446,7 @@ static void* netlink_thread_func(void* arg)
 
         length = recvmsg(sockfd, &msg, 0);
         if(length < 0) {
-            if(errno == EAGAIN) { continue; }
+            if(errno == EAGAIN || errno == EINTR) { continue; }
             ERROR_MSG("Receiving message failed");
         }
         else {

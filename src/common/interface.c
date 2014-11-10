@@ -157,10 +157,10 @@ int interface_bind(struct interface *ife, int bind_port)
 void free_interface(struct interface* ife)
 {
     if(ife) {
-        free(ife);
 #ifdef GATEWAY
-		remove_drop_tcp_rst(ife->name);
+        remove_drop_tcp_rst(ife->name);
 #endif
+        free(ife);
     }
 }
 

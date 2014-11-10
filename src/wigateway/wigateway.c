@@ -123,7 +123,7 @@ int main(int argc, char* argv[])
     while(1) {
         if(state == GATEWAY_START) {
             result = register_gateway(&lease, wiroot_address, wiroot_port);
-            if(result == 0) {
+            if(result == SUCCESS) {
                 if(lease.unique_id == 0) {
                     DEBUG_MSG("Lease request rejected, will retry in %u seconds",
                         lease_retry_delay);
@@ -179,6 +179,8 @@ int main(int argc, char* argv[])
                     DEBUG_MSG("Failed to bring up tunnel interface");
                     exit(1);
                 }
+
+                tcp_mtu_clamp();
 
                 if(start_data_thread(getTunnel()) == FAILURE) {
                     DEBUG_MSG("Failed to start data thread");
@@ -362,6 +364,7 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
 
 static void shutdown_handler(int signo)
 {
+    remove_tcp_mtu_clamp();
     stop_netlink_thread();
     send_shutdown_notification();
     exit(0);
