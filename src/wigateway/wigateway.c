@@ -181,6 +181,7 @@ int main(int argc, char* argv[])
                 }
 
                 tcp_mtu_clamp();
+                masquerade("tun0");
 
                 if(start_data_thread(getTunnel()) == FAILURE) {
                     DEBUG_MSG("Failed to start data thread");
@@ -365,6 +366,7 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
 static void shutdown_handler(int signo)
 {
     remove_tcp_mtu_clamp();
+    remove_masquerade("tun0");
     stop_netlink_thread();
     send_shutdown_notification();
     exit(0);

@@ -21,6 +21,7 @@
 #include "config.h"
 #include "timing.h"
 #include "tunnel.h"
+#include "util.h"
 
 const int           CLEANUP_INTERVAL = 5; // seconds between calling remove_idle_clients()
 const unsigned int  CLIENT_TIMEOUT = 5;
@@ -35,6 +36,7 @@ static unsigned short bw_ext_port = DEFAULT_BANDWIDTH_PORT;
 
 static void server_loop(int cchan_sock);
 static int request_lease(const struct lease_info *old_lease, struct lease_info *new_lease);
+static void shutdown_handler(int signo);
 
 static struct lease_info lease;
 static time_t lease_renewal_time = 0;
@@ -44,6 +46,8 @@ int main(int argc, char* argv[])
     int result;
 
     signal(SIGSEGV, segfault_handler);
+    signal(SIGINT, shutdown_handler);
+    signal(SIGTERM, shutdown_handler);
 
     printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR, 
         WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);
@@ -87,6 +91,8 @@ int main(int argc, char* argv[])
     if(result == -1) {
         DEBUG_MSG("Fatal error: failed to bring up tunnel interface");
     }
+
+    masquerade("eth0");
 
     int cchan_sock = tcp_passive_open(control_port, SOMAXCONN);
     if(cchan_sock == -1) {
@@ -249,6 +255,12 @@ static void server_loop(int cchan_sock)
             }
         }
     }
+}
+
+static void shutdown_handler(int signo)
+{
+    remove_masquerade("eth0");
+    exit(0);
 }
 
 /*
