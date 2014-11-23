@@ -25,7 +25,8 @@ add_executable(wigateway
     ${COMMON}/sockets.c
     ${COMMON}/status.c
     ${COMMON}/timing.c
-	${COMMON}/packet_buffer
+	${COMMON}/packet_buffer.c
+	${COMMON}/packet.c
     ${COMMON}/tunnel.c
     ${COMMON}/callback.c
     ${COMMON}/format.c

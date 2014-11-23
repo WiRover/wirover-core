@@ -26,6 +26,7 @@ add_executable(wicontroller
     ${COMMON}/timing.c
 	${COMMON}/tunnel.c
     ${COMMON}/format.c
+	${COMMON}/packet.c
 	${COMMON}/packet_buffer.c
 	${COMMON}/util.c
 	${COMMON}/policy_table.c

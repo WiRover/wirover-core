@@ -23,6 +23,7 @@
 #include "sockets.h"
 #include "timing.h"
 #include "tunnel.h"
+#include "packet.h"
 #include "ping.h"
 #include "rateinfer.h"
 #include "remote_node.h"
@@ -382,28 +383,36 @@ int write_to_tunnel(int tunfd, char *packet, int size) {
 
 int handleOutboundPacket(int tunfd, struct tunnel * tun) 
 {
-    int orig_size;
+    int ret = SUCCESS;
+
     //Leave room for the TUNTAP header
-    char *orig_packet;
-    char buffer[tunnel_mtu + TUNTAP_OFFSET];
-    if( (orig_size = read(tunfd, buffer, sizeof(buffer))) < 0) 
-    {
-        ERROR_MSG("read packet failed");
-    } 
-    else 
-    {
+    struct packet *pkt = alloc_packet(0, tunnel_mtu + TUNTAP_OFFSET);
+    
+    int read_size = read(tunfd, pkt->data, pkt->tail_size);
+    if (read_size >= 0) {
+        packet_put(pkt, read_size);
+
         //Ignore the tuntap header
-        orig_packet = &buffer[TUNTAP_OFFSET];
-        orig_size -= TUNTAP_OFFSET;
+        packet_pull(pkt, TUNTAP_OFFSET);
+
         obtain_read_lock(&interface_list_lock);
-        int output = send_packet(orig_packet, orig_size);
+        int output = queue_send_packet(pkt);
         release_read_lock(&interface_list_lock);
 
-        return output;
+        ret = output;
+    } else {
+        ERROR_MSG("read packet failed");
     }
 
-    return SUCCESS;
+    free_packet(pkt);
+
+    return ret;
 } // End function int handleOutboundPacket()
+
+int queue_send_packet(struct packet *pkt)
+{
+    return send_packet(pkt->data, pkt->data_size);
+}
 
 int send_packet(char *orig_packet, int orig_size)
 {
