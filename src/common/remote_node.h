@@ -10,6 +10,7 @@
 #include "config.h"
 
 struct interface;
+struct packet;
 
 struct remote_node {
     int state;
@@ -35,6 +36,9 @@ struct remote_node {
 
     int cchan_updates;
 
+    struct packet *tx_queue_head;
+    struct packet *tx_queue_tail;
+
     UT_hash_handle      hh_id;
     char hash[NODE_HASH_SIZE+1];
 };
@@ -45,6 +49,8 @@ int remove_remote_node(struct remote_node *gw);
 
 struct remote_node* lookup_remote_node_by_id(unsigned short id);
 struct remote_node* lookup_remote_node_by_ip(ipaddr_t private_ip);
+
+int node_tx_queue_append(struct remote_node *node, struct packet *pkt);
 
 extern struct remote_node* remote_node_id_hash;
 extern struct rwlock remote_node_lock;

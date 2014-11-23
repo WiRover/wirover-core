@@ -130,7 +130,7 @@ int handlePackets()
     sigset_t orig_set;
     struct timespec timeout;
     timeout.tv_sec = 0;
-    timeout.tv_nsec = 100 * NSECS_PER_MSEC;
+    timeout.tv_nsec = 20 * NSECS_PER_MSEC;
 
     while( 1 )
     {
@@ -191,6 +191,7 @@ int handlePackets()
             handleOutboundPacket(tun->tunnelfd, tun);
         }
 
+        service_tx_queues();
     } // while( 1 )
 
     return SUCCESS;
@@ -383,8 +384,6 @@ int write_to_tunnel(int tunfd, char *packet, int size) {
 
 int handleOutboundPacket(int tunfd, struct tunnel * tun) 
 {
-    int ret = SUCCESS;
-
     //Leave room for the TUNTAP header
     struct packet *pkt = alloc_packet(0, tunnel_mtu + TUNTAP_OFFSET);
     
@@ -399,19 +398,46 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         int output = queue_send_packet(pkt);
         release_read_lock(&interface_list_lock);
 
-        ret = output;
+        return output;
     } else {
         ERROR_MSG("read packet failed");
+        free_packet(pkt);
+    }
+
+    return SUCCESS;
+} // End function int handleOutboundPacket()
+
+/* Try sending the packet but queue it for later if necessary.  The packet
+ * structure is consumed regardless of whether the transmission happens. */
+int queue_send_packet(struct packet *pkt)
+{
+    int result = send_packet(pkt->data, pkt->data_size);
+
+    if (result == SEND_QUEUE) {
+        struct flow_tuple ft;
+
+        // Policy and Flow table
+        fill_flow_tuple(pkt->data, &ft, 0);
+
+        struct flow_entry *ftd = get_flow_entry(&ft);
+        if (!ftd)
+            goto no_queue;
+
+        struct remote_node *node = lookup_remote_node_by_id(ftd->remote_node_id);
+        if (!node)
+            goto no_queue;
+
+        node_tx_queue_append(node, pkt);
+        return SUCCESS;
+
+no_queue:
+        /* Queuing was not possible, so just free the packet. */
+        free_packet(pkt);
+        return SUCCESS;
     }
 
     free_packet(pkt);
-
-    return ret;
-} // End function int handleOutboundPacket()
-
-int queue_send_packet(struct packet *pkt)
-{
-    return send_packet(pkt->data, pkt->data_size);
+    return result;
 }
 
 int send_packet(char *orig_packet, int orig_size)
@@ -448,6 +474,10 @@ int send_packet(char *orig_packet, int orig_size)
             ftd->remote_link_id = dst_ife->index;
             ftd->remote_node_id = dst_ife->node_id;
         }
+
+        if (!src_ife || !dst_ife)
+            return SEND_QUEUE;
+
         return send_encap_packet_ife(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife, NULL);
     }
 
@@ -574,3 +604,29 @@ int send_ife_packet(char *packet, int size, struct interface *ife, int sockfd, s
         ife->tx_bytes += size;
     return SUCCESS;
 }
+
+int service_tx_queues()
+{
+    struct remote_node *node;
+    struct remote_node *tmp_node;
+
+    HASH_ITER(hh_id, remote_node_id_hash, node, tmp_node) {
+        while (node->tx_queue_head) {
+            struct packet *pkt = node->tx_queue_head;
+            struct packet *next_pkt = pkt->next;
+
+            int result = send_packet(pkt->data, pkt->data_size);
+            if (result == SEND_QUEUE)
+                break;
+
+            node->tx_queue_head = next_pkt;
+        }
+
+        /* We may have emptied the queue. */
+        if (!node->tx_queue_head)
+            node->tx_queue_tail = NULL;
+    }
+
+    return 0;
+}
+

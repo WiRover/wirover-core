@@ -3,6 +3,9 @@
 
 #include "tunnel.h"
 
+/* Return value of send_packet indicating that packet should be queued. */
+#define SEND_QUEUE -2
+
 struct packet;
 
 int start_data_thread(struct tunnel *tun_in);
@@ -15,5 +18,6 @@ int send_encap_packet_dst_noinfo(uint8_t type, char *packet, int size, struct in
     struct sockaddr_storage *dst);
 int send_nat_packet(char *orig_packet, int orig_size, struct interface *src_ife);
 int send_ife_packet(char *packet, int size, struct interface *ife, int sockfd, struct sockaddr *dst);
+int service_tx_queues();
 
 #endif
