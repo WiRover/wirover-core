@@ -87,5 +87,9 @@
 // Limit ping error responses to 5 per second to prevent flooding.
 #define ERROR_RESPONSE_LIMIT 5
 
+#define RATE_CONTROL_INTERVAL 20000 // 20ms
+#define RATE_CONTROL_BINS 8
+#define MAX_TX_QUEUE_AGE 100000 // 100ms
+
 #endif //_CONFIG_H_
 

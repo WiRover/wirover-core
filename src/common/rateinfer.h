@@ -2,6 +2,15 @@
 #define RATEINFER_H
 
 #include <stdint.h>
+#include "config.h"
+
+struct rate_control_info {
+    int capacity;
+
+    struct timeval start_time;
+    int start_index;
+    int tx_counts[RATE_CONTROL_BINS];
+};
 
 struct packet_burst {
     uint32_t local_start; // Timestamps in usecs
@@ -20,6 +29,10 @@ struct packet_burst {
     uint32_t bytes_received;
     uint32_t packets_received;
 };
+
+void init_rate_control_info(struct rate_control_info *rcinfo);
+int has_capacity(struct rate_control_info *rcinfo, const struct timeval *now);
+void update_tx_rate(struct rate_control_info *rcinfo, int size);
 
 void update_burst(struct packet_burst *burst, uint32_t local_ts, uint32_t remote_ts, 
         uint32_t seq, uint32_t size);

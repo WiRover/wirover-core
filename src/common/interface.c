@@ -16,6 +16,7 @@
 #include "datapath.h"
 #include "debug.h"
 #include "interface.h"
+#include "rateinfer.h"
 #include "rwlock.h"
 #include "packet_buffer.h"
 #ifdef GATEWAY
@@ -57,6 +58,8 @@ struct interface* alloc_interface(int node_id)
     ife->last_ping_success = now;
     struct rwlock lock = RWLOCK_INITIALIZER;
     ife->rt_buffer.rwlock = lock;
+
+    init_rate_control_info(&ife->rate_control);
 
     return ife;
 }

@@ -297,12 +297,14 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     pb_free_packets(&update_ife->rt_buffer, h_path_ack);
     release_write_lock(&update_ife->rt_buffer.rwlock);
 
+/*
     DEBUG_MSG("Receive: %s,%u,%u,%u,%u",
             update_ife->name,
             recv_ts,
             h_local_ts,
             h_link_seq,
             bufSize);
+*/
 
     update_burst(&update_ife->burst, recv_ts, h_local_ts, h_link_seq, bufSize);
     
@@ -461,6 +463,26 @@ int send_packet(char *orig_packet, int orig_size)
         //sendAllInterfaces(orig_packet, orig_size);
         return SUCCESS;
     }
+
+    if (ftd->egress_action & POLICY_OP_MULTIPATH) {
+        int node_id = get_unique_id();
+        struct interface *src_ife = select_mp_src_interface(ftd);
+        if(src_ife != NULL) {
+            ftd->local_link_id = src_ife->index;
+        }
+
+        struct interface *dst_ife = select_mp_dst_interface(ftd);
+        if(dst_ife != NULL) {
+            ftd->remote_link_id = dst_ife->index;
+            ftd->remote_node_id = dst_ife->node_id;
+        }
+
+        if (!src_ife || !dst_ife)
+            return SEND_QUEUE;
+
+        return send_encap_packet_ife(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife, NULL);
+    }
+
     //Add a tunnel header to the packet
     if((ftd->egress_action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
         int node_id = get_unique_id();
@@ -600,8 +622,10 @@ int send_ife_packet(char *packet, int size, struct interface *ife, int sockfd, s
 
         return FAILURE;
     }
-    if(ife != NULL)
+    if(ife != NULL) {
         ife->tx_bytes += size;
+        update_tx_rate(&ife->rate_control, size);
+    }
     return SUCCESS;
 }
 
@@ -610,14 +634,24 @@ int service_tx_queues()
     struct remote_node *node;
     struct remote_node *tmp_node;
 
+    struct timeval now;
+    gettimeofday(&now, NULL);
+
     HASH_ITER(hh_id, remote_node_id_hash, node, tmp_node) {
         while (node->tx_queue_head) {
             struct packet *pkt = node->tx_queue_head;
             struct packet *next_pkt = pkt->next;
 
             int result = send_packet(pkt->data, pkt->data_size);
-            if (result == SEND_QUEUE)
-                break;
+            if (result == SEND_QUEUE) {
+                /* If the packet has been queued for too long, give up on it.
+                 * Otherwise, leave it in the queue. */
+                long age = timeval_diff(&now, &pkt->created);
+                if (age > MAX_TX_QUEUE_AGE)
+                    free_packet(pkt);
+                else
+                    break;
+            }
 
             node->tx_queue_head = next_pkt;
         }

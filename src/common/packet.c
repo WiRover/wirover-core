@@ -10,6 +10,8 @@ struct packet *alloc_packet(int head_size, int tail_size)
     if (!pkt)
         return NULL;
 
+    gettimeofday(&pkt->created, NULL);
+
     pkt->buffer_size = head_size + tail_size;
 
     pkt->buffer = malloc(pkt->buffer_size);
@@ -32,6 +34,8 @@ struct packet *clone_packet(struct packet *pkt)
     struct packet *newpkt = malloc(sizeof(struct packet));
     if (!newpkt)
         return NULL;
+
+    memcpy(&newpkt->created, &pkt->created, sizeof(newpkt->created));
 
     newpkt->buffer_size = pkt->buffer_size;
 

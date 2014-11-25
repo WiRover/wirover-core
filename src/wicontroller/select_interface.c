@@ -50,3 +50,15 @@ struct interface *select_dst_interface(struct flow_entry *fe)
     if(dst_ife != NULL) { fe->remote_link_id = dst_ife->index; }
     return dst_ife;
 }
+
+struct interface *select_mp_src_interface(struct flow_entry *fe)
+{
+    return select_src_interface(fe);
+}
+
+struct interface *select_mp_dst_interface(struct flow_entry *fe)
+{
+    // TODO: Implement functionality here.
+    return select_dst_interface(fe);
+}
+

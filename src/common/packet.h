@@ -1,9 +1,13 @@
 #ifndef PACKET_H
 #define PACKET_H
 
+#include <sys/time.h>
+
 /* This is modeled after skbuff in Linux kernel. */
 
 struct packet {
+    struct timeval created;
+
     char *buffer;
 
     /* Data for reading starts here and extends data_size bytes. */

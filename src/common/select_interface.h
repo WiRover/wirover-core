@@ -11,4 +11,8 @@
 struct interface *select_src_interface(struct flow_entry *fe);
 struct interface *select_dst_interface(struct flow_entry *fe);
 
+// Multipath versions of the above functions.
+struct interface *select_mp_src_interface(struct flow_entry *fe);
+struct interface *select_mp_dst_interface(struct flow_entry *fe);
+
 #endif /* SELECTINTERFACE_H */
