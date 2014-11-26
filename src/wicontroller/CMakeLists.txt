@@ -21,6 +21,7 @@ add_executable(wicontroller
 	${COMMON}/remote_node.c
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c
+    ${COMMON}/select_interface.c
     ${COMMON}/sockets.c
     ${COMMON}/status.c
     ${COMMON}/timing.c

@@ -67,55 +67,8 @@ struct interface *select_dst_interface(struct flow_entry *fe)
 
 struct interface *select_mp_src_interface(struct flow_entry *fe)
 {
-    struct interface *output = NULL;
-
-    //Find the subset of interfaces with the highest priority
-    int size = count_active_interfaces(interface_list);
-    if(size == 0)
-        return NULL;
-
-    struct interface *interfaces[size];
-    struct interface *curr_ife = interface_list;
-    int highest_priority = 0;
-    int ife_count = 0;
-
-    struct timeval now;
-    gettimeofday(&now, NULL);
-
-    while(curr_ife) {
-        if(curr_ife->state != ACTIVE || !has_capacity(&curr_ife->rate_control, &now)) {
-            curr_ife = curr_ife->next;
-            continue;
-        }
-
-        if(curr_ife->priority > highest_priority) {
-            highest_priority = curr_ife->priority;
-            ife_count = 0;
-        }
-
-        if(curr_ife->priority == highest_priority) {
-            interfaces[ife_count] = curr_ife;
-            ife_count++;
-        }
-
-        curr_ife = curr_ife->next;
-    }
-
-    if (ife_count <= 0)
-        return NULL;
-
-    double min_rtt = interfaces[0]->avg_rtt;
-    output = interfaces[0];
-
-    for (int i = 1; i < ife_count; i++) {
-        if (interfaces[i]->avg_rtt < min_rtt) {
-            min_rtt = interfaces[i]->avg_rtt;
-            output = interfaces[i];
-        }
-    }
-
     update_flow_entry(fe);
-    return output;
+    return select_mp_interface(interface_list);
 }
 
 struct interface *select_mp_dst_interface(struct flow_entry *fe)

@@ -3,6 +3,7 @@
 
 #include "flow_table.h"
 
+struct interface *select_mp_interface(struct interface *head);
 
 //These are defined separately by both the controller and gateway
 //Their purpose is to choose source and destination interfaces for

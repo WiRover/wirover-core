@@ -9,6 +9,31 @@
 #include "remote_node.h"
 #include "ipaddr.h"
 
+static struct remote_node *find_remote_node(const struct flow_entry *fe)
+{
+    struct remote_node *gw = lookup_remote_node_by_id(fe->remote_node_id);
+    if (gw)
+        return gw;
+
+    // Case where a flow isn't inititated by a gateway
+    ipaddr_t dst_ip;
+    ipv4_to_ipaddr(fe->id->local, &dst_ip);
+
+    struct remote_node *node;
+    struct remote_node *tmp_node;
+    
+    obtain_read_lock(&remote_node_lock);
+    HASH_ITER(hh_id, remote_node_id_hash, node, tmp_node) {
+        if(ipaddr_cmp(&node->private_ip, &dst_ip) == 0) {
+            gw = node;
+            break;
+        }
+    }
+    release_read_lock(&remote_node_lock);
+
+    return gw;
+}
+
 struct interface *select_src_interface(struct flow_entry *fe)
 {
     return interface_list;
@@ -58,7 +83,12 @@ struct interface *select_mp_src_interface(struct flow_entry *fe)
 
 struct interface *select_mp_dst_interface(struct flow_entry *fe)
 {
-    // TODO: Implement functionality here.
-    return select_dst_interface(fe);
+    struct remote_node *gw = find_remote_node(fe);
+    if (!gw) {
+        DEBUG_MSG("Dropping packet for unknown gateway.");
+        return NULL;
+    }
+
+    return select_mp_interface(gw->head_interface);
 }
 
