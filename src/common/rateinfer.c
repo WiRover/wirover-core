@@ -4,62 +4,38 @@
 #include "rateinfer.h"
 #include "timing.h"
 
-void init_rate_control_info(struct rate_control_info *rcinfo)
+void init_interface_rate_control_info(struct rate_control_info *rcinfo)
 {
     gettimeofday(&rcinfo->start_time, NULL);
-    rcinfo->start_index = 0;
-    memset(rcinfo->tx_counts, 0, sizeof(rcinfo->tx_counts));
-}
 
-static int rotate_counts(struct rate_control_info *rcinfo, const struct timeval *send_time)
-{
-    long diff = timeval_diff(send_time, &rcinfo->start_time);
-    long offset = diff / RATE_CONTROL_INTERVAL;
-    
-    if (offset >= 0 && offset < RATE_CONTROL_BINS) {
-        return (rcinfo->start_index + offset) % RATE_CONTROL_BINS;
-    } else if(offset >= RATE_CONTROL_BINS && offset < 2*RATE_CONTROL_BINS) {
-        long rotate = offset - RATE_CONTROL_BINS + 1;
-        for (int i = 0; i < rotate; i++) {
-            rcinfo->tx_counts[rcinfo->start_index] = 0;
-            rcinfo->start_index = (rcinfo->start_index + 1) % RATE_CONTROL_BINS;
-        }
-        rcinfo->start_time.tv_usec += RATE_CONTROL_INTERVAL * rotate;
-        if (rcinfo->start_time.tv_usec > USEC_PER_SEC) {
-            rcinfo->start_time.tv_usec -= USEC_PER_SEC;
-            rcinfo->start_time.tv_sec++;
-        }
-        return (rcinfo->start_index - 1 + RATE_CONTROL_BINS) % RATE_CONTROL_BINS;
-    } else {
-        memcpy(&rcinfo->start_time, send_time, sizeof(rcinfo->start_time));
-        rcinfo->start_index = 0;
-        memset(rcinfo->tx_counts, 0, sizeof(rcinfo->tx_counts));
-        return 0;
-    }
-}
-
-int has_capacity(struct rate_control_info *rcinfo, const struct timeval *now)
-{
-    int index = rotate_counts(rcinfo, now);
-    int count = 0;
-
-    // Look at the past 100ms.
-    for (int i = 0; i < 5; i++) {
-        count += rcinfo->tx_counts[(index - i + RATE_CONTROL_BINS) % RATE_CONTROL_BINS];
-    }
+    // 5 bins * 20,000 us each = 100 ms time window for estimating rate.
+    ccount_init(&rcinfo->tx_counter, 5, 20000);
 
     // Artificially limit to 1 Mbps for testing.
-    // Ultimately, we will limit this based on predicted link capacity.
-    return (count < 12500);
+    // Ultimately, we will limit this based on predicted link capacity or policy.
+    // 1 Mbps = 12500 bytes / 100 ms.
+    rcinfo->capacity = 12500;
 }
 
+/* Test if the target has remaining capacity to send another packet.  Returns
+ * true/false.  This could be augmented to consider the size of the packet to
+ * be sent. */
+int has_capacity(struct rate_control_info *rcinfo, const struct timeval *now)
+{
+    long t = timeval_diff(now, &rcinfo->start_time);
+    long count = ccount_sum(&rcinfo->tx_counter, t);
+    return (count < rcinfo->capacity);
+}
+
+/* Call after sending a packet of the given size in bytes to increment the
+ * counter. */
 void update_tx_rate(struct rate_control_info *rcinfo, int size)
 {
     struct timeval send_time;
     gettimeofday(&send_time, NULL);
 
-    int index = rotate_counts(rcinfo, &send_time);
-    rcinfo->tx_counts[index] += size;
+    long t = timeval_diff(&send_time, &rcinfo->start_time);
+    ccount_inc(&rcinfo->tx_counter, t, size);
 }
 
 void update_burst(struct packet_burst *burst, uint32_t local_ts, uint32_t remote_ts, uint32_t seq, uint32_t size)

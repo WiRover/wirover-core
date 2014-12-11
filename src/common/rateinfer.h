@@ -2,14 +2,14 @@
 #define RATEINFER_H
 
 #include <stdint.h>
+#include "circular_counter.h"
 #include "config.h"
 
+/* Structure for implementing rate control on a flow or interface. */
 struct rate_control_info {
-    int capacity;
-
     struct timeval start_time;
-    int start_index;
-    int tx_counts[RATE_CONTROL_BINS];
+    struct circular_counter tx_counter;
+    long capacity;
 };
 
 struct packet_burst {
@@ -30,7 +30,7 @@ struct packet_burst {
     uint32_t packets_received;
 };
 
-void init_rate_control_info(struct rate_control_info *rcinfo);
+void init_interface_rate_control_info(struct rate_control_info *rcinfo);
 int has_capacity(struct rate_control_info *rcinfo, const struct timeval *now);
 void update_tx_rate(struct rate_control_info *rcinfo, int size);
 

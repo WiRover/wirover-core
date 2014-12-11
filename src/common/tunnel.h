@@ -35,7 +35,6 @@ struct tunhdr {
 
     __be32      local_ts;
     __be32      remote_ts;
-
 } __attribute__((__packed__));
 
 struct tunnel {

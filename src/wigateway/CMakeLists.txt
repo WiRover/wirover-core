@@ -10,6 +10,7 @@ add_executable(wigateway
     arguments.c
 	select_interface.c
     ${COMMON}/bandwidth.c
+    ${COMMON}/circular_counter.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
 	${COMMON}/datapath.c
