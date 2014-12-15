@@ -55,28 +55,39 @@ static json_object * get_table() {
 
 static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
     json_object * value;
+
     //--ACTION--//
     value = json_object_object_get(jobj_policy, "action");
-    if(value == NULL || !json_object_is_type(value, json_type_string)) { goto failure_print; }
-    const char * action = json_object_get_string(value);
-    if (strcmp(action, "encap") == 0) {
-        pe->action = POLICY_ACT_ENCAP;
-    }
-    else if (strcmp(action, "decap") == 0) {
-        pe->action = POLICY_ACT_DECAP;
-    }
-    else if (strcmp(action, "nat") == 0) {
-        pe->action = POLICY_ACT_NAT;
-    }
-    else if (strcmp(action, "pass") == 0) {
-        pe->action = POLICY_ACT_PASS;
-    }
-    else if (strcmp(action, "drop") == 0) {
-        pe->action = POLICY_ACT_DROP;
-    }
-    else {
+    if(!value)
+        goto failure_print;
+
+    if(json_object_is_type(value, json_type_string)) {
+        const char * action = json_object_get_string(value);
+        if (strcmp(action, "encap") == 0) {
+            pe->action = POLICY_ACT_ENCAP;
+        }
+        else if (strcmp(action, "decap") == 0) {
+            pe->action = POLICY_ACT_DECAP;
+        }
+        else if (strcmp(action, "nat") == 0) {
+            pe->action = POLICY_ACT_NAT;
+        }
+        else if (strcmp(action, "pass") == 0) {
+            pe->action = POLICY_ACT_PASS;
+        }
+        else if (strcmp(action, "drop") == 0) {
+            pe->action = POLICY_ACT_DROP;
+        }
+        else {
+            goto failure_print;
+        }
+    } else if(json_object_is_type(value, json_type_int)) {
+        // Allow direct input of integer values for experimental policies.
+        pe->action = json_object_get_int(value);
+    } else {
         goto failure_print;
     }
+
     //--PROTOCOL--//
     value = json_object_object_get(jobj_policy, "protocol");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
