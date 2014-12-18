@@ -1,4 +1,5 @@
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <errno.h>
 #include <linux/if_ether.h>
 #include <sys/ioctl.h>
@@ -22,7 +23,9 @@
 #include "sockets.h"
 #include "timing.h"
 #include "tunnel.h"
+#include "packet.h"
 #include "ping.h"
+#include "rateinfer.h"
 #include "remote_node.h"
 
 #ifndef SIOCGSTAMP
@@ -127,7 +130,7 @@ int handlePackets()
     sigset_t orig_set;
     struct timespec timeout;
     timeout.tv_sec = 0;
-    timeout.tv_nsec = 100 * NSECS_PER_MSEC;
+    timeout.tv_nsec = 20 * NSECS_PER_MSEC;
 
     while( 1 )
     {
@@ -188,6 +191,7 @@ int handlePackets()
             handleOutboundPacket(tun->tunnelfd, tun);
         }
 
+        service_tx_queues();
     } // while( 1 )
 
     return SUCCESS;
@@ -238,8 +242,8 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     unsigned int h_local_ts = ntohl(n_tun_hdr.local_ts);
 
     //Remote_ts is the remote send time in our local clock domain
+    uint32_t recv_ts = timeval_to_usec(&arrival_time);
     if(h_remote_ts != 0) {
-        uint32_t recv_ts = timeval_to_usec(&arrival_time);
         long diff = (long)recv_ts - (long)h_remote_ts;
 
         ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
@@ -293,6 +297,17 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     pb_free_packets(&update_ife->rt_buffer, h_path_ack);
     release_write_lock(&update_ife->rt_buffer.rwlock);
 
+/*
+    DEBUG_MSG("Receive: %s,%u,%u,%u,%u",
+            update_ife->name,
+            recv_ts,
+            h_local_ts,
+            h_link_seq,
+            bufSize);
+*/
+
+    update_burst(&update_ife->burst, recv_ts, h_local_ts, h_link_seq, bufSize);
+    
     //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
     if((n_tun_hdr.type == TUNTYPE_ACK)) {
         return SUCCESS;
@@ -371,28 +386,61 @@ int write_to_tunnel(int tunfd, char *packet, int size) {
 
 int handleOutboundPacket(int tunfd, struct tunnel * tun) 
 {
-    int orig_size;
     //Leave room for the TUNTAP header
-    char *orig_packet;
-    char buffer[tunnel_mtu + TUNTAP_OFFSET];
-    if( (orig_size = read(tunfd, buffer, sizeof(buffer))) < 0) 
-    {
-        ERROR_MSG("read packet failed");
-    } 
-    else 
-    {
+    struct packet *pkt = alloc_packet(0, tunnel_mtu + TUNTAP_OFFSET);
+    
+    int read_size = read(tunfd, pkt->data, pkt->tail_size);
+    if (read_size >= 0) {
+        packet_put(pkt, read_size);
+
         //Ignore the tuntap header
-        orig_packet = &buffer[TUNTAP_OFFSET];
-        orig_size -= TUNTAP_OFFSET;
+        packet_pull(pkt, TUNTAP_OFFSET);
+
         obtain_read_lock(&interface_list_lock);
-        int output = send_packet(orig_packet, orig_size);
+        int output = queue_send_packet(pkt);
         release_read_lock(&interface_list_lock);
 
         return output;
+    } else {
+        ERROR_MSG("read packet failed");
+        free_packet(pkt);
     }
 
     return SUCCESS;
 } // End function int handleOutboundPacket()
+
+/* Try sending the packet but queue it for later if necessary.  The packet
+ * structure is consumed regardless of whether the transmission happens. */
+int queue_send_packet(struct packet *pkt)
+{
+    int result = send_packet(pkt->data, pkt->data_size);
+
+    if (result == SEND_QUEUE) {
+        struct flow_tuple ft;
+
+        // Policy and Flow table
+        fill_flow_tuple(pkt->data, &ft, 0);
+
+        struct flow_entry *ftd = get_flow_entry(&ft);
+        if (!ftd)
+            goto no_queue;
+
+        struct remote_node *node = lookup_remote_node_by_id(ftd->remote_node_id);
+        if (!node)
+            goto no_queue;
+
+        node_tx_queue_append(node, pkt);
+        return SUCCESS;
+
+no_queue:
+        /* Queuing was not possible, so just free the packet. */
+        free_packet(pkt);
+        return SUCCESS;
+    }
+
+    free_packet(pkt);
+    return result;
+}
 
 int send_packet(char *orig_packet, int orig_size)
 {
@@ -415,6 +463,26 @@ int send_packet(char *orig_packet, int orig_size)
         //sendAllInterfaces(orig_packet, orig_size);
         return SUCCESS;
     }
+
+    if (ftd->egress_action & POLICY_OP_MULTIPATH) {
+        int node_id = get_unique_id();
+        struct interface *src_ife = select_mp_src_interface(ftd);
+        if(src_ife != NULL) {
+            ftd->local_link_id = src_ife->index;
+        }
+
+        struct interface *dst_ife = select_mp_dst_interface(ftd);
+        if(dst_ife != NULL) {
+            ftd->remote_link_id = dst_ife->index;
+            ftd->remote_node_id = dst_ife->node_id;
+        }
+
+        if (!src_ife || !dst_ife)
+            return SEND_QUEUE;
+
+        return send_encap_packet_ife(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife, NULL);
+    }
+
     //Add a tunnel header to the packet
     if((ftd->egress_action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
         int node_id = get_unique_id();
@@ -428,6 +496,10 @@ int send_packet(char *orig_packet, int orig_size)
             ftd->remote_link_id = dst_ife->index;
             ftd->remote_node_id = dst_ife->node_id;
         }
+
+        if (!src_ife || !dst_ife)
+            return SEND_QUEUE;
+
         return send_encap_packet_ife(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife, NULL);
     }
 
@@ -550,7 +622,45 @@ int send_ife_packet(char *packet, int size, struct interface *ife, int sockfd, s
 
         return FAILURE;
     }
-    if(ife != NULL)
+    if(ife != NULL) {
         ife->tx_bytes += size;
+        update_tx_rate(&ife->rate_control, size);
+    }
     return SUCCESS;
 }
+
+int service_tx_queues()
+{
+    struct remote_node *node;
+    struct remote_node *tmp_node;
+
+    struct timeval now;
+    gettimeofday(&now, NULL);
+
+    HASH_ITER(hh_id, remote_node_id_hash, node, tmp_node) {
+        while (node->tx_queue_head) {
+            struct packet *pkt = node->tx_queue_head;
+            struct packet *next_pkt = pkt->next;
+
+            int result = send_packet(pkt->data, pkt->data_size);
+            if (result == SEND_QUEUE) {
+                /* If the packet has been queued for too long, give up on it.
+                 * Otherwise, leave it in the queue. */
+                long age = timeval_diff(&now, &pkt->created);
+                if (age > MAX_TX_QUEUE_AGE)
+                    free_packet(pkt);
+                else
+                    break;
+            }
+
+            node->tx_queue_head = next_pkt;
+        }
+
+        /* We may have emptied the queue. */
+        if (!node->tx_queue_head)
+            node->tx_queue_tail = NULL;
+    }
+
+    return 0;
+}
+

@@ -9,6 +9,7 @@ add_executable(wicontroller
     ping.c
 	select_interface.c
     ${COMMON}/bandwidth.c
+    ${COMMON}/circular_counter.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
 	${COMMON}/datapath.c
@@ -17,14 +18,17 @@ add_executable(wicontroller
     ${COMMON}/ipaddr.c
     ${COMMON}/headers.c
     ${COMMON}/ping.c
+    ${COMMON}/rateinfer.c
 	${COMMON}/remote_node.c
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c
+    ${COMMON}/select_interface.c
     ${COMMON}/sockets.c
     ${COMMON}/status.c
     ${COMMON}/timing.c
 	${COMMON}/tunnel.c
     ${COMMON}/format.c
+	${COMMON}/packet.c
 	${COMMON}/packet_buffer.c
 	${COMMON}/util.c
 	${COMMON}/policy_table.c

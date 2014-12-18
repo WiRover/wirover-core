@@ -63,3 +63,16 @@ struct interface *select_dst_interface(struct flow_entry *fe)
 {
     return get_controller_ife();
 }
+
+
+struct interface *select_mp_src_interface(struct flow_entry *fe)
+{
+    update_flow_entry(fe);
+    return select_mp_interface(interface_list);
+}
+
+struct interface *select_mp_dst_interface(struct flow_entry *fe)
+{
+    return select_dst_interface(fe);
+}
+

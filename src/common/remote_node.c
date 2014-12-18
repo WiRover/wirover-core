@@ -4,6 +4,7 @@
 #include "config.h"
 #include "debug.h"
 #include "remote_node.h"
+#include "packet.h"
 #include "packet_buffer.h"
 #include "utlist.h"
 #include "interface.h"
@@ -92,6 +93,19 @@ int remove_remote_node(struct remote_node *gw)
     HASH_DELETE(hh_id, remote_node_id_hash, gw);
     free(gw);
 
+    return 0;
+}
+
+int node_tx_queue_append(struct remote_node *node, struct packet *pkt)
+{
+    if (node->tx_queue_tail) {
+        node->tx_queue_tail->next = pkt;
+        node->tx_queue_tail = pkt;
+    } else {
+        node->tx_queue_head = pkt;
+        node->tx_queue_tail = pkt;
+    }
+    pkt->next = NULL;
     return 0;
 }
 

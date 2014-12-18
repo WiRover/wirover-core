@@ -3,6 +3,7 @@
 
 #include "flow_table.h"
 
+struct interface *select_mp_interface(struct interface *head);
 
 //These are defined separately by both the controller and gateway
 //Their purpose is to choose source and destination interfaces for
@@ -10,5 +11,9 @@
 //interface is no longer active
 struct interface *select_src_interface(struct flow_entry *fe);
 struct interface *select_dst_interface(struct flow_entry *fe);
+
+// Multipath versions of the above functions.
+struct interface *select_mp_src_interface(struct flow_entry *fe);
+struct interface *select_mp_dst_interface(struct flow_entry *fe);
 
 #endif /* SELECTINTERFACE_H */

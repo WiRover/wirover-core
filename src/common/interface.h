@@ -10,6 +10,7 @@
 #include "uthash.h"
 #include "packet_buffer.h"
 #include "ipaddr.h"
+#include "rateinfer.h"
 
 #define NETWORK_NAME_LENGTH 16
 
@@ -94,6 +95,12 @@ struct interface {
     long meas_bw;
     long pred_bw;
     time_t meas_bw_time;
+
+    /* Information for controlling transmit rate. */
+    struct rate_control_info rate_control;
+
+    /* Track the most recent burst of packets received. */
+    struct packet_burst burst;
 
     struct interface* next;
     struct interface* prev;

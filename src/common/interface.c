@@ -16,6 +16,7 @@
 #include "datapath.h"
 #include "debug.h"
 #include "interface.h"
+#include "rateinfer.h"
 #include "rwlock.h"
 #include "packet_buffer.h"
 #ifdef GATEWAY
@@ -57,6 +58,8 @@ struct interface* alloc_interface(int node_id)
     ife->last_ping_success = now;
     struct rwlock lock = RWLOCK_INITIALIZER;
     ife->rt_buffer.rwlock = lock;
+
+    init_interface_rate_control_info(&ife->rate_control);
 
     return ife;
 }
@@ -108,7 +111,7 @@ static int configure_socket(int sock_type, int proto, const char * ife_name, int
             close(sockfd);
             return FAILURE;
         }
-        DEBUG_MSG("Bound to device");
+        DEBUG_MSG("Bound socket %d to device %s", sockfd, ife_name);
     }
     
     struct sockaddr_in myAddr;
