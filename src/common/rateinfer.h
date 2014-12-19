@@ -32,6 +32,7 @@ struct packet_burst {
 
 void init_interface_rate_control_info(struct rate_control_info *rcinfo);
 int has_capacity(struct rate_control_info *rcinfo, const struct timeval *now);
+float current_allocation(struct rate_control_info *rcinfo);
 void update_tx_rate(struct rate_control_info *rcinfo, int size);
 
 void update_burst(struct packet_burst *burst, uint32_t local_ts, uint32_t remote_ts, 

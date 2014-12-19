@@ -3,3 +3,6 @@ CMakeFiles
 *.cmake
 config.h
 Makefile
+src/wicontroller/wicontroller
+src/wigateway/wigateway
+src/wiroot/wiroot

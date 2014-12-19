@@ -26,6 +26,14 @@ int has_capacity(struct rate_control_info *rcinfo, const struct timeval *now)
     long count = ccount_sum(&rcinfo->tx_counter, t);
     return (count < rcinfo->capacity);
 }
+float current_allocation(struct rate_control_info *rcinfo)
+{
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    long t = timeval_diff(&now, &rcinfo->start_time);
+    long count = ccount_sum(&rcinfo->tx_counter, t);
+    return count * 1.0f / (rcinfo->tx_counter.window_size * rcinfo->tx_counter.bin_size / 1000);
+}
 
 /* Call after sending a packet of the given size in bytes to increment the
  * counter. */

@@ -45,6 +45,8 @@ static unsigned int         outbound_mtu = 0;
 static FILE *               packet_log_file;
 static int                  packet_log_enabled = 0;
 static char *               send_buffer;
+static struct packet *      tx_queue_head;
+static struct packet *      tx_queue_tail;
 
 int start_data_thread(struct tunnel *tun_in)
 {
@@ -429,7 +431,7 @@ int queue_send_packet(struct packet *pkt)
         if (!node)
             goto no_queue;
 
-        node_tx_queue_append(node, pkt);
+        packet_queue_append(&tx_queue_head, &tx_queue_tail, pkt);
         return SUCCESS;
 
 no_queue:
@@ -631,35 +633,24 @@ int send_ife_packet(char *packet, int size, struct interface *ife, int sockfd, s
 
 int service_tx_queues()
 {
-    struct remote_node *node;
-    struct remote_node *tmp_node;
-
     struct timeval now;
     gettimeofday(&now, NULL);
+    while (tx_queue_head) {
+        struct packet *pkt = tx_queue_head;
 
-    HASH_ITER(hh_id, remote_node_id_hash, node, tmp_node) {
-        while (node->tx_queue_head) {
-            struct packet *pkt = node->tx_queue_head;
-            struct packet *next_pkt = pkt->next;
-
-            int result = send_packet(pkt->data, pkt->data_size);
-            if (result == SEND_QUEUE) {
-                /* If the packet has been queued for too long, give up on it.
-                 * Otherwise, leave it in the queue. */
-                long age = timeval_diff(&now, &pkt->created);
-                if (age > MAX_TX_QUEUE_AGE)
-                    free_packet(pkt);
-                else
-                    break;
-            }
-
-            node->tx_queue_head = next_pkt;
+        int result = send_packet(pkt->data, pkt->data_size);
+        if (result == SEND_QUEUE) {
+            /* If the packet has been queued for too long, give up on it.
+             * Otherwise, leave it at the front of the queue and quit. */
+            long age = timeval_diff(&now, &pkt->created);
+            if (age > MAX_TX_QUEUE_AGE)
+                free_packet(pkt);
+            else
+                break;
         }
-
-        /* We may have emptied the queue. */
-        if (!node->tx_queue_head)
-            node->tx_queue_tail = NULL;
+        packet_queue_dequeue(&tx_queue_head);
     }
+
 
     return 0;
 }

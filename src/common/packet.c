@@ -80,3 +80,27 @@ void packet_pull(struct packet *pkt, int bytes)
     pkt->data_size -= bytes;
 }
 
+
+int packet_queue_append(struct packet **tx_queue_head, struct packet **tx_queue_tail, struct packet *pkt)
+{
+    if (*tx_queue_tail && *tx_queue_head) {
+        (*tx_queue_tail)->next = pkt;
+        *tx_queue_tail = pkt;
+    } else {
+        *tx_queue_head = pkt;
+        *tx_queue_tail = pkt;
+    }
+    pkt->next = NULL;
+    return 0;
+}
+struct packet * packet_queue_dequeue(struct packet **tx_queue_head)
+{
+    struct packet *output = *tx_queue_head;
+    if(output) {
+        *tx_queue_head = output->next;
+    }
+    else{
+        *tx_queue_head = NULL;
+    }
+    return output;
+}
