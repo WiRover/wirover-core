@@ -12,10 +12,7 @@
 #include "uthash.h"
 #include "interface.h"
 #include "tunnel.h"
-
-#define SUCCESS 0
-#define DUPLICATE_ENTRY 1
-#define FILE_ERROR 2
+#include "packet.h"
 
 #define MAX_ALG_NAME_LEN   16
 
@@ -27,13 +24,18 @@ struct flow_entry {
     uint16_t remote_link_id;
     uint16_t local_link_id;
     int count;
-    uint32_t ingress_action;
-    uint32_t egress_action;
-    char ingress_alg_name[MAX_ALG_NAME_LEN];
-    char egress_alg_name[MAX_ALG_NAME_LEN];
+    uint32_t action;
+    char alg_name[MAX_ALG_NAME_LEN];
+
+    // Rate limiting and packet queueing
+    double rate_limit;
+    struct circular_counter rate_counter;
+    struct packet * packet_queue_head;
+    struct packet * packet_queue_tail;
 };
 
 struct flow_tuple {
+    uint8_t ingress;
     uint8_t net_proto;
     uint32_t remote;
     uint32_t local;

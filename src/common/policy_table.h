@@ -62,7 +62,7 @@ typedef struct{
     uint32_t remote_netmask;
 
     char dev_name[IFNAMSIZ];
-    int max_rate;
+    double max_rate;
 
     char alg_name[MAX_ALG_NAME_LEN];
 }policy_entry;

@@ -27,6 +27,7 @@ int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress)
     struct tcphdr   *tcp_hdr = (struct tcphdr *)(packet + (ip_hdr->ihl * 4));
 
     memset(ft, 0, sizeof(struct flow_tuple));
+    ft->ingress = ingress;
     ft->net_proto = ip_hdr->version;
     ft->remote = ingress ? ip_hdr->saddr : ip_hdr->daddr;
     ft->local = ingress ? ip_hdr->daddr : ip_hdr->saddr;
@@ -66,14 +67,9 @@ struct flow_entry *get_flow_entry(struct flow_tuple *ft) {
         if(fe == NULL) { return NULL; }
         policy_entry pd;
         memset(&pd, 0, sizeof(policy_entry));
-        get_policy_by_tuple(ft,  &pd, DIR_INGRESS);
-        fe->ingress_action = pd.action;
-        strcpy(fe->ingress_alg_name, pd.alg_name);
-        memset(&pd, 0, sizeof(policy_entry));
-        get_policy_by_tuple(ft,  &pd, DIR_EGRESS);
-        fe->egress_action = pd.action;
-        strcpy(fe->egress_alg_name, pd.alg_name);
-
+        get_policy_by_tuple(ft,  &pd, ft->ingress ? DIR_INGRESS : DIR_EGRESS);
+        fe->action = pd.action;
+        strcpy(fe->alg_name, pd.alg_name);
     }
     fe->last_visit_time = time(NULL);
 
@@ -121,9 +117,10 @@ int flow_entry_to_string(const struct flow_entry *fe, char *str, int size) {
     char remote_ip[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &fe->id->local, local_ip, INET6_ADDRSTRLEN);
     inet_ntop(AF_INET, &fe->id->remote, remote_ip, INET6_ADDRSTRLEN);
-    return snprintf(str, size, "%s:%d -> %s:%d Proto: %d Action: I%dE%d remote: %d:%d Local link: %d hits: %d",
-        local_ip, ntohs(fe->id->local_port), remote_ip, ntohs(fe->id->remote_port),
-        fe->id->proto, fe->ingress_action, fe->egress_action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
+    char * dir_string = fe->id->ingress ? "<-" : "->";
+    return snprintf(str, size, "%s:%d %s %s:%d Proto: %d Action: %d remote: %d:%d Local link: %d hits: %d",
+        local_ip, ntohs(fe->id->local_port), dir_string, remote_ip, ntohs(fe->id->remote_port),
+        fe->id->proto, fe->action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
     );
 }
 //All methods below here are for debugging purposes

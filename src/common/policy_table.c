@@ -157,6 +157,11 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         pe->ft.remote &= pe->remote_netmask;
     }
 
+    //--RATE LIMIT--//
+    value = json_object_object_get(jobj_policy, "rate_limit");
+    if(value != NULL && json_object_is_type(value, json_type_double)) {
+        pe->max_rate = json_object_get_double(value);
+    }
 
     return SUCCESS;
 failure_print:
@@ -225,7 +230,8 @@ void print_policy_entry(policy_entry * pe) {
     if(pe->direction == DIR_INGRESS) { dir_str = "I"; }
     if(pe->direction == DIR_EGRESS) { dir_str = "O"; }
     if(pe->direction == DIR_BOTH) { dir_str = "*"; }
-    DEBUG_MSG("direction: %s local: %s local_net: %s remote: %s remote_net: %s proto: %d act: %d", dir_str, l_str, l_net_str, r_str, r_net_str, pe->ft.proto, pe->action);
+    DEBUG_MSG("direction: %s local: %s local_net: %s remote: %s remote_net: %s proto: %d act: %d rate: %f",
+        dir_str, l_str, l_net_str, r_str, r_net_str, pe->ft.proto, pe->action, pe->max_rate);
 }
 
 void print_policies() {

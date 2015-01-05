@@ -120,7 +120,9 @@ static int nat_receive(int tunfd, int sockfd) {
     fill_flow_tuple(buffer, &ft, 1);
 
     struct flow_entry *fe = get_flow_entry(&ft);
-    if(fe->ingress_action != POLICY_ACT_NAT) { return SUCCESS; }
+    if(fe->action != POLICY_ACT_NAT) { return SUCCESS; }
+
+    update_flow_entry(fe);
 
     return write_to_tunnel(tunfd, buffer, bufSize);
 }
@@ -427,10 +429,6 @@ int queue_send_packet(struct packet *pkt)
         if (!ftd)
             goto no_queue;
 
-        struct remote_node *node = lookup_remote_node_by_id(ftd->remote_node_id);
-        if (!node)
-            goto no_queue;
-
         packet_queue_append(&tx_queue_head, &tx_queue_tail, pkt);
         return SUCCESS;
 
@@ -456,17 +454,17 @@ int send_packet(char *orig_packet, int orig_size)
     update_flow_entry(ftd);
 
     // Check for drop
-    if((ftd->egress_action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
+    if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
         return SUCCESS;
     }
 
     // Send on all interfaces
-    if((ftd->egress_action & POLICY_OP_DUPLICATE) != 0) {
+    if((ftd->action & POLICY_OP_DUPLICATE) != 0) {
         //sendAllInterfaces(orig_packet, orig_size);
         return SUCCESS;
     }
 
-    if (ftd->egress_action & POLICY_OP_MULTIPATH) {
+    if (ftd->action & POLICY_OP_MULTIPATH) {
         int node_id = get_unique_id();
         struct interface *src_ife = select_mp_src_interface(ftd);
         if(src_ife != NULL) {
@@ -486,7 +484,7 @@ int send_packet(char *orig_packet, int orig_size)
     }
 
     //Add a tunnel header to the packet
-    if((ftd->egress_action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
+    if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
         int node_id = get_unique_id();
         struct interface *src_ife = select_src_interface(ftd);
         if(src_ife != NULL) {
@@ -505,7 +503,7 @@ int send_packet(char *orig_packet, int orig_size)
         return send_encap_packet_ife(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife, NULL);
     }
 
-    if((ftd->egress_action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
+    if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
         struct interface *src_ife = select_src_interface(ftd);
         if(src_ife != NULL) {
             return send_nat_packet(orig_packet, orig_size, src_ife);
