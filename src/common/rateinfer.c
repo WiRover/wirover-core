@@ -4,48 +4,6 @@
 #include "rateinfer.h"
 #include "timing.h"
 
-void init_interface_rate_control_info(struct rate_control_info *rcinfo)
-{
-    gettimeofday(&rcinfo->start_time, NULL);
-
-    // 5 bins * 20,000 us each = 100 ms time window for estimating rate.
-    ccount_init(&rcinfo->tx_counter, 5, 20000);
-
-    // Artificially limit to 1 Mbps for testing.
-    // Ultimately, we will limit this based on predicted link capacity or policy.
-    // 1 Mbps = 12500 bytes / 100 ms.
-    rcinfo->capacity = 12500;
-}
-
-/* Test if the target has remaining capacity to send another packet.  Returns
- * true/false.  This could be augmented to consider the size of the packet to
- * be sent. */
-int has_capacity(struct rate_control_info *rcinfo, const struct timeval *now)
-{
-    long t = timeval_diff(now, &rcinfo->start_time);
-    long count = ccount_sum(&rcinfo->tx_counter, t);
-    return (count < rcinfo->capacity);
-}
-float current_allocation(struct rate_control_info *rcinfo)
-{
-    struct timeval now;
-    gettimeofday(&now, NULL);
-    long t = timeval_diff(&now, &rcinfo->start_time);
-    long count = ccount_sum(&rcinfo->tx_counter, t);
-    return count * 1.0f / (rcinfo->tx_counter.window_size * rcinfo->tx_counter.bin_size / 1000);
-}
-
-/* Call after sending a packet of the given size in bytes to increment the
- * counter. */
-void update_tx_rate(struct rate_control_info *rcinfo, int size)
-{
-    struct timeval send_time;
-    gettimeofday(&send_time, NULL);
-
-    long t = timeval_diff(&send_time, &rcinfo->start_time);
-    ccount_inc(&rcinfo->tx_counter, t, size);
-}
-
 void update_burst(struct packet_burst *burst, uint32_t local_ts, uint32_t remote_ts, uint32_t seq, uint32_t size)
 {
     int diff = (int)remote_ts - (int)burst->remote_end;

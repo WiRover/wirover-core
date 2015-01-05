@@ -59,7 +59,8 @@ struct interface* alloc_interface(int node_id)
     struct rwlock lock = RWLOCK_INITIALIZER;
     ife->rt_buffer.rwlock = lock;
 
-    init_interface_rate_control_info(&ife->rate_control);
+    ccount_init(&ife->rate_control, 5, 20000);
+    ife->capacity = 12500;
 
     return ife;
 }
@@ -165,6 +166,24 @@ void free_interface(struct interface* ife)
 #endif
         free(ife);
     }
+}
+
+/* Test if the target has remaining capacity to send another packet.  Returns
+ * true/false.  This could be augmented to consider the size of the packet to
+ * be sent. */
+int has_capacity(struct interface *ife)
+{
+    long count = ccount_sum(&ife->rate_control);
+    return (count < ife->capacity);
+}
+
+float current_allocation(struct interface *ife)
+{
+    long count = ccount_sum(&ife->rate_control);
+    return count * 1.0f / (ife->rate_control.window_size * ife->rate_control.bin_size / 1000);
+}
+void update_tx_rate(struct interface *ife, int size) {
+    ccount_inc(&ife->rate_control, size);
 }
 
 struct interface *find_interface_by_index(struct interface *head, unsigned int index)

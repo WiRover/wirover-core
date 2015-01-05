@@ -3,6 +3,8 @@
 #include <string.h>
 
 #include "circular_counter.h"
+#include "timing.h"
+#include "debug.h"
 
 static inline int ilog2(unsigned x)
 {
@@ -34,7 +36,8 @@ int ccount_init(struct circular_counter *cc, int window_size, long bin_size)
     if(!cc->counts)
         return -1;
 
-    cc->start_time = 0;
+    cc->time_offset = 0;
+    gettimeofday(&cc->start_time, NULL);
     cc->start_index = 0;
 
     return 0;
@@ -59,9 +62,11 @@ void ccount_destroy(struct circular_counter *cc)
  *
  * This function is intended for internal use by the ccount_{read,set,inc} functions.
  */
-int ccount_rotate(struct circular_counter *cc, long t)
+int ccount_rotate(struct circular_counter *cc)
 {
-    long diff = t - cc->start_time;
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    long diff = timeval_diff(&now, &cc->start_time) - cc->time_offset;
     long offset = diff / cc->bin_size;
 
     if(offset >= 0 && offset < cc->size) {
@@ -72,10 +77,11 @@ int ccount_rotate(struct circular_counter *cc, long t)
             cc->counts[cc->start_index] = 0;
             cc->start_index = (cc->start_index + 1) & cc->bitmask;
         }
-        cc->start_time += cc->bin_size * rotate;
+        cc->time_offset += cc->bin_size * rotate;
         return (cc->start_index - 1) & cc->bitmask;
     } else {
-        cc->start_time = t;
+        cc->start_time = now;
+        cc->time_offset = 0;
         cc->start_index = 0;
         memset(cc->counts, 0, sizeof(*cc->counts) * cc->size);
         return 0;
@@ -83,36 +89,35 @@ int ccount_rotate(struct circular_counter *cc, long t)
 }
 
 /* Read the counter for the bin at time t. */
-long ccount_read(struct circular_counter *cc, long t)
+long ccount_read(struct circular_counter *cc)
 {
-    int i = ccount_rotate(cc, t);
+    int i = ccount_rotate(cc);
     return cc->counts[i];
 }
 
 /* Set the counter for the bin at time t. */
-void ccount_set(struct circular_counter *cc, long t, long value)
+void ccount_set(struct circular_counter *cc, long value)
 {
-    int i = ccount_rotate(cc, t);
+    int i = ccount_rotate(cc);
     cc->counts[i] = value;
 }
 
 /* Increment the counter for the bin at time t and return the result. */
-long ccount_inc(struct circular_counter *cc, long t, long amount)
+long ccount_inc(struct circular_counter *cc, long amount)
 {
-    int i = ccount_rotate(cc, t);
+    int i = ccount_rotate(cc);
     cc->counts[i] += amount;
     return cc->counts[i];
 }
 
 /* Starting from t, sum the past window of data. */
-long ccount_sum(struct circular_counter *cc, long t)
+long ccount_sum(struct circular_counter *cc)
 {
     long sum = 0;
-    int i = ccount_rotate(cc, t);
+    int i = ccount_rotate(cc);
     for(int j = 0; j < cc->window_size; j++) {
         sum += cc->counts[i];
         i = (i - 1) & cc->bitmask;
     }
     return sum;
 }
-
