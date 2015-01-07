@@ -16,7 +16,7 @@ struct interface *select_mp_interface(struct interface *head)
     int ife_count = 0;
 
     while(curr_ife) {
-        if(curr_ife->state != ACTIVE || !has_capacity(curr_ife)) {
+        if(curr_ife->state != ACTIVE || !has_capacity(&curr_ife->rate_control)) {
             curr_ife = curr_ife->next;
             continue;
         }

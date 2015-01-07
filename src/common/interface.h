@@ -98,7 +98,6 @@ struct interface {
 
     /* Information for controlling transmit rate. */
     struct circular_counter rate_control;
-    long capacity;
 
     /* Track the most recent burst of packets received. */
     struct packet_burst burst;
@@ -120,11 +119,6 @@ struct interface* alloc_interface(int node_id);
 int change_interface_state(struct interface *ife, enum if_state state);
 int interface_bind(struct interface *ife, int bind_port);
 void free_interface(struct interface* ife);
-
-// Rate information
-int has_capacity(struct interface *ife);
-float current_allocation(struct interface *ife);
-void update_tx_rate(struct interface *ife, int size);
 
 //These are currently implemented by searching the linked list, since the list
 //will typically contain around 1-3 elements.  One can very easily change

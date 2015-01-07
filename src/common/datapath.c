@@ -580,7 +580,7 @@ int send_ife_packet(char *packet, int size, struct interface *ife, int sockfd, s
     }
     if(ife != NULL) {
         ife->tx_bytes += size;
-        update_tx_rate(ife, size);
+        update_tx_rate(&ife->rate_control, size);
     }
     return SUCCESS;
 }

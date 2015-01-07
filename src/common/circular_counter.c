@@ -9,12 +9,14 @@
 /* 
  * window_size: minimum length of history to keep (as a number of bins)
  * bin_size: size of each bin in time units
+ * capacity: the counter's capacity in Mbit/s
  */
-int ccount_init(struct circular_counter *cc, int window_size, long bin_size)
+int ccount_init(struct circular_counter *cc, int window_size, long bin_size, double capacity)
 {
     assert(window_size > 0);
     assert(bin_size > 0);
 
+    cc->capacity = capacity;
     cc->window_size = window_size;
     cc->bin_size = bin_size;
 
@@ -84,15 +86,6 @@ void ccount_set(struct circular_counter *cc, long value)
     cc->counts[i] = value;
 }
 
-/* Increment the counter for the bin at time t and return the result. */
-long ccount_inc(struct circular_counter *cc, long amount)
-{
-    int i = ccount_rotate(cc);
-    cc->counts[i] += amount;
-    //DEBUG_MSG("Incrementing %d", i);
-    return cc->counts[i];
-}
-
 /* Starting from t, sum the past window of data. */
 long ccount_sum(struct circular_counter *cc)
 {
@@ -101,6 +94,29 @@ long ccount_sum(struct circular_counter *cc)
     for(int j = 0; j < cc->window_size; j++) {
         sum += cc->counts[j];
     }
-    //DEBUG_MSG("Sum: %ld", sum);
     return sum;
+}
+
+/* Test if the target has remaining capacity to send another packet.  Returns
+ * true/false.  This could be augmented to consider the size of the packet to
+ * be sent. */
+int has_capacity(struct circular_counter *cc)
+{
+    double count = current_allocation(cc);
+    return (count < cc->capacity);
+}
+
+/* Return the counter's current allocation in Mbit/s */
+double current_allocation(struct circular_counter *cc)
+{
+    long count = ccount_sum(cc);
+    return count * 8.0 / (cc->window_size * cc->bin_size);
+}
+
+/* Increment the counter for the bin at time t and return the result. */
+long update_tx_rate(struct circular_counter *cc, long amount)
+{
+    int i = ccount_rotate(cc);
+    cc->counts[i] += amount;
+    return cc->counts[i];
 }
