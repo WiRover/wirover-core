@@ -6,16 +6,6 @@
 #include "timing.h"
 #include "debug.h"
 
-static inline int ilog2(unsigned x)
-{
-    int result = -1;
-    while(x) {
-        x >>= 1;
-        result++;
-    }
-    return result;
-}
-
 /* 
  * window_size: minimum length of history to keep (as a number of bins)
  * bin_size: size of each bin in time units
@@ -25,20 +15,15 @@ int ccount_init(struct circular_counter *cc, int window_size, long bin_size)
     assert(window_size > 0);
     assert(bin_size > 0);
 
-    /* Make the array size a power of two for easy accesses. */
-    cc->size = 1 << (ilog2(window_size-1) + 1);
     cc->window_size = window_size;
     cc->bin_size = bin_size;
 
-    cc->bitmask = cc->size - 1;
-
-    cc->counts = calloc(cc->size, sizeof(*cc->counts));
+    cc->counts = calloc(cc->window_size, sizeof(*cc->counts));
     if(!cc->counts)
         return -1;
 
-    cc->time_offset = 0;
     gettimeofday(&cc->start_time, NULL);
-    cc->start_index = 0;
+    cc->current_bin_offset = 0;
 
     return 0;
 }
@@ -53,12 +38,8 @@ void ccount_destroy(struct circular_counter *cc)
 }
 
 /* 
- * Update the data structure for the new time t (should always be monotonically
- * non-decreasing) and return the index into the counts array for the bin
- * associated with time t.
- *
- * If t is beyond the current range of the array, then some or all of the oldest
- * bins will be cleared to make room.
+ * Update the data structure for the current time and return the index
+ * into the counts array for the bin associated with the current time.
  *
  * This function is intended for internal use by the ccount_{read,set,inc} functions.
  */
@@ -66,26 +47,27 @@ int ccount_rotate(struct circular_counter *cc)
 {
     struct timeval now;
     gettimeofday(&now, NULL);
-    long diff = timeval_diff(&now, &cc->start_time) - cc->time_offset;
-    long offset = diff / cc->bin_size;
-
-    if(offset >= 0 && offset < cc->size) {
-        return (cc->start_index + offset) & cc->bitmask;
-    } else if(offset >= cc->size && offset < 2 * cc->size) {
-        long rotate = offset - cc->size + 1;
-        for(int i = 0; i < rotate; i++) {
-            cc->counts[cc->start_index] = 0;
-            cc->start_index = (cc->start_index + 1) & cc->bitmask;
-        }
-        cc->time_offset += cc->bin_size * rotate;
-        return (cc->start_index - 1) & cc->bitmask;
-    } else {
-        cc->start_time = now;
-        cc->time_offset = 0;
-        cc->start_index = 0;
-        memset(cc->counts, 0, sizeof(*cc->counts) * cc->size);
+    long diff = timeval_diff(&now, &cc->start_time) / cc->bin_size;
+    long bin_diff = diff - cc->current_bin_offset;
+    if(bin_diff < 0) {
+        DEBUG_MSG("CCount error, offset less than 0");
         return 0;
     }
+    // A bin_diff greater than the window size means we can clear
+    // the whole counter and set our offset to the diff
+    if(bin_diff >= cc->window_size) {
+        cc->current_bin_offset = diff;
+        memset(cc->counts, 0, sizeof(*cc->counts) * cc->window_size);
+    }
+
+    // Each time we have to move forward in our circular buffer
+    // we clear the next bin and move our offset to point to it
+    int new_index = (diff) % cc->window_size;
+    while(cc->current_bin_offset % cc->window_size != new_index) {
+        cc->current_bin_offset ++;
+        cc->counts[cc->current_bin_offset % cc->window_size] = 0;
+    }
+    return new_index;
 }
 
 /* Read the counter for the bin at time t. */
@@ -107,6 +89,7 @@ long ccount_inc(struct circular_counter *cc, long amount)
 {
     int i = ccount_rotate(cc);
     cc->counts[i] += amount;
+    //DEBUG_MSG("Incrementing %d", i);
     return cc->counts[i];
 }
 
@@ -114,10 +97,10 @@ long ccount_inc(struct circular_counter *cc, long amount)
 long ccount_sum(struct circular_counter *cc)
 {
     long sum = 0;
-    int i = ccount_rotate(cc);
+    ccount_rotate(cc);
     for(int j = 0; j < cc->window_size; j++) {
-        sum += cc->counts[i];
-        i = (i - 1) & cc->bitmask;
+        sum += cc->counts[j];
     }
+    //DEBUG_MSG("Sum: %ld", sum);
     return sum;
 }

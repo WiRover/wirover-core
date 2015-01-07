@@ -69,6 +69,7 @@ struct flow_entry *get_flow_entry(struct flow_tuple *ft) {
         memset(&pd, 0, sizeof(policy_entry));
         get_policy_by_tuple(ft,  &pd, ft->ingress ? DIR_INGRESS : DIR_EGRESS);
         fe->action = pd.action;
+        fe->rate_limit = pd.rate_limit;
         strcpy(fe->alg_name, pd.alg_name);
     }
     fe->last_visit_time = time(NULL);

@@ -4,16 +4,13 @@
 #include <sys/time.h>
 
 struct circular_counter {
-    int size;
     int window_size;
     long bin_size;
 
-    int bitmask;
+    long *counts;
 
     struct timeval start_time;
-    long time_offset;
-    int start_index;
-    long *counts;
+    long current_bin_offset;
 };
 
 int ccount_init(struct circular_counter *cc, int window_size, long bin_size);

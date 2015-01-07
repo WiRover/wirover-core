@@ -170,6 +170,7 @@ int handlePackets()
             DEBUG_MSG("select() failed");
             continue;
         }
+        service_tx_queues();
 
         obtain_read_lock(&interface_list_lock);
         curr_ife = interface_list;
@@ -195,7 +196,6 @@ int handlePackets()
             handleOutboundPacket(tun->tunnelfd, tun);
         }
 
-        service_tx_queues();
     } // while( 1 )
 
     return SUCCESS;
@@ -401,7 +401,7 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         packet_pull(pkt, TUNTAP_OFFSET);
 
         obtain_read_lock(&interface_list_lock);
-        int output = queue_send_packet(pkt);
+        int output = send_packet(pkt, 1);
         release_read_lock(&interface_list_lock);
 
         return output;
@@ -413,41 +413,12 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
     return SUCCESS;
 } // End function int handleOutboundPacket()
 
-/* Try sending the packet but queue it for later if necessary.  The packet
- * structure is consumed regardless of whether the transmission happens. */
-int queue_send_packet(struct packet *pkt)
-{
-    int result = send_packet(pkt->data, pkt->data_size);
-
-    if (result == SEND_QUEUE) {
-        struct flow_tuple ft;
-
-        // Policy and Flow table
-        fill_flow_tuple(pkt->data, &ft, 0);
-
-        struct flow_entry *ftd = get_flow_entry(&ft);
-        if (!ftd)
-            goto no_queue;
-
-        packet_queue_append(&tx_queue_head, &tx_queue_tail, pkt);
-        return SUCCESS;
-
-no_queue:
-        /* Queuing was not possible, so just free the packet. */
-        free_packet(pkt);
-        return SUCCESS;
-    }
-
-    free_packet(pkt);
-    return result;
-}
-
-int send_packet(char *orig_packet, int orig_size)
+int send_packet(struct packet *pkt, int allow_enqueue)
 {
     struct flow_tuple ft;
 
     // Policy and Flow table
-    fill_flow_tuple(orig_packet, &ft, 0);
+    fill_flow_tuple(pkt->data, &ft, 0);
 
     struct flow_entry *ftd = get_flow_entry(&ft);
 
@@ -464,49 +435,34 @@ int send_packet(char *orig_packet, int orig_size)
         return SUCCESS;
     }
 
-    if (ftd->action & POLICY_OP_MULTIPATH) {
-        int node_id = get_unique_id();
-        struct interface *src_ife = select_mp_src_interface(ftd);
-        if(src_ife != NULL) {
-            ftd->local_link_id = src_ife->index;
-        }
-
-        struct interface *dst_ife = select_mp_dst_interface(ftd);
-        if(dst_ife != NULL) {
-            ftd->remote_link_id = dst_ife->index;
-            ftd->remote_node_id = dst_ife->node_id;
-        }
-
-        if (!src_ife || !dst_ife)
-            return SEND_QUEUE;
-
-        return send_encap_packet_ife(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife, NULL);
+    // Flow table and interface lookup
+    int node_id = get_unique_id();
+    struct interface *src_ife = select_src_interface(ftd);
+    if(src_ife != NULL) {
+        ftd->local_link_id = src_ife->index;
     }
 
+    struct interface *dst_ife = select_dst_interface(ftd);
+    if(dst_ife != NULL) {
+        ftd->remote_link_id = dst_ife->index;
+        ftd->remote_node_id = dst_ife->node_id;
+    }
+
+    if (!src_ife || !dst_ife) {
+        if (allow_enqueue)
+            packet_queue_append(&tx_queue_head, &tx_queue_tail, pkt);
+        return SEND_QUEUE;
+    }
+    
     //Add a tunnel header to the packet
     if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
-        int node_id = get_unique_id();
-        struct interface *src_ife = select_src_interface(ftd);
-        if(src_ife != NULL) {
-            ftd->local_link_id = src_ife->index;
-        }
-
-        struct interface *dst_ife = select_dst_interface(ftd);
-        if(dst_ife != NULL) {
-            ftd->remote_link_id = dst_ife->index;
-            ftd->remote_node_id = dst_ife->node_id;
-        }
-
-        if (!src_ife || !dst_ife)
-            return SEND_QUEUE;
-
-        return send_encap_packet_ife(TUNTYPE_DATA, orig_packet, orig_size, node_id, src_ife, dst_ife, NULL);
+        return send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, src_ife, dst_ife, NULL);
     }
 
     if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
         struct interface *src_ife = select_src_interface(ftd);
         if(src_ife != NULL) {
-            return send_nat_packet(orig_packet, orig_size, src_ife);
+            return send_nat_packet(pkt->data, pkt->data_size, src_ife);
         }
     }
 
@@ -635,21 +591,18 @@ int service_tx_queues()
     gettimeofday(&now, NULL);
     while (tx_queue_head) {
         struct packet *pkt = tx_queue_head;
-
-        int result = send_packet(pkt->data, pkt->data_size);
-        if (result == SEND_QUEUE) {
+        if(send_packet(pkt, 0) == SEND_QUEUE) {
             /* If the packet has been queued for too long, give up on it.
              * Otherwise, leave it at the front of the queue and quit. */
             long age = timeval_diff(&now, &pkt->created);
-            if (age > MAX_TX_QUEUE_AGE)
+            if (age > MAX_TX_QUEUE_AGE) {
                 free_packet(pkt);
+            }
             else
                 break;
         }
         packet_queue_dequeue(&tx_queue_head);
     }
-
-
     return 0;
 }
 

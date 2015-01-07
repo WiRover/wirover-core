@@ -1,5 +1,6 @@
 #include "interface.h"
 #include "select_interface.h"
+#include "debug.h"
 
 struct interface *select_mp_interface(struct interface *head)
 {
