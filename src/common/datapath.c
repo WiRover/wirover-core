@@ -29,7 +29,7 @@
 #include "remote_node.h"
 
 #ifndef SIOCGSTAMP
-# define SIOCGSTAMP 0x8906
+    #define SIOCGSTAMP 0x8906
 #endif
 
 int write_to_tunnel(int tunfd, char *packet, int size);
@@ -401,7 +401,7 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
         packet_pull(pkt, TUNTAP_OFFSET);
 
         obtain_read_lock(&interface_list_lock);
-        int output = send_packet(pkt, 1);
+        int output = send_packet(pkt, 1, 1);
         release_read_lock(&interface_list_lock);
 
         return output;
@@ -413,7 +413,7 @@ int handleOutboundPacket(int tunfd, struct tunnel * tun)
     return SUCCESS;
 } // End function int handleOutboundPacket()
 
-int send_packet(struct packet *pkt, int allow_enqueue)
+int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueue)
 {
     struct flow_tuple ft;
 
@@ -435,8 +435,7 @@ int send_packet(struct packet *pkt, int allow_enqueue)
         return SUCCESS;
     }
 
-    // Flow table and interface lookup
-    int node_id = get_unique_id();
+    // Interface lookup
     struct interface *src_ife = select_src_interface(ftd);
     if(src_ife != NULL) {
         ftd->local_link_id = src_ife->index;
@@ -448,24 +447,34 @@ int send_packet(struct packet *pkt, int allow_enqueue)
         ftd->remote_node_id = dst_ife->node_id;
     }
 
+    //Packet queuing if a rate limit is violated
+    if(ftd->rate_control != NULL && !has_capacity(ftd->rate_control)) {
+        if (allow_flow_enqueue)
+            packet_queue_append(&ftd->packet_queue_head, &ftd->packet_queue_head, pkt);
+        return SEND_QUEUE;
+    }
     if (!src_ife || !dst_ife) {
-        if (allow_enqueue)
+        if (allow_ife_enqueue)
             packet_queue_append(&tx_queue_head, &tx_queue_tail, pkt);
         return SEND_QUEUE;
     }
-    
+
+    int output = FAILURE;
+    int node_id = get_unique_id();
     //Add a tunnel header to the packet
     if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
-        return send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, src_ife, dst_ife, NULL);
+        output = send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, src_ife, dst_ife, NULL);
     }
-
-    if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
+    else if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
         struct interface *src_ife = select_src_interface(ftd);
         if(src_ife != NULL) {
-            return send_nat_packet(pkt->data, pkt->data_size, src_ife);
+            output = send_nat_packet(pkt->data, pkt->data_size, src_ife);
         }
     }
-
+    //Update rate information for the flow entry
+    if(output == SUCCESS && ftd->rate_control != NULL) {
+        update_tx_rate(ftd->rate_control, pkt->data_size);
+    }
     return FAILURE;
 }
 
@@ -585,24 +594,35 @@ int send_ife_packet(char *packet, int size, struct interface *ife, int sockfd, s
     return SUCCESS;
 }
 
-int service_tx_queues()
-{
-    struct timeval now;
-    gettimeofday(&now, NULL);
-    while (tx_queue_head) {
-        struct packet *pkt = tx_queue_head;
-        if(send_packet(pkt, 0) == SEND_QUEUE) {
+
+void service_tx_queue(struct packet ** head, struct timeval *now) {
+    while (*head) {
+        struct packet *pkt = *head;
+        if(send_packet(pkt, 0, 0) == SEND_QUEUE) {
             /* If the packet has been queued for too long, give up on it.
              * Otherwise, leave it at the front of the queue and quit. */
-            long age = timeval_diff(&now, &pkt->created);
+            long age = timeval_diff(now, &pkt->created);
             if (age > MAX_TX_QUEUE_AGE) {
                 free_packet(pkt);
             }
             else
                 break;
         }
-        packet_queue_dequeue(&tx_queue_head);
+        packet_queue_dequeue(head);
     }
-    return 0;
 }
 
+int service_tx_queues()
+{
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    struct flow_entry *flow_entry, *tmp;
+    HASH_ITER(hh, get_flow_table(), flow_entry, tmp) {
+        if(flow_entry->rate_control != NULL) {
+            service_tx_queue(&flow_entry->packet_queue_head, &now);
+        }
+    }
+    service_tx_queue(&tx_queue_head, &now);
+
+    return 0;
+}

@@ -7,6 +7,7 @@
 #include <arpa/inet.h>
 #include <inttypes.h>
 
+#include "circular_counter.h"
 #include "debug.h"
 
 #include "flow_table.h"
@@ -40,17 +41,29 @@ int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress)
     return 0;
 }
 
-struct flow_entry *add_entry(struct flow_tuple* entry) {
+struct flow_entry *add_entry(struct flow_tuple* tuple) {
     struct flow_entry *fe;
 
     struct flow_tuple *newKey = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
     memset(newKey, 0, sizeof(struct flow_tuple));
-    memcpy(newKey, entry, sizeof(struct flow_tuple));
+    memcpy(newKey, tuple, sizeof(struct flow_tuple));
     HASH_FIND(hh, flow_table, newKey, sizeof(struct flow_tuple), fe);
     if(fe == NULL) {
         fe = (struct flow_entry *) malloc(sizeof(struct flow_entry));
         memset(fe, 0, sizeof(struct flow_entry));
         fe->id = newKey;
+
+        policy_entry pd;
+        memset(&pd, 0, sizeof(policy_entry));
+        get_policy_by_tuple(tuple,  &pd, tuple->ingress ? DIR_INGRESS : DIR_EGRESS);
+        fe->action = pd.action;
+        if(pd.rate_limit != 0)
+        {
+            fe->rate_control = (struct circular_counter *)malloc(sizeof(struct circular_counter));
+            ccount_init(fe->rate_control, 10, 20000, pd.rate_limit);
+
+        }
+        strcpy(fe->alg_name, pd.alg_name);
 
         fe->last_visit_time = time(NULL);
         HASH_ADD_KEYPTR(hh, flow_table, newKey, sizeof(struct flow_tuple), fe);
@@ -65,17 +78,15 @@ struct flow_entry *get_flow_entry(struct flow_tuple *ft) {
     if(fe == NULL) {
         fe = add_entry(ft);
         if(fe == NULL) { return NULL; }
-        policy_entry pd;
-        memset(&pd, 0, sizeof(policy_entry));
-        get_policy_by_tuple(ft,  &pd, ft->ingress ? DIR_INGRESS : DIR_EGRESS);
-        fe->action = pd.action;
-        fe->rate_limit = pd.rate_limit;
-        strcpy(fe->alg_name, pd.alg_name);
     }
     fe->last_visit_time = time(NULL);
 
     return fe;
 } 
+
+struct flow_entry *get_flow_table() {
+    return flow_table;
+}
 
 void expiration_time_check() {
     struct flow_entry *current_key, *tmp;

@@ -28,8 +28,7 @@ struct flow_entry {
     char alg_name[MAX_ALG_NAME_LEN];
 
     // Rate limiting and packet queueing
-    double rate_limit;
-    struct circular_counter rate_counter;
+    struct circular_counter * rate_control;
     struct packet * packet_queue_head;
     struct packet * packet_queue_tail;
 };
@@ -47,6 +46,7 @@ struct flow_tuple {
 int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short reverse);
 
 struct flow_entry *get_flow_entry(struct flow_tuple *);
+struct flow_entry *get_flow_table();
 
 int update_flow_entry(struct flow_entry *fe);
 

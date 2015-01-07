@@ -55,6 +55,7 @@ int ccount_rotate(struct circular_counter *cc)
         DEBUG_MSG("CCount error, offset less than 0");
         return 0;
     }
+
     // A bin_diff greater than the window size means we can clear
     // the whole counter and set our offset to the diff
     if(bin_diff >= cc->window_size) {
