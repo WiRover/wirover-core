@@ -32,10 +32,20 @@
     #define SIOCGSTAMP 0x8906
 #endif
 
-int write_to_tunnel(int tunfd, char *packet, int size);
-int handleInboundPacket(int tunfd, struct interface *ife);
-int handleOutboundPacket(int tunfd, struct tunnel *tun);
+
+
+int handle_packet(struct interface * ife, int sockfd, int is_nat);
+int handle_ife_packet(struct packet *pkt, struct interface * ife, int is_nat);
+int handle_nat_packet(struct packet *pkt, struct flow_entry *fe);
+int handle_encap_packet(struct packet *pkt, struct interface *ife, struct flow_entry *fe);
+// Sends a packet over the tunnel specified, if a flow entry or interface
+// is included, the packet may be queued if either are over their rate limit.
+// The packet will not be queued if NULL is passed in for either parameter.
+int handle_flow_packet(struct packet * pkt, struct flow_entry *fe, int allow_enqueue);
+int handleInboundPacket(struct interface *ife);
+int handleOutboundPacket(struct tunnel *tun);
 int handlePackets();
+int service_queues();
 
 static int                  running = 0;
 static pthread_t            data_thread;
@@ -93,40 +103,6 @@ void logPacket(struct timeval *arrival_time, int size, const char *direction, st
     fflush(packet_log_file);
 }
 
-static int nat_receive(int tunfd, int sockfd) {
-    int     bufSize;
-    char    buffer[outbound_mtu];
-
-    struct sockaddr_storage     from;
-    unsigned    fromlen = sizeof(from);
-
-    bufSize = recvfrom(sockfd, buffer, sizeof(buffer), 0, 
-        (struct sockaddr *)&from, &fromlen);
-
-    if(bufSize < 0) {
-        ERROR_MSG("recvfrom() failed");
-        return FAILURE;
-    }
-
-
-    struct iphdr * ip_hdr = (struct iphdr *)buffer;
-    ip_hdr->daddr = tun->n_private_ip;
-    compute_ip_checksum(ip_hdr);
-    if(ip_hdr->protocol == 6) { 
-        compute_tcp_checksum(&buffer[sizeof(struct iphdr)], bufSize - sizeof(struct iphdr), ip_hdr->saddr, ip_hdr->daddr);
-    }
-
-    struct flow_tuple ft;
-    fill_flow_tuple(buffer, &ft, 1);
-
-    struct flow_entry *fe = get_flow_entry(&ft);
-    if(fe->action != POLICY_ACT_NAT) { return SUCCESS; }
-
-    update_flow_entry(fe);
-
-    return write_to_tunnel(tunfd, buffer, bufSize);
-}
-
 int handlePackets()
 {
     // The File Descriptor set to add sockets to
@@ -170,22 +146,22 @@ int handlePackets()
             DEBUG_MSG("select() failed");
             continue;
         }
-        service_tx_queues();
+        service_queues();
 
         obtain_read_lock(&interface_list_lock);
         curr_ife = interface_list;
         while (curr_ife) {
             if( FD_ISSET(curr_ife->sockfd, &read_set) ) {
-                handleInboundPacket(tun->tunnelfd, curr_ife);
+                handle_packet(curr_ife, curr_ife->sockfd, 0);
             }
             if( FD_ISSET(curr_ife->raw_icmp_sockfd, &read_set) ) {
-                nat_receive(tun->tunnelfd, curr_ife->raw_icmp_sockfd);
+                handle_packet(curr_ife, curr_ife->raw_icmp_sockfd, 1);
             }
             if( FD_ISSET(curr_ife->raw_tcp_sockfd, &read_set) ) {
-                nat_receive(tun->tunnelfd, curr_ife->raw_tcp_sockfd);
+                handle_packet(curr_ife, curr_ife->raw_tcp_sockfd, 1);
             }
             if( FD_ISSET(curr_ife->raw_udp_sockfd, &read_set) ) {
-                nat_receive(tun->tunnelfd, curr_ife->raw_udp_sockfd);
+                handle_packet(curr_ife, curr_ife->raw_udp_sockfd, 1);
             }
             curr_ife = curr_ife->next;
         }
@@ -193,7 +169,7 @@ int handlePackets()
 
         if( FD_ISSET(tun->tunnelfd, &read_set) ) 
         {
-            handleOutboundPacket(tun->tunnelfd, tun);
+            handleOutboundPacket(tun);
         }
 
     } // while( 1 )
@@ -201,42 +177,112 @@ int handlePackets()
     return SUCCESS;
 } // End function int handlePackets()
 
-int handleInboundPacket(int tunfd, struct interface *ife) 
+int handle_packet(struct interface * ife, int sockfd, int is_nat)
 {
-    struct  tunhdr n_tun_hdr;
-    int     bufSize;
-    char    buffer[outbound_mtu];
+    int     received_bytes;
+    struct packet * pkt = alloc_packet(0, outbound_mtu);
 
     struct sockaddr_storage     from;
     unsigned    fromlen = sizeof(from);
 
-    bufSize = recvfrom(ife->sockfd, buffer, sizeof(buffer), 0, 
+    received_bytes = recvfrom(sockfd, pkt->data, pkt->tail_size, 0, 
         (struct sockaddr *)&from, &fromlen);
-    if(bufSize < 0) {
+    if(received_bytes < 0) {
         ERROR_MSG("recvfrom() failed");
         return FAILURE;
     }
 
-    ife->rx_bytes += bufSize;
+    packet_put(pkt, received_bytes);
 
     struct timeval arrival_time;
-    if(ioctl(ife->sockfd, SIOCGSTAMP, &arrival_time) == -1) {
+    if(ioctl(sockfd, SIOCGSTAMP, &arrival_time) == -1) {
         ERROR_MSG("ioctl SIOCGSTAMP failed");
         gettimeofday(&arrival_time, 0);
     }
+    pkt->created = arrival_time;
 
-    ife->rx_time = arrival_time;
-    ife->packets_since_ack = 0;
-    change_interface_state(ife, ACTIVE);
+    if(is_nat)
+    {
+        struct flow_tuple ft;
+        fill_flow_tuple(pkt->data, &ft, 1);
 
-    unsigned int h_header_len = ntohs(((struct tunhdr *)buffer)->header_len);
+        struct flow_entry *fe = get_flow_entry(&ft);
+        if(fe->action != POLICY_ACT_NAT) { return SUCCESS; }
+    }
+    else
+    {
+        unsigned int h_header_len = ntohs(((struct tunhdr *)pkt->data)->header_len);
+        packet_pull(pkt, h_header_len);
+        ife->rx_time = arrival_time;
+        ife->packets_since_ack = 0;
+        change_interface_state(ife, ACTIVE);
+    }
+    return handle_ife_packet(pkt, ife, 1);
+}
+
+int handle_ife_packet(struct packet *pkt, struct interface *ife, int allow_enqueue)
+{
+
+    if (ife != NULL && !has_capacity(&ife->rate_control)) {
+        packet_queue_append(&tx_queue_head, &tx_queue_tail, pkt);
+        return SEND_QUEUE;
+    }
+
+    struct flow_tuple ft;
+    fill_flow_tuple(pkt->data, &ft, 1);
+
+    struct flow_entry *fe = get_flow_entry(&ft);
+
+    ife->rx_bytes += pkt->data_size;
+
+    int result = FAILURE;
+    if(fe->action == POLICY_ACT_NAT)
+    {
+        result = handle_nat_packet(pkt, fe);
+    }
+    else if(fe->action == POLICY_ACT_ENCAP)
+    {
+        result = handle_encap_packet(pkt, ife, fe);
+    }
+
+    // Update flow stats
+    if(result == SUCCESS)
+    {
+        update_flow_entry(fe);
+        if(fe->rate_control != NULL)
+            update_tx_rate(fe->rate_control, pkt->data_size);
+    }
+    return result;
+}
+
+int handle_nat_packet(struct packet * pkt, struct flow_entry *fe)
+{
+    struct iphdr * ip_hdr = (struct iphdr *)pkt->data;
+    ip_hdr->daddr = tun->n_private_ip;
+    compute_ip_checksum(ip_hdr);
+    if(ip_hdr->protocol == 6) { 
+        compute_tcp_checksum(&pkt->data[sizeof(struct iphdr)], pkt->data_size - sizeof(struct iphdr), ip_hdr->saddr, ip_hdr->daddr);
+    }
+
+    return handle_flow_packet(pkt, fe, 1);
+}
+
+int handle_encap_packet(struct packet * pkt, struct interface *ife, struct flow_entry *fe)
+{
+    packet_push(pkt, pkt->head_size);
+    struct  tunhdr n_tun_hdr;
+
+    unsigned int h_header_len = ntohs(((struct tunhdr *)pkt->data)->header_len);
 
     if(h_header_len == 0)
         h_header_len = sizeof(struct tunhdr);
 
     // Get the tunhdr (should be the first n bytes in the packet)
     // store network format in temporary struct
-    memcpy(&n_tun_hdr, buffer, h_header_len);
+    memcpy(&n_tun_hdr, pkt->data, h_header_len);
+
+    //Stripe the tunnel header from our packet
+    packet_pull(pkt, h_header_len);
 
     // Copy temporary to host format
     unsigned int h_global_seq = ntohl(n_tun_hdr.global_seq);
@@ -246,7 +292,7 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     unsigned int h_local_ts = ntohl(n_tun_hdr.local_ts);
 
     //Remote_ts is the remote send time in our local clock domain
-    uint32_t recv_ts = timeval_to_usec(&arrival_time);
+    uint32_t recv_ts = timeval_to_usec(&pkt->created);
     if(h_remote_ts != 0) {
         long diff = (long)recv_ts - (long)h_remote_ts;
 
@@ -257,12 +303,22 @@ int handleInboundPacket(int tunfd, struct interface *ife)
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
     struct interface *remote_ife = NULL;
 
+    // Update the flow entry information
+    fe->remote_node_id = node_id;
+    fe->remote_link_id = link_id;
+    fe->local_link_id = ife->index;
+
     if(n_tun_hdr.type == TUNTYPE_ERROR){
 #ifdef GATEWAY
         send_notification(1);
 #endif
         return SUCCESS;
     }
+
+    struct sockaddr_storage from;
+    ((struct sockaddr_in*)&from)->sin_family = AF_INET;
+    ((struct sockaddr_in*)&from)->sin_port = htons(fe->id->remote_port);
+    ((struct sockaddr_in*)&from)->sin_addr.s_addr  = htonl(fe->id->remote);
 
     struct remote_node *gw = lookup_remote_node_by_id(node_id);
     if(gw == NULL)
@@ -310,15 +366,15 @@ int handleInboundPacket(int tunfd, struct interface *ife)
             bufSize);
 */
 
-    update_burst(&update_ife->burst, recv_ts, h_local_ts, h_link_seq, bufSize);
-    
+    update_burst(&update_ife->burst, recv_ts, h_local_ts, h_link_seq, pkt->data_size);
+
     //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
     if((n_tun_hdr.type == TUNTYPE_ACK)) {
         return SUCCESS;
     }
     //Process the ping even though we may not have an entry in our remote_nodes
     if((n_tun_hdr.type == TUNTYPE_PING)){
-        handle_incoming_ping(&from, arrival_time, ife, remote_ife, &buffer[h_header_len], bufSize - h_header_len);
+        handle_incoming_ping(&from, pkt->created, ife, remote_ife, pkt->data, pkt->data_size);
         return SUCCESS;
     }
 
@@ -336,28 +392,23 @@ int handleInboundPacket(int tunfd, struct interface *ife)
 
     if(packet_log_enabled && packet_log_file != NULL)
     {
-        logPacket(&arrival_time, bufSize, "INGRESS", ife, remote_ife);
+        logPacket(&pkt->created, pkt->data_size, "INGRESS", ife, remote_ife);
     }
 
-    struct flow_tuple ft;
-    // Policy and Flow table
-    fill_flow_tuple(&buffer[h_header_len], &ft, 1);
-    struct flow_entry *ftd = get_flow_entry(&ft);
-
-    ftd->remote_node_id = node_id;
-    ftd->remote_link_id = link_id;
-    ftd->local_link_id = ife->index;
-
-    update_flow_entry(ftd);
-
-    return write_to_tunnel(tunfd, &buffer[h_header_len], bufSize - h_header_len);
+    return handle_flow_packet(pkt, fe, 1);
     
 } // End function int handleInboundPacket()
 
-int write_to_tunnel(int tunfd, char *packet, int size) {
-    
-    if(size + TUNTAP_OFFSET > outbound_mtu) { 
-        DEBUG_MSG("Tried to send packet larger than our send buffer %d", size);
+int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_enqueue) {
+    //Packet queuing if a rate limit is violated
+    if(fe->rate_control != NULL && !has_capacity(fe->rate_control)) {
+        if(allow_enqueue)
+            packet_queue_append(&fe->packet_queue_head, &fe->packet_queue_head, pkt);
+        return SEND_QUEUE;
+    }
+
+    if(pkt->data_size + TUNTAP_OFFSET > outbound_mtu) { 
+        DEBUG_MSG("Tried to send packet larger than our send buffer %d", pkt->data_size);
         return FAILURE;
     }
     
@@ -370,16 +421,16 @@ int write_to_tunnel(int tunfd, char *packet, int size) {
     // the flags field, the next two byte (0800 are the protocol field, in this
     // case IP): http://www.mjmwired.net/kernel/Documentation/networking/tuntap.txt
 
-    struct iphdr *ip_hdr = (struct iphdr *)(packet);
+    struct iphdr *ip_hdr = (struct iphdr *)(pkt->data);
     unsigned short tun_info[2];
     tun_info[0] = 0; //flags
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
     memcpy(send_buffer, tun_info, TUNTAP_OFFSET);
 
 
-    memcpy( (char *)&send_buffer[TUNTAP_OFFSET], packet, size);
+    memcpy( (char *)&send_buffer[TUNTAP_OFFSET], pkt->data, pkt->data_size);
 
-    if( write(tunfd, send_buffer, size + TUNTAP_OFFSET) < 0)
+    if( write(tun->tunnelfd, send_buffer, pkt->data_size + TUNTAP_OFFSET) < 0)
     {
         ERROR_MSG("write() failed");
         return FAILURE;
@@ -388,12 +439,12 @@ int write_to_tunnel(int tunfd, char *packet, int size) {
     return SUCCESS;
 }
 
-int handleOutboundPacket(int tunfd, struct tunnel * tun) 
+int handleOutboundPacket(struct tunnel * tun) 
 {
     //Leave room for the TUNTAP header
     struct packet *pkt = alloc_packet(0, tunnel_mtu + TUNTAP_OFFSET);
     
-    int read_size = read(tunfd, pkt->data, pkt->tail_size);
+    int read_size = read(tun->tunnelfd, pkt->data, pkt->tail_size);
     if (read_size >= 0) {
         packet_put(pkt, read_size);
 
@@ -420,37 +471,37 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
     // Policy and Flow table
     fill_flow_tuple(pkt->data, &ft, 0);
 
-    struct flow_entry *ftd = get_flow_entry(&ft);
+    struct flow_entry *fe = get_flow_entry(&ft);
 
-    update_flow_entry(ftd);
+    update_flow_entry(fe);
 
     // Check for drop
-    if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
+    if((fe->action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
         return SUCCESS;
     }
 
     // Send on all interfaces
-    if((ftd->action & POLICY_OP_DUPLICATE) != 0) {
+    if((fe->action & POLICY_OP_DUPLICATE) != 0) {
         //sendAllInterfaces(orig_packet, orig_size);
         return SUCCESS;
     }
 
     // Interface lookup
-    struct interface *src_ife = select_src_interface(ftd);
+    struct interface *src_ife = select_src_interface(fe);
     if(src_ife != NULL) {
-        ftd->local_link_id = src_ife->index;
+        fe->local_link_id = src_ife->index;
     }
 
-    struct interface *dst_ife = select_dst_interface(ftd);
+    struct interface *dst_ife = select_dst_interface(fe);
     if(dst_ife != NULL) {
-        ftd->remote_link_id = dst_ife->index;
-        ftd->remote_node_id = dst_ife->node_id;
+        fe->remote_link_id = dst_ife->index;
+        fe->remote_node_id = dst_ife->node_id;
     }
 
     //Packet queuing if a rate limit is violated
-    if(ftd->rate_control != NULL && !has_capacity(ftd->rate_control)) {
+    if(fe->rate_control != NULL && !has_capacity(fe->rate_control)) {
         if (allow_flow_enqueue)
-            packet_queue_append(&ftd->packet_queue_head, &ftd->packet_queue_head, pkt);
+            packet_queue_append(&fe->packet_queue_head, &fe->packet_queue_head, pkt);
         return SEND_QUEUE;
     }
     if (!src_ife || !dst_ife) {
@@ -462,18 +513,18 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
     int output = FAILURE;
     int node_id = get_unique_id();
     //Add a tunnel header to the packet
-    if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
+    if((fe->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
         output = send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, src_ife, dst_ife, NULL);
     }
-    else if((ftd->action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
-        struct interface *src_ife = select_src_interface(ftd);
+    else if((fe->action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
+        struct interface *src_ife = select_src_interface(fe);
         if(src_ife != NULL) {
             output = send_nat_packet(pkt->data, pkt->data_size, src_ife);
         }
     }
     //Update rate information for the flow entry
-    if(output == SUCCESS && ftd->rate_control != NULL) {
-        update_tx_rate(ftd->rate_control, pkt->data_size);
+    if(output == SUCCESS && fe->rate_control != NULL) {
+        update_tx_rate(fe->rate_control, pkt->data_size);
     }
     return FAILURE;
 }
@@ -595,10 +646,10 @@ int send_ife_packet(char *packet, int size, struct interface *ife, int sockfd, s
 }
 
 
-void service_tx_queue(struct packet ** head, struct timeval *now) {
+void service_tx_queue(struct packet ** head, struct timeval *now, int allow_ife_enqueue, int allow_flow_enqueue) {
     while (*head) {
         struct packet *pkt = *head;
-        if(send_packet(pkt, 0, 0) == SEND_QUEUE) {
+        if(send_packet(pkt, allow_ife_enqueue, allow_flow_enqueue) == SEND_QUEUE) {
             /* If the packet has been queued for too long, give up on it.
              * Otherwise, leave it at the front of the queue and quit. */
             long age = timeval_diff(now, &pkt->created);
@@ -612,17 +663,38 @@ void service_tx_queue(struct packet ** head, struct timeval *now) {
     }
 }
 
-int service_tx_queues()
+void service_flow_rx_queue(struct flow_entry * fe, struct timeval *now) {
+    struct packet **head = &fe->packet_queue_head;
+    while (*head) {
+        struct packet *pkt = *head;
+        if(handle_flow_packet(pkt, fe, 0) == SEND_QUEUE) {
+            /* If the packet has been queued for too long, give up on it.
+             * Otherwise, leave it at the front of the queue and quit. */
+            long age = timeval_diff(now, &pkt->created);
+            if (age > MAX_TX_QUEUE_AGE) {
+                free_packet(pkt);
+            }
+            else
+                break;
+        }
+        packet_queue_dequeue(head);
+    }
+}
+
+int service_queues()
 {
     struct timeval now;
     gettimeofday(&now, NULL);
     struct flow_entry *flow_entry, *tmp;
     HASH_ITER(hh, get_flow_table(), flow_entry, tmp) {
         if(flow_entry->rate_control != NULL) {
-            service_tx_queue(&flow_entry->packet_queue_head, &now);
+            if(flow_entry->id->ingress)
+                service_flow_rx_queue(flow_entry, &now);
+            else
+                service_tx_queue(&flow_entry->packet_queue_head, &now, 1, 0);
         }
     }
-    service_tx_queue(&tx_queue_head, &now);
+    service_tx_queue(&tx_queue_head, &now, 0, 0);
 
     return 0;
 }

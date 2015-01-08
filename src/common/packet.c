@@ -72,11 +72,26 @@ void packet_put(struct packet *pkt, int bytes)
     pkt->tail_size -= bytes;
 }
 
+void packet_push(struct packet *pkt, int bytes)
+{
+    assert(pkt->head_size >= bytes);
+    pkt->data_size += bytes;
+    pkt->data -= bytes;
+    pkt->head_size -= bytes;
+}
+
 void packet_pull(struct packet *pkt, int bytes)
 {
     assert(pkt->data_size >= bytes);
     pkt->data += bytes;
     pkt->head_size += bytes;
+    pkt->data_size -= bytes;
+}
+
+void packet_pull_tail(struct packet *pkt, int bytes)
+{
+    assert(pkt->data_size >= bytes);
+    pkt->tail_size += bytes;
     pkt->data_size -= bytes;
 }
 

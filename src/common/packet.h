@@ -27,7 +27,9 @@ struct packet *clone_packet(struct packet *pkt);
 void free_packet(struct packet *pkt);
 
 void packet_put(struct packet *pkt, int bytes);
+void packet_push(struct packet *pkt, int bytes);
 void packet_pull(struct packet *pkt, int bytes);
+void packet_pull_tail(struct packet *pkt, int bytes);
 
 int packet_queue_append(struct packet **tx_queue_head, struct packet **tx_queue_tail, struct packet *pkt);
 struct packet * packet_queue_dequeue(struct packet **tx_queue_head);
