@@ -16,6 +16,7 @@ static policy_entry * alloc_policy() {
     policy_entry * output = ( policy_entry *)malloc(sizeof( policy_entry));
     memset(output, 0, sizeof( policy_entry));
     output->action = POLICY_ACT_ENCAP;
+    output->direction = DIR_BOTH;
     return output;
 }
 
@@ -188,7 +189,10 @@ int get_policy_by_tuple(struct flow_tuple *ft, policy_entry *policy, int dir) {
 static policy_entry** load_policies(int * count) {
     *count = 0;
     json_object * table = get_table();
-    if(table == 0) { return 0; }
+    if(table == 0) {
+        DEBUG_MSG("Policy table doesn't exist at /var/lib/wirover/policy_tbl");
+        goto default_return;
+    }
     if(!json_object_is_type(table, json_type_array)) {
         DEBUG_MSG("Policy table is formatted incorrectly");
         goto default_return;
@@ -204,11 +208,13 @@ static policy_entry** load_policies(int * count) {
             goto free_return;
         }
     }
+    free(table);
     return output;
 
 free_return:
     free(output);
 default_return:
+    free(table);
     *count = 1;
     output = ( policy_entry **)malloc(sizeof( policy_entry));
     output[0] = alloc_policy();

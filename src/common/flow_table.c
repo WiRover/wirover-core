@@ -13,6 +13,7 @@
 #include "flow_table.h"
 #include "uthash.h"
 #include "tunnel.h"
+#include "packet.h"
 #include "policy_table.h"
 
 #define TIME_BUFFER_SIZE 1024
@@ -88,14 +89,31 @@ struct flow_entry *get_flow_table() {
     return flow_table;
 }
 
+void free_flow_table() {
+    struct flow_entry *current_key, *tmp;
+
+    HASH_ITER(hh, flow_table, current_key, tmp) {
+            free_flow_entry(current_key);
+    }
+}
+
+void free_flow_entry(struct flow_entry * fe) {
+    HASH_DEL(flow_table, fe);
+    free(fe->id);
+    while(fe->packet_queue_head) {
+        struct packet * pkt = fe->packet_queue_head;
+        packet_queue_dequeue(&fe->packet_queue_head);
+        free_packet(pkt);
+    }
+    free(fe);
+}
+
 void expiration_time_check() {
     struct flow_entry *current_key, *tmp;
 
     HASH_ITER(hh, flow_table, current_key, tmp) {
         if(time(NULL) - current_key->last_visit_time > flow_table_timeout) {
-            HASH_DEL(flow_table, current_key);
-            free(current_key->id);
-            free(current_key);
+            free_flow_entry(current_key);
         }
     }
 }

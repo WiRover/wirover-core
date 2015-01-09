@@ -189,6 +189,7 @@ int handle_packet(struct interface * ife, int sockfd, int is_nat)
         (struct sockaddr *)&from, &fromlen);
     if(received_bytes < 0) {
         ERROR_MSG("recvfrom() failed");
+        free_packet(pkt);
         return FAILURE;
     }
 
@@ -207,7 +208,10 @@ int handle_packet(struct interface * ife, int sockfd, int is_nat)
         fill_flow_tuple(pkt->data, &ft, 1);
 
         struct flow_entry *fe = get_flow_entry(&ft);
-        if(fe->action != POLICY_ACT_NAT) { return SUCCESS; }
+        if(fe->action != POLICY_ACT_NAT) {
+            free_packet(pkt);
+            return SUCCESS;
+        }
     }
     else
     {
@@ -222,12 +226,6 @@ int handle_packet(struct interface * ife, int sockfd, int is_nat)
 
 int handle_ife_packet(struct packet *pkt, struct interface *ife, int allow_enqueue)
 {
-
-    if (ife != NULL && !has_capacity(&ife->rate_control)) {
-        packet_queue_append(&tx_queue_head, &tx_queue_tail, pkt);
-        return SEND_QUEUE;
-    }
-
     struct flow_tuple ft;
     fill_flow_tuple(pkt->data, &ft, 1);
 
@@ -245,13 +243,6 @@ int handle_ife_packet(struct packet *pkt, struct interface *ife, int allow_enque
         result = handle_encap_packet(pkt, ife, fe);
     }
 
-    // Update flow stats
-    if(result == SUCCESS)
-    {
-        update_flow_entry(fe);
-        if(fe->rate_control != NULL)
-            update_tx_rate(fe->rate_control, pkt->data_size);
-    }
     return result;
 }
 
@@ -312,6 +303,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct flow_
 #ifdef GATEWAY
         send_notification(1);
 #endif
+        free_packet(pkt);
         return SUCCESS;
     }
 
@@ -325,6 +317,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct flow_
     {
         DEBUG_MSG("Sending error for bad node");
         char error[] = { TUNERROR_BAD_NODE };
+        free_packet(pkt);
         return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, &from);
     }
     
@@ -339,6 +332,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct flow_
     {
         DEBUG_MSG("Sending error for bad link %d", link_id);
         char error[] = { TUNERROR_BAD_LINK };
+        free_packet(pkt);
         return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, &from);
     }
 
@@ -370,23 +364,27 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct flow_
 
     //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
     if((n_tun_hdr.type == TUNTYPE_ACK)) {
+        free_packet(pkt);
         return SUCCESS;
     }
     //Process the ping even though we may not have an entry in our remote_nodes
     if((n_tun_hdr.type == TUNTYPE_PING)){
         handle_incoming_ping(&from, pkt->created, ife, remote_ife, pkt->data, pkt->data_size);
+        free_packet(pkt);
         return SUCCESS;
     }
 
     //If it's not a ping and we don't have an entry, it's an error
     if(remote_ife == NULL) { 
         DEBUG_MSG("Received packet from unknown node %d link %d", node_id, link_id);
+        free_packet(pkt);
         return FAILURE;
     }
 
     //Send an ack and return if the packet was only requesting an ack
     send_encap_packet_ife(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife, &h_local_ts);
     if((n_tun_hdr.type == TUNTYPE_ACKREQ)){
+        free_packet(pkt);
         return SUCCESS;
     }
 
@@ -403,12 +401,13 @@ int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_en
     //Packet queuing if a rate limit is violated
     if(fe->rate_control != NULL && !has_capacity(fe->rate_control)) {
         if(allow_enqueue)
-            packet_queue_append(&fe->packet_queue_head, &fe->packet_queue_head, pkt);
+            packet_queue_append(&fe->packet_queue_head, &fe->packet_queue_tail, pkt);
         return SEND_QUEUE;
     }
 
     if(pkt->data_size + TUNTAP_OFFSET > outbound_mtu) { 
         DEBUG_MSG("Tried to send packet larger than our send buffer %d", pkt->data_size);
+        free_packet(pkt);
         return FAILURE;
     }
     
@@ -433,9 +432,17 @@ int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_en
     if( write(tun->tunnelfd, send_buffer, pkt->data_size + TUNTAP_OFFSET) < 0)
     {
         ERROR_MSG("write() failed");
+        free_packet(pkt);
         return FAILURE;
     }
 
+    // Update flow statistics
+    update_flow_entry(fe);
+    if(fe->rate_control != NULL) {
+        update_tx_rate(fe->rate_control, pkt->data_size);
+    }
+
+    free_packet(pkt);
     return SUCCESS;
 }
 
@@ -477,12 +484,14 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
 
     // Check for drop
     if((fe->action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
+        free_packet(pkt);
         return SUCCESS;
     }
 
     // Send on all interfaces
     if((fe->action & POLICY_OP_DUPLICATE) != 0) {
         //sendAllInterfaces(orig_packet, orig_size);
+        free_packet(pkt);
         return SUCCESS;
     }
 
@@ -526,7 +535,8 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
     if(output == SUCCESS && fe->rate_control != NULL) {
         update_tx_rate(fe->rate_control, pkt->data_size);
     }
-    return FAILURE;
+    free_packet(pkt);
+    return output;
 }
 
 int send_encap_packet_ife(uint8_t type, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife, uint32_t *remote_ts)
@@ -687,7 +697,7 @@ int service_queues()
     gettimeofday(&now, NULL);
     struct flow_entry *flow_entry, *tmp;
     HASH_ITER(hh, get_flow_table(), flow_entry, tmp) {
-        if(flow_entry->rate_control != NULL) {
+        if(flow_entry->packet_queue_head != NULL) {
             if(flow_entry->id->ingress)
                 service_flow_rx_queue(flow_entry, &now);
             else

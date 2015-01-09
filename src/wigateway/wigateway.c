@@ -368,6 +368,7 @@ static void shutdown_handler(int signo)
     remove_tcp_mtu_clamp();
     remove_masquerade("tun0");
     stop_netlink_thread();
+    free_flow_table();
     send_shutdown_notification();
     exit(0);
 }

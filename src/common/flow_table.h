@@ -52,6 +52,9 @@ int update_flow_entry(struct flow_entry *fe);
 
 int set_flow_table_timeout(int);
 
+void free_flow_entry(struct flow_entry * fe);
+void free_flow_table();
+
 //Debug Methods
 int dump_flow_table_to_file(const char *filename);
 void print_flow_entry(struct flow_entry *fe);
