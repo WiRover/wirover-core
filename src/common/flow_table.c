@@ -15,11 +15,13 @@
 #include "tunnel.h"
 #include "packet.h"
 #include "policy_table.h"
+#include "rwlock.h"
 
 #define TIME_BUFFER_SIZE 1024
 #define TIME_BETWEEN_EXPIRATION_CHECKS 5
 
 struct flow_entry *flow_table = NULL;
+struct rwlock flow_table_lock = RWLOCK_INITIALIZER;
 int flow_table_timeout = 10;
 time_t last_expiration_check = 0;
 
@@ -98,6 +100,7 @@ void free_flow_table() {
 }
 
 void free_flow_entry(struct flow_entry * fe) {
+    obtain_write_lock(&flow_table_lock);
     HASH_DEL(flow_table, fe);
     free(fe->id);
     while(fe->packet_queue_head) {
@@ -106,6 +109,7 @@ void free_flow_entry(struct flow_entry * fe) {
         free_packet(pkt);
     }
     free(fe);
+    release_write_lock(&flow_table_lock);
 }
 
 void expiration_time_check() {
@@ -175,10 +179,12 @@ int dump_flow_table_to_file(const char *filename)
         return FAILURE;
     char buffer[128];
     struct flow_entry *current_key, *tmp;
+    obtain_read_lock(&flow_table_lock);
     HASH_ITER(hh, flow_table, current_key, tmp) {
         flow_entry_to_string(current_key, buffer, sizeof(buffer));
         fprintf(ft_file, "%s\n", buffer);
     }
+    release_read_lock(&flow_table_lock);
     fclose(ft_file);
     return SUCCESS;
 }
