@@ -160,8 +160,12 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
 
     //--RATE LIMIT--//
     value = json_object_object_get(jobj_policy, "rate_limit");
-    if(value != NULL && json_object_is_type(value, json_type_double)) {
-        pe->rate_limit = json_object_get_double(value);
+    if(value != NULL) {
+        if(json_object_is_type(value, json_type_double))
+            pe->rate_limit = json_object_get_double(value);
+        else if(json_object_is_type(value, json_type_int))
+            pe->rate_limit = json_object_get_int(value);
+
     }
 
     return SUCCESS;
