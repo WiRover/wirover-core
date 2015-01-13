@@ -8,7 +8,7 @@ struct circular_counter {
     int window_size;
     long bin_size;
 
-    long *counts;
+    float *counts;
 
     struct timeval start_time;
     long current_bin_offset;
@@ -20,7 +20,7 @@ int ccount_rotate(struct circular_counter *cc);
 long ccount_read(struct circular_counter *cc);
 void ccount_set(struct circular_counter *cc, long value);
 long update_tx_rate(struct circular_counter *cc, long amount);
-long ccount_sum(struct circular_counter *cc);
+float ccount_sum(struct circular_counter *cc);
 
 // Rate information
 int has_capacity(struct circular_counter *cc);

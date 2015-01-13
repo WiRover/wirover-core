@@ -88,9 +88,9 @@ void ccount_set(struct circular_counter *cc, long value)
 }
 
 /* Starting from t, sum the past window of data. */
-long ccount_sum(struct circular_counter *cc)
+float ccount_sum(struct circular_counter *cc)
 {
-    long sum = 0;
+    float sum = 0;
     ccount_rotate(cc);
     for(int j = 0; j < cc->window_size; j++) {
         sum += cc->counts[j];
@@ -103,21 +103,25 @@ long ccount_sum(struct circular_counter *cc)
  * be sent. */
 int has_capacity(struct circular_counter *cc)
 {
-    double count = current_allocation(cc);
-    return (count < cc->capacity);
+    float count = ccount_sum(cc);
+    return (count < cc->capacity * cc->bin_size * (cc->window_size + 1) / 16);
 }
 
 /* Return the counter's current allocation in Mbit/s */
 double current_allocation(struct circular_counter *cc)
 {
-    long count = ccount_sum(cc);
+    float count = ccount_sum(cc);
     return count * 8.0 / (cc->window_size * cc->bin_size);
 }
 
 /* Increment the counter for the bin at time t and return the result. */
 long update_tx_rate(struct circular_counter *cc, long amount)
 {
-    int i = ccount_rotate(cc);
-    cc->counts[i] += amount;
-    return cc->counts[i];
+    //int i = ccount_rotate(cc);
+    //cc->counts[i] += amount;
+    for(int i = 0; i < cc->window_size; i++)
+    {
+        cc->counts[i] += amount * 1.0f / cc->window_size;
+    }
+    return amount;
 }
