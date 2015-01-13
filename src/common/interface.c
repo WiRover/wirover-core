@@ -59,7 +59,7 @@ struct interface* alloc_interface(int node_id)
     struct rwlock lock = RWLOCK_INITIALIZER;
     ife->rt_buffer.rwlock = lock;
 
-    init_interface_rate_control_info(&ife->rate_control);
+    rc_init(&ife->rate_control, 10, 20000, 1.0);
 
     return ife;
 }
@@ -78,7 +78,8 @@ int change_interface_state(struct interface *ife, enum if_state state)
     {
         DEBUG_MSG("Retransmitting %d unacked packets", ife->rt_buffer.length);
         while(ife->rt_buffer.length > 0) {
-            send_packet(ife->rt_buffer.head->packet, ife->rt_buffer.head->size);
+            //TODO: Switch retransmit buffer to use struct packet
+            //send_packet(ife->rt_buffer.head->packet, ife->rt_buffer.head->size);
             pb_free_head(&ife->rt_buffer);
         }
     }

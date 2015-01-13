@@ -95,17 +95,3 @@ int remove_remote_node(struct remote_node *gw)
 
     return 0;
 }
-
-int node_tx_queue_append(struct remote_node *node, struct packet *pkt)
-{
-    if (node->tx_queue_tail) {
-        node->tx_queue_tail->next = pkt;
-        node->tx_queue_tail = pkt;
-    } else {
-        node->tx_queue_head = pkt;
-        node->tx_queue_tail = pkt;
-    }
-    pkt->next = NULL;
-    return 0;
-}
-

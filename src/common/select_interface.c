@@ -1,5 +1,6 @@
 #include "interface.h"
 #include "select_interface.h"
+#include "debug.h"
 
 struct interface *select_mp_interface(struct interface *head)
 {
@@ -14,11 +15,8 @@ struct interface *select_mp_interface(struct interface *head)
     int highest_priority = 0;
     int ife_count = 0;
 
-    struct timeval now;
-    gettimeofday(&now, NULL);
-
     while(curr_ife) {
-        if(curr_ife->state != ACTIVE || !has_capacity(&curr_ife->rate_control, &now)) {
+        if(curr_ife->state != ACTIVE || !has_capacity(&curr_ife->rate_control)) {
             curr_ife = curr_ife->next;
             continue;
         }

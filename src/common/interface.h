@@ -97,7 +97,7 @@ struct interface {
     time_t meas_bw_time;
 
     /* Information for controlling transmit rate. */
-    struct rate_control_info rate_control;
+    struct rate_control rate_control;
 
     /* Track the most recent burst of packets received. */
     struct packet_burst burst;

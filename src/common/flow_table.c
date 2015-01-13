@@ -8,16 +8,19 @@
 #include <inttypes.h>
 
 #include "debug.h"
-
 #include "flow_table.h"
 #include "uthash.h"
 #include "tunnel.h"
+#include "packet.h"
 #include "policy_table.h"
+#include "rate_control.h"
+#include "rwlock.h"
 
 #define TIME_BUFFER_SIZE 1024
 #define TIME_BETWEEN_EXPIRATION_CHECKS 5
 
 struct flow_entry *flow_table = NULL;
+struct rwlock flow_table_lock = RWLOCK_INITIALIZER;
 int flow_table_timeout = 10;
 time_t last_expiration_check = 0;
 
@@ -27,6 +30,7 @@ int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress)
     struct tcphdr   *tcp_hdr = (struct tcphdr *)(packet + (ip_hdr->ihl * 4));
 
     memset(ft, 0, sizeof(struct flow_tuple));
+    ft->ingress = ingress;
     ft->net_proto = ip_hdr->version;
     ft->remote = ingress ? ip_hdr->saddr : ip_hdr->daddr;
     ft->local = ingress ? ip_hdr->daddr : ip_hdr->saddr;
@@ -39,17 +43,29 @@ int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress)
     return 0;
 }
 
-struct flow_entry *add_entry(struct flow_tuple* entry) {
+struct flow_entry *add_entry(struct flow_tuple* tuple) {
     struct flow_entry *fe;
 
     struct flow_tuple *newKey = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
     memset(newKey, 0, sizeof(struct flow_tuple));
-    memcpy(newKey, entry, sizeof(struct flow_tuple));
+    memcpy(newKey, tuple, sizeof(struct flow_tuple));
     HASH_FIND(hh, flow_table, newKey, sizeof(struct flow_tuple), fe);
     if(fe == NULL) {
         fe = (struct flow_entry *) malloc(sizeof(struct flow_entry));
         memset(fe, 0, sizeof(struct flow_entry));
         fe->id = newKey;
+
+        policy_entry pd;
+        memset(&pd, 0, sizeof(policy_entry));
+        get_policy_by_tuple(tuple,  &pd, tuple->ingress ? DIR_INGRESS : DIR_EGRESS);
+        fe->action = pd.action;
+        if(pd.rate_limit != 0)
+        {
+            fe->rate_control = (struct rate_control *)malloc(sizeof(struct rate_control));
+            rc_init(fe->rate_control, 10, 20000, pd.rate_limit);
+
+        }
+        strcpy(fe->alg_name, pd.alg_name);
 
         fe->last_visit_time = time(NULL);
         HASH_ADD_KEYPTR(hh, flow_table, newKey, sizeof(struct flow_tuple), fe);
@@ -64,30 +80,43 @@ struct flow_entry *get_flow_entry(struct flow_tuple *ft) {
     if(fe == NULL) {
         fe = add_entry(ft);
         if(fe == NULL) { return NULL; }
-        policy_entry pd;
-        memset(&pd, 0, sizeof(policy_entry));
-        get_policy_by_tuple(ft,  &pd, DIR_INGRESS);
-        fe->ingress_action = pd.action;
-        strcpy(fe->ingress_alg_name, pd.alg_name);
-        memset(&pd, 0, sizeof(policy_entry));
-        get_policy_by_tuple(ft,  &pd, DIR_EGRESS);
-        fe->egress_action = pd.action;
-        strcpy(fe->egress_alg_name, pd.alg_name);
-
     }
     fe->last_visit_time = time(NULL);
 
     return fe;
 } 
 
+struct flow_entry *get_flow_table() {
+    return flow_table;
+}
+
+void free_flow_table() {
+    struct flow_entry *current_key, *tmp;
+
+    HASH_ITER(hh, flow_table, current_key, tmp) {
+            free_flow_entry(current_key);
+    }
+}
+
+void free_flow_entry(struct flow_entry * fe) {
+    obtain_write_lock(&flow_table_lock);
+    HASH_DEL(flow_table, fe);
+    free(fe->id);
+    while(fe->packet_queue_head) {
+        struct packet * pkt = fe->packet_queue_head;
+        packet_queue_dequeue(&fe->packet_queue_head);
+        free_packet(pkt);
+    }
+    free(fe);
+    release_write_lock(&flow_table_lock);
+}
+
 void expiration_time_check() {
     struct flow_entry *current_key, *tmp;
 
     HASH_ITER(hh, flow_table, current_key, tmp) {
         if(time(NULL) - current_key->last_visit_time > flow_table_timeout) {
-            HASH_DEL(flow_table, current_key);
-            free(current_key->id);
-            free(current_key);
+            free_flow_entry(current_key);
         }
     }
 }
@@ -121,9 +150,10 @@ int flow_entry_to_string(const struct flow_entry *fe, char *str, int size) {
     char remote_ip[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &fe->id->local, local_ip, INET6_ADDRSTRLEN);
     inet_ntop(AF_INET, &fe->id->remote, remote_ip, INET6_ADDRSTRLEN);
-    return snprintf(str, size, "%s:%d -> %s:%d Proto: %d Action: I%dE%d remote: %d:%d Local link: %d hits: %d",
-        local_ip, ntohs(fe->id->local_port), remote_ip, ntohs(fe->id->remote_port),
-        fe->id->proto, fe->ingress_action, fe->egress_action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
+    char * dir_string = fe->id->ingress ? "<-" : "->";
+    return snprintf(str, size, "%s:%d %s %s:%d Proto: %d Action: %d remote: %d:%d Local link: %d hits: %d",
+        local_ip, ntohs(fe->id->local_port), dir_string, remote_ip, ntohs(fe->id->remote_port),
+        fe->id->proto, fe->action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
     );
 }
 //All methods below here are for debugging purposes
@@ -148,10 +178,12 @@ int dump_flow_table_to_file(const char *filename)
         return FAILURE;
     char buffer[128];
     struct flow_entry *current_key, *tmp;
+    obtain_read_lock(&flow_table_lock);
     HASH_ITER(hh, flow_table, current_key, tmp) {
         flow_entry_to_string(current_key, buffer, sizeof(buffer));
         fprintf(ft_file, "%s\n", buffer);
     }
+    release_read_lock(&flow_table_lock);
     fclose(ft_file);
     return SUCCESS;
 }
