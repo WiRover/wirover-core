@@ -59,7 +59,7 @@ struct interface* alloc_interface(int node_id)
     struct rwlock lock = RWLOCK_INITIALIZER;
     ife->rt_buffer.rwlock = lock;
 
-    ccount_init(&ife->rate_control, 10, 20000, 1.0);
+    rc_init(&ife->rate_control, 10, 20000, 1.0);
 
     return ife;
 }

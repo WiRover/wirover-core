@@ -2,7 +2,7 @@
 #define RATEINFER_H
 
 #include <stdint.h>
-#include "circular_counter.h"
+#include "rate_control.h"
 #include "config.h"
 
 struct packet_burst {

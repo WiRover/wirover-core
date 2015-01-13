@@ -7,14 +7,13 @@
 #include <arpa/inet.h>
 #include <inttypes.h>
 
-#include "circular_counter.h"
 #include "debug.h"
-
 #include "flow_table.h"
 #include "uthash.h"
 #include "tunnel.h"
 #include "packet.h"
 #include "policy_table.h"
+#include "rate_control.h"
 #include "rwlock.h"
 
 #define TIME_BUFFER_SIZE 1024
@@ -62,8 +61,8 @@ struct flow_entry *add_entry(struct flow_tuple* tuple) {
         fe->action = pd.action;
         if(pd.rate_limit != 0)
         {
-            fe->rate_control = (struct circular_counter *)malloc(sizeof(struct circular_counter));
-            ccount_init(fe->rate_control, 10, 20000, pd.rate_limit);
+            fe->rate_control = (struct rate_control *)malloc(sizeof(struct rate_control));
+            rc_init(fe->rate_control, 10, 20000, pd.rate_limit);
 
         }
         strcpy(fe->alg_name, pd.alg_name);
