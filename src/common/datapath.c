@@ -36,8 +36,8 @@
 
 int handle_packet(struct interface * ife, int sockfd, int is_nat);
 int handle_ife_packet(struct packet *pkt, struct interface * ife, int is_nat);
-int handle_nat_packet(struct packet *pkt, struct flow_entry *fe);
-int handle_encap_packet(struct packet *pkt, struct interface *ife, struct flow_entry *fe);
+int handle_nat_packet(struct packet *pkt, struct interface *ife);
+int handle_encap_packet(struct packet *pkt, struct interface *ife, struct sockaddr_storage *from);
 // Sends a packet over the tunnel specified, if a flow entry or interface
 // is included, the packet may be queued if either are over their rate limit.
 // The packet will not be queued if NULL is passed in for either parameter.
@@ -204,63 +204,20 @@ int handle_packet(struct interface * ife, int sockfd, int is_nat)
 
     if(is_nat)
     {
-        struct flow_tuple ft;
-        fill_flow_tuple(pkt->data, &ft, 1);
-
-        struct flow_entry *fe = get_flow_entry(&ft);
-        if(fe->action != POLICY_ACT_NAT) {
-            free_packet(pkt);
-            return SUCCESS;
-        }
+        return handle_nat_packet(pkt, ife);
     }
     else
     {
-        unsigned int h_header_len = ntohs(((struct tunhdr *)pkt->data)->header_len);
-        packet_pull(pkt, h_header_len);
         ife->rx_time = arrival_time;
         ife->packets_since_ack = 0;
         change_interface_state(ife, ACTIVE);
+        return handle_encap_packet(pkt, ife, &from);
     }
-    return handle_ife_packet(pkt, ife, 1);
+    return FAILURE;
 }
 
-int handle_ife_packet(struct packet *pkt, struct interface *ife, int allow_enqueue)
+int handle_encap_packet(struct packet * pkt, struct interface *ife, struct sockaddr_storage * from)
 {
-    struct flow_tuple ft;
-    fill_flow_tuple(pkt->data, &ft, 1);
-
-    struct flow_entry *fe = get_flow_entry(&ft);
-
-    ife->rx_bytes += pkt->data_size;
-
-    int result = FAILURE;
-    if(fe->action == POLICY_ACT_NAT)
-    {
-        result = handle_nat_packet(pkt, fe);
-    }
-    else if(fe->action == POLICY_ACT_ENCAP)
-    {
-        result = handle_encap_packet(pkt, ife, fe);
-    }
-
-    return result;
-}
-
-int handle_nat_packet(struct packet * pkt, struct flow_entry *fe)
-{
-    struct iphdr * ip_hdr = (struct iphdr *)pkt->data;
-    ip_hdr->daddr = tun->n_private_ip;
-    compute_ip_checksum(ip_hdr);
-    if(ip_hdr->protocol == 6) { 
-        compute_tcp_checksum(&pkt->data[sizeof(struct iphdr)], pkt->data_size - sizeof(struct iphdr), ip_hdr->saddr, ip_hdr->daddr);
-    }
-
-    return handle_flow_packet(pkt, fe, 1);
-}
-
-int handle_encap_packet(struct packet * pkt, struct interface *ife, struct flow_entry *fe)
-{
-    packet_push(pkt, pkt->head_size);
     struct  tunhdr n_tun_hdr;
 
     unsigned int h_header_len = ntohs(((struct tunhdr *)pkt->data)->header_len);
@@ -295,6 +252,10 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct flow_
     struct interface *remote_ife = NULL;
 
     // Update the flow entry information
+    struct flow_tuple ft;
+    fill_flow_tuple(pkt->data, &ft, 1);
+
+    struct flow_entry *fe = get_flow_entry(&ft);
     fe->remote_node_id = node_id;
     fe->remote_link_id = link_id;
     fe->local_link_id = ife->index;
@@ -307,18 +268,13 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct flow_
         return SUCCESS;
     }
 
-    struct sockaddr_storage from;
-    ((struct sockaddr_in*)&from)->sin_family = AF_INET;
-    ((struct sockaddr_in*)&from)->sin_port = htons(fe->id->remote_port);
-    ((struct sockaddr_in*)&from)->sin_addr.s_addr  = htonl(fe->id->remote);
-
     struct remote_node *gw = lookup_remote_node_by_id(node_id);
     if(gw == NULL)
     {
         DEBUG_MSG("Sending error for bad node");
         char error[] = { TUNERROR_BAD_NODE };
         free_packet(pkt);
-        return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, &from);
+        return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, from);
     }
     
     if(pb_add_seq_num(gw->rec_seq_buffer, h_global_seq) == DUPLICATE) {
@@ -333,7 +289,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct flow_
         DEBUG_MSG("Sending error for bad link %d", link_id);
         char error[] = { TUNERROR_BAD_LINK };
         free_packet(pkt);
-        return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, &from);
+        return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, from);
     }
 
     struct interface *update_ife;
@@ -369,7 +325,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct flow_
     }
     //Process the ping even though we may not have an entry in our remote_nodes
     if((n_tun_hdr.type == TUNTYPE_PING)){
-        handle_incoming_ping(&from, pkt->created, ife, remote_ife, pkt->data, pkt->data_size);
+        handle_incoming_ping(from, pkt->created, ife, remote_ife, pkt->data, pkt->data_size);
         free_packet(pkt);
         return SUCCESS;
     }
@@ -393,9 +349,42 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct flow_
         logPacket(&pkt->created, pkt->data_size, "INGRESS", ife, remote_ife);
     }
 
-    return handle_flow_packet(pkt, fe, 1);
+    return handle_ife_packet(pkt, ife, 1);
     
 } // End function int handleInboundPacket()
+
+int handle_nat_packet(struct packet * pkt, struct interface * ife)
+{
+    struct flow_tuple ft;
+    fill_flow_tuple(pkt->data, &ft, 0);
+
+    policy_entry pe;
+    get_policy_by_tuple(&ft,  &pe, DIR_INGRESS);
+    if(pe.action != POLICY_ACT_NAT) {
+        free_packet(pkt);
+        return SUCCESS;
+    }
+    struct iphdr * ip_hdr = (struct iphdr *)pkt->data;
+    ip_hdr->daddr = tun->n_private_ip;
+    compute_ip_checksum(ip_hdr);
+    if(ip_hdr->protocol == 6) { 
+        compute_tcp_checksum(&pkt->data[sizeof(struct iphdr)], pkt->data_size - sizeof(struct iphdr), ip_hdr->saddr, ip_hdr->daddr);
+    }
+
+    return handle_ife_packet(pkt, ife, 1);
+}
+
+int handle_ife_packet(struct packet *pkt, struct interface *ife, int allow_enqueue)
+{
+    struct flow_tuple ft;
+    fill_flow_tuple(pkt->data, &ft, 1);
+
+    struct flow_entry *fe = get_flow_entry(&ft);
+
+    ife->rx_bytes += pkt->data_size;
+
+    return handle_flow_packet(pkt, fe, 1);
+}
 
 int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_enqueue) {
     //Packet queuing if a rate limit is violated
@@ -637,14 +626,23 @@ int send_nat_packet(char *orig_packet, int orig_size, struct interface *src_ife)
 int send_ife_packet(char *packet, int size, struct interface *ife, int sockfd, struct sockaddr * dst)
 {
     if(sockfd == 0) {
-        if(ife != NULL)
+        if(ife != NULL) {
             DEBUG_MSG("Tried to send packet over bad sockfd on interface %s", ife->name);
+        }
+        else {
+            DEBUG_MSG("Tried to send packet over bad sockfd");
+        }
+
         return FAILURE;
     }
     if((sendto(sockfd, packet, size, 0, (struct sockaddr *)dst, sizeof(struct sockaddr))) < 0)
     {
-        if(ife != NULL)
+        if(ife != NULL) {
             ERROR_MSG("sendto failed fd %d (%s),  dst: %s, new_size: %d", sockfd, ife->name, inet_ntoa(((struct sockaddr_in*)dst)->sin_addr), size);
+        }
+        else {
+            ERROR_MSG("sendto failed fd %d,  dst: %s, new_size: %d", sockfd, inet_ntoa(((struct sockaddr_in*)dst)->sin_addr), size);
+        }
 
         return FAILURE;
     }
