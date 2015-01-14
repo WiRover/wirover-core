@@ -142,6 +142,12 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         pe->ft.local &= pe->local_netmask;
     }
 
+    //--LOCAL PORT--//
+    value = json_object_object_get(jobj_policy, "local_port");
+    if(value != NULL && json_object_is_type(value, json_type_int)) {
+        pe->ft.local_port = json_object_get_int(value);
+    }
+
     //--REMOTE--//
     value = json_object_object_get(jobj_policy, "remote");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
@@ -156,6 +162,12 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         const char * remote_net_str = json_object_get_string(value);
         inet_pton(AF_INET, remote_net_str, &pe->remote_netmask);
         pe->ft.remote &= pe->remote_netmask;
+    }
+
+    //--LOCAL PORT--//
+    value = json_object_object_get(jobj_policy, "remote_port");
+    if(value != NULL && json_object_is_type(value, json_type_int)) {
+        pe->ft.remote_port = json_object_get_int(value);
     }
 
     //--RATE LIMIT--//
@@ -229,11 +241,23 @@ default_return:
 
 void print_policy_entry(policy_entry * pe) {
     char l_str[INET6_ADDRSTRLEN];
+    char l_str_port[INET6_ADDRSTRLEN + 10];
     inet_ntop(AF_INET, &pe->ft.local, l_str, sizeof(l_str));
+    if(pe->ft.local_port != 0)
+        snprintf(l_str_port, sizeof(l_str_port), "%s:%d", l_str, pe->ft.local_port);
+    else
+        snprintf(l_str_port, sizeof(l_str_port), "%s", l_str);
     char l_net_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &pe->local_netmask, l_net_str, sizeof(l_net_str));
+
     char r_str[INET6_ADDRSTRLEN];
+    char r_str_port[sizeof(r_str) + 10];
     inet_ntop(AF_INET, &pe->ft.remote, r_str, sizeof(r_str));
+    if(pe->ft.remote_port != 0)
+        snprintf(r_str_port, sizeof(r_str_port), "%s:%d", r_str, pe->ft.remote_port);
+    else
+        snprintf(r_str_port, sizeof(r_str_port), "%s", r_str);
+
     char r_net_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &pe->remote_netmask, r_net_str, sizeof(r_net_str));
     char *dir_str;
@@ -241,7 +265,7 @@ void print_policy_entry(policy_entry * pe) {
     if(pe->direction == DIR_EGRESS) { dir_str = "O"; }
     if(pe->direction == DIR_BOTH) { dir_str = "*"; }
     DEBUG_MSG("direction: %s local: %s local_net: %s remote: %s remote_net: %s proto: %d act: %d rate: %f",
-        dir_str, l_str, l_net_str, r_str, r_net_str, pe->ft.proto, pe->action, pe->rate_limit);
+        dir_str, l_str_port, l_net_str, r_str_port, r_net_str, pe->ft.proto, pe->action, pe->rate_limit);
 }
 
 void print_policies() {
