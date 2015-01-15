@@ -235,7 +235,7 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
 } // End function tunnelCreate()
 
 int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packet, 
-    struct interface *src_ife, struct interface *update_ife, uint32_t *global_seq, uint32_t *remote_ts)
+    struct interface *src_ife, struct interface *update_ife, uint32_t global_seq, uint32_t *remote_ts)
 {
     // Getting a sequence number should be done as close to sending as possible
     struct tunhdr tun_hdr;
@@ -246,9 +246,7 @@ int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packe
     //tun_hdr.client_id = 0; // TODO: Add a client ID.
     tun_hdr.node_id = htons(get_unique_id());
     tun_hdr.link_id = htons(src_ife->index);
-
-    if(global_seq != NULL)
-        tun_hdr.global_seq = htonl((*global_seq)++);
+    tun_hdr.global_seq = htonl(global_seq);
 
     if(update_ife != NULL){
         tun_hdr.link_seq = htonl(update_ife->local_seq++);

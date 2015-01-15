@@ -301,24 +301,31 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     }
 
     struct interface *update_ife;
+    struct interface *head_ife;
 #ifdef CONTROLLER
     update_ife = remote_ife;
+    head_ife = gw->head_interface;
 #endif
 #ifdef GATEWAY
     update_ife = ife;
+    head_ife = interface_list;
 #endif
+
+    while(head_ife){
+        obtain_write_lock(&head_ife->rt_buffer.rwlock);
+        pb_free_packets(&head_ife->rt_buffer, h_path_ack);   
+        release_write_lock(&head_ife->rt_buffer.rwlock);
+        head_ife = head_ife->next;
+    }
 
     update_ife->remote_ack = h_path_ack;
     update_ife->remote_seq = h_link_seq;
-
-    obtain_write_lock(&update_ife->rt_buffer.rwlock);
-    pb_free_packets(&update_ife->rt_buffer, h_path_ack);
-    release_write_lock(&update_ife->rt_buffer.rwlock);
 
     update_burst(&update_ife->burst, recv_ts, h_local_ts, h_link_seq, pkt->data_size);
 
     //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
     if((n_tun_hdr.type == TUNTYPE_ACK)) {
+        DEBUG_MSG("Got ack");
         free_packet(pkt);
         return SUCCESS;
     }
@@ -337,7 +344,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     }
 
     //Send an ack and return if the packet was only requesting an ack
-    send_encap_packet_ife(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife, &h_local_ts);
+    send_encap_packet_ife(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife, &h_local_ts, 0);
     if((n_tun_hdr.type == TUNTYPE_ACKREQ)){
         free_packet(pkt);
         return SUCCESS;
@@ -484,13 +491,20 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
         fe->remote_node_id = dst_ife->node_id;
     }
 
+    struct remote_node *remote_node = lookup_remote_node_by_id(dst_ife->node_id);
+    if(remote_node == NULL) {
+        DEBUG_MSG("Destination interface %s had bad remote_node id %d", dst_ife->name, dst_ife->node_id);
+        return FAILURE;
+    }
+
     // Send on all interfaces
     if((fe->action & POLICY_OP_MASK) == POLICY_OP_DUPLICATE) {
         struct interface *curr_ife = interface_list;
         while(curr_ife) {
-            send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, curr_ife, dst_ife, NULL);
+            send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, curr_ife, dst_ife, NULL, remote_node->global_seq);
             curr_ife = curr_ife->next;
         }
+        remote_node->global_seq++;
         free_packet(pkt);
         return SUCCESS;
     }
@@ -515,7 +529,8 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
     int output = FAILURE;
     //Add a tunnel header to the packet
     if((fe->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
-        output = send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, src_ife, dst_ife, NULL);
+        output = send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, src_ife, dst_ife, NULL, remote_node->global_seq);
+        remote_node->global_seq++;
     }
     else if((fe->action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
         struct interface *src_ife = select_src_interface(fe);
@@ -531,7 +546,8 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
     return output;
 }
 
-int send_encap_packet_ife(uint8_t type, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife, uint32_t *remote_ts)
+int send_encap_packet_ife(uint8_t type, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife,
+    uint32_t *remote_ts, uint32_t global_seq)
 {
     if(dst_ife == NULL || src_ife == NULL)
     {
@@ -543,13 +559,10 @@ int send_encap_packet_ife(uint8_t type, char *packet, int size, uint16_t node_id
         gettimeofday(&tv, 0);
         logPacket(&tv, size, "EGRESS", src_ife, dst_ife);
     }
+
     struct sockaddr_storage dst;
     build_data_sockaddr(dst_ife, &dst);
-    struct remote_node *remote_node = lookup_remote_node_by_id(dst_ife->node_id);
-    if(remote_node == NULL) {
-        DEBUG_MSG("Destination interface %s had bad remote_node id %d", dst_ife->name, dst_ife->node_id);
-        return FAILURE;
-    }
+
     struct interface *update_ife;
 #ifdef CONTROLLER
     update_ife = dst_ife;
@@ -564,16 +577,17 @@ int send_encap_packet_ife(uint8_t type, char *packet, int size, uint16_t node_id
         pb_add_packet(&update_ife->rt_buffer, update_ife->local_seq, packet, size);
         release_write_lock(&update_ife->rt_buffer.rwlock);
     }
-    return send_encap_packet_dst(type, packet, size, src_ife, &dst, update_ife, &remote_node->global_seq, remote_ts);
+
+    return send_encap_packet_dst(type, packet, size, src_ife, &dst, update_ife, global_seq, remote_ts);
 }
 
 int send_encap_packet_dst_noinfo(uint8_t type, char *packet, int size, struct interface *src_ife,
     struct sockaddr_storage *dst)
 {
-    return send_encap_packet_dst(type, packet, size, src_ife, dst, NULL, NULL, NULL);
+    return send_encap_packet_dst(type, packet, size, src_ife, dst, NULL, 0, NULL);
 }
 int send_encap_packet_dst(uint8_t type, char *packet, int size, struct interface *src_ife,
-    struct sockaddr_storage *dst, struct interface *update_ife, uint32_t *global_seq, uint32_t *remote_ts)
+    struct sockaddr_storage *dst, struct interface *update_ife, uint32_t global_seq, uint32_t *remote_ts)
 {
     int output = FAILURE;
     char new_packet[size + sizeof(struct tunhdr)];
@@ -585,6 +599,7 @@ int send_encap_packet_dst(uint8_t type, char *packet, int size, struct interface
 #ifdef GATEWAY
     struct timeval tv;
     gettimeofday(&tv, NULL);
+    DEBUG_MSG("%s packets since ack %d", src_ife->name, src_ife->packets_since_ack);
     if(src_ife->packets_since_ack == 3)
     {
         src_ife->st_time = tv;
