@@ -143,13 +143,25 @@ static struct remote_node *update_remote_node_v2(const struct cchan_notification
 
         copy_ipaddr(&notif->priv_ip, &gw->private_ip);
         gw->unique_id = ntohs(notif->unique_id);
+        memcpy(gw->hash, notif->hash, NODE_HASH_SIZE);
 
         add_remote_node(gw);
     }
+
+    // Don't update a remote node if it's sent a hash you didn't expect!
+    char notif_hash[NODE_HASH_SIZE + 1];
+    notif_hash[NODE_HASH_SIZE -1] = 0;
+    memcpy(notif_hash, notif->hash, NODE_HASH_SIZE);
+
+    if(strcmp(gw->hash, notif_hash))
+    {
+        DEBUG_MSG("A uniqueid collision has occured between %s and %s", gw->hash, notif_hash);
+        return NULL;
+    }
+
     memcpy(gw->private_key, notif->key, sizeof(gw->private_key));
     /*gw->hash is size NODE_HASH_SIZE + 1 and is initialized to 0
       this null terminates the string*/
-    memcpy(gw->hash, notif->hash, NODE_HASH_SIZE);
     
     int state_change = 0;
 
