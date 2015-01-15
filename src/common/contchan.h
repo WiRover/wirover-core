@@ -23,10 +23,10 @@
 
 #define MAX_INTERFACES    6
 
-#define CCHAN_NOTIFICATION_V1   0x10
-#define CCHAN_NOTIFICATION_V2   0x20
-#define CCHAN_INTERFACE         0x21
-#define CCHAN_SHUTDOWN          0x22
+#define CCHAN_NOTIFICATION      0x10
+#define CCHAN_STARTUP           0x11
+#define CCHAN_INTERFACE         0x12
+#define CCHAN_SHUTDOWN          0x13
 
 #define SHUTDOWN_REASON_NORMAL  0x01
 #define SHUTDOWN_REASON_CRASH   0x02
@@ -35,16 +35,14 @@
 #define CCHAN_RESPONSE_TIMEOUT_SEC 5
 
 /* A typical control channel message contains a notification block followed by
- * one or more interface information blocks.  Version 2 of the protocol uses
+ * one or more interface information blocks. The protocol uses
  * length fields to indicate the length of the current block and hence the
- * start of the next block.  Therefore, if you want to add new fields, you can
- * add them at the structure without breaking backwards compatibility.  If the
+ * start of the next block. Therefore, if you want to add new fields, you can
+ * add them at the structure without breaking backwards compatibility. If the
  * receiver does not recognize the new fields, it can still use the length
- * field to skip to the next block.  Removing fields always breaks backwards
+ * field to skip to the next block. Removing fields always breaks backwards
  * compatibility, however. 
  *
- * Protocol version 1 is used in code versions prior to 1.1.4.
- * Protocol version 2 is used in 1.1.4 and up.
  */
 
 /* Minimal header used during notification parsing. */
@@ -53,9 +51,9 @@ struct cchan_header {
     uint8_t     len;
 } __attribute__((__packed__));
 
-struct cchan_notification_v2 {
+struct cchan_notification {
     uint8_t     type;
-    uint8_t     len;
+    uint16_t     len;
 
     uint8_t     ver_maj;
     uint8_t     ver_min;
@@ -69,11 +67,11 @@ struct cchan_notification_v2 {
 
     /* Interface list follows */
 } __attribute__((__packed__));
-#define MIN_NOTIFICATION_V2_LEN (sizeof(struct cchan_notification_v2))
+#define MIN_NOTIFICATION_LEN (sizeof(struct cchan_notification))
 
-struct interface_info_v2 {
+struct interface_info {
     uint8_t     type;
-    uint8_t     len;
+    uint16_t     len;
     
     uint32_t    link_id;
     char        ifname[IFNAMSIZ];
@@ -84,11 +82,11 @@ struct interface_info_v2 {
     uint32_t    local_ip;
     uint16_t    data_port;
 } __attribute__((__packed__));
-#define MIN_INTERFACE_INFO_V2_LEN (sizeof(struct interface_info_v2))
+#define MIN_INTERFACE_INFO_LEN (sizeof(struct interface_info))
 
 struct cchan_shutdown {
     uint8_t     type;
-    uint8_t     len;
+    uint16_t     len;
 
     ipaddr_t    priv_ip;
     uint16_t    unique_id;
@@ -97,30 +95,6 @@ struct cchan_shutdown {
     uint8_t     reason;
 } __attribute__((__packed__));
 
-/* Obsolete - only used prior to 1.1.4 */
-struct interface_info_v1 {
-    uint32_t    link_id;
-    char        ifname[IFNAMSIZ];
-    char        network[NETWORK_NAME_LENGTH];
-    uint8_t     state;
-
-    uint32_t    local_ip;
-    uint16_t    data_port;
-} __attribute__((__packed__));
-
-/* Obsolete - only used prior to 1.1.4 */
-struct cchan_notification_v1 {
-    uint8_t     type;
-    ipaddr_t    priv_ip;
-    uint16_t    unique_id;
-    uint8_t     key[SHA256_DIGEST_LENGTH];
-    uint16_t    bw_port;
-    uint8_t     interfaces;
-    struct interface_info_v1 if_info[MAX_INTERFACES];
-} __attribute__((__packed__));
-#define MIN_NOTIFICATION_LEN (offsetof(struct cchan_notification_v1, if_info))
-#define MAX_NOTIFICATION_LEN (sizeof(struct cchan_notification_v1))
-
 #ifdef CONTROLLER
 int process_notification(int sockfd, const char* packet, unsigned int pkt_len, uint16_t bw_port);
 #endif
@@ -128,6 +102,7 @@ int process_notification(int sockfd, const char* packet, unsigned int pkt_len, u
 #ifdef GATEWAY
 int send_notification(int max_tries);
 uint16_t get_remote_bw_port();
+int send_startup_notification();
 int send_shutdown_notification();
 
 extern uint8_t private_key[SHA256_DIGEST_LENGTH];

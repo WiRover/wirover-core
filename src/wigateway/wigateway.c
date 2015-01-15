@@ -219,9 +219,15 @@ int main(int argc, char* argv[])
         }
 
         if(state == GATEWAY_LEASE_OBTAINED) {
-            result = add_route(0, 0, 0, 0, TUN_DEVICE);
             if(find_active_interface(interface_list)) {
+                DEBUG_MSG("Sending startup message to controller");
+                result = send_startup_notification();
+                if(result == FAILURE) {
+                    lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
+                    continue;
+                }
 
+                result = add_route(0, 0, 0, 0, TUN_DEVICE);
                 // EEXIST means the route was already present -> not a failure
                 if(result < 0 && result != -EEXIST) {
                     DEBUG_MSG("add_route failed");

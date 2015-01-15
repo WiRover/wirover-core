@@ -87,12 +87,12 @@ static int _send_notification(const char *ifname)
     int space_left = BUFSIZ;
     int offset = 0;
 
-    struct cchan_notification_v2 *notif = (struct cchan_notification_v2 *)buffer;
-    space_left -= sizeof(struct cchan_notification_v2);
-    offset += sizeof(struct cchan_notification_v2);
+    struct cchan_notification *notif = (struct cchan_notification *)buffer;
+    space_left -= sizeof(struct cchan_notification);
+    offset += sizeof(struct cchan_notification);
 
-    notif->type = CCHAN_NOTIFICATION_V2;
-    notif->len = sizeof(struct cchan_notification_v2);
+    notif->type = CCHAN_NOTIFICATION;
+    notif->len = sizeof(struct cchan_notification);
 
     notif->ver_maj = WIROVER_VERSION_MAJOR;
     notif->ver_min = WIROVER_VERSION_MINOR;
@@ -105,15 +105,15 @@ static int _send_notification(const char *ifname)
     memcpy(notif->hash, node_hash, sizeof(notif->hash));
     
     struct interface* ife = interface_list;
-    while(ife && space_left > sizeof(struct cchan_notification_v2)) {
+    while(ife && space_left > sizeof(struct cchan_notification)) {
         /* Avoid sending interfaces that have not passed the init state. */
         if(ife->state != INIT_INACTIVE) {
-            struct interface_info_v2 *dest = (struct interface_info_v2 *)(buffer + offset);
-            space_left -= sizeof(struct interface_info_v2);
-            offset += sizeof(struct interface_info_v2);
+            struct interface_info *dest = (struct interface_info *)(buffer + offset);
+            space_left -= sizeof(struct interface_info);
+            offset += sizeof(struct interface_info);
 
             dest->type = CCHAN_INTERFACE;
-            dest->len = sizeof(struct interface_info_v2);
+            dest->len = sizeof(struct interface_info);
 
             dest->link_id = htonl(ife->index);
             strncpy(dest->ifname, ife->name, sizeof(dest->ifname));
@@ -150,7 +150,7 @@ static int _send_notification(const char *ifname)
     timeout.tv_sec = CCHAN_RESPONSE_TIMEOUT_SEC;
     timeout.tv_usec = 0;
 
-    struct cchan_notification_v2 response;
+    struct cchan_notification response;
 
     bytes = recv_timeout(sockfd, &response, 
             sizeof(response), 0, &timeout);
@@ -221,3 +221,62 @@ close_and_fail:
     return FAILURE;
 }
 
+int send_startup_notification()
+{
+    int sockfd;
+    struct sockaddr_storage cont_dest;
+    build_control_sockaddr(get_controller_ife(), &cont_dest);
+
+    struct timeval timeout;
+    timeout.tv_sec  = CCHAN_CONNECT_TIMEOUT_SEC;
+    timeout.tv_usec = 0;
+    sockfd = tcp_active_open(&cont_dest, NULL, &timeout);
+    if(sockfd == -1) {
+        DEBUG_MSG("Failed to open control channel with controller");
+        return FAILURE;
+    }
+
+    struct cchan_notification notif;
+    memset(&notif, 0, sizeof(notif));
+
+    notif.type = CCHAN_STARTUP;
+    notif.len = sizeof(notif);
+
+    get_private_ip(&notif.priv_ip);
+    notif.unique_id = htons(get_unique_id());
+    memcpy(notif.key, private_key, sizeof(notif.key));
+    
+    int bytes = send(sockfd, &notif, sizeof(notif), 0);
+
+    if(bytes < 0) {
+        ERROR_MSG("sending notification failed");
+        goto close_and_fail;
+    } else if(bytes == 0) {
+        DEBUG_MSG("Controller closed control channel");
+        goto close_and_fail;
+    } else if(bytes < sizeof(notif)) {
+        DEBUG_MSG("Full notification packet was not sent, investigate this.");
+        goto close_and_fail;
+    }
+
+    set_nonblock(sockfd, NONBLOCKING);
+    timeout.tv_sec = CCHAN_RESPONSE_TIMEOUT_SEC;
+    timeout.tv_usec = 0;
+
+    struct cchan_notification response;
+
+    bytes = recv_timeout(sockfd, &response, 
+            sizeof(response), 0, &timeout);
+    if(bytes < 0) {
+        ERROR_MSG("Receiving notification response failed");
+        close(sockfd);
+        return -1;
+    }
+
+    close(sockfd);
+    return SUCCESS;
+
+close_and_fail:
+    close(sockfd);
+    return FAILURE;
+}
