@@ -286,10 +286,6 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
         free_packet(pkt);
         return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, from);
     }
-    
-    if(pb_add_seq_num(gw->rec_seq_buffer, h_global_seq) == DUPLICATE) {
-        return SUCCESS;
-    }
 
     remote_ife = find_interface_by_index(gw->head_interface, link_id);
     if(remote_ife == NULL)
@@ -298,6 +294,13 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
         char error[] = { TUNERROR_BAD_LINK };
         free_packet(pkt);
         return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, from);
+    }
+
+    if(pb_add_seq_num(gw->rec_seq_buffer, h_global_seq) == DUPLICATE) {
+        // Send an ack anyway so that if one interface always has a lower RTT
+        // it won't time out
+        send_encap_packet_ife(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife, &h_local_ts, 0);
+        return SUCCESS;
     }
 
     struct interface *update_ife;
@@ -325,7 +328,6 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
 
     //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
     if((n_tun_hdr.type == TUNTYPE_ACK)) {
-        DEBUG_MSG("Got ack");
         free_packet(pkt);
         return SUCCESS;
     }
@@ -599,7 +601,6 @@ int send_encap_packet_dst(uint8_t type, char *packet, int size, struct interface
 #ifdef GATEWAY
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    DEBUG_MSG("%s packets since ack %d", src_ife->name, src_ife->packets_since_ack);
     if(src_ife->packets_since_ack == 3)
     {
         src_ife->st_time = tv;
