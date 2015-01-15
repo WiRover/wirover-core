@@ -35,6 +35,7 @@ int pb_free_head(struct retrans_buffer *rt_buffer);
 
 uint32_t *pb_alloc_seq_buffer();
 int pb_add_seq_num(uint32_t *received_buffer, uint32_t seq);
+void pb_clear_buffer(uint32_t *received_buffer);
 
 
 

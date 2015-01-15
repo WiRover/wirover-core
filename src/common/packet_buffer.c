@@ -87,3 +87,6 @@ int pb_add_seq_num(uint32_t *packet_buffer, uint32_t seq) {
     return DUPLICATE;
 }
 
+void pb_clear_buffer(uint32_t *received_buffer) {
+    memset(received_buffer, 0, sizeof(uint32_t) * PACKET_BUFFER_SIZE);
+}

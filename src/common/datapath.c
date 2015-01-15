@@ -260,7 +260,18 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     fe->remote_link_id = link_id;
     fe->local_link_id = ife->index;
 
+
+    struct remote_node *gw = lookup_remote_node_by_id(node_id);
+
     if(n_tun_hdr.type == TUNTYPE_ERROR){
+        int error = pkt->data[0];
+        DEBUG_MSG("Received an error: %d", error);
+
+        // The sequence number buffer is invalid if the remote node has no record for us
+        if(error == TUNERROR_BAD_NODE && gw != NULL) {
+            pb_clear_buffer(gw->rec_seq_buffer);
+        }
+
 #ifdef GATEWAY
         send_notification(1);
 #endif
@@ -268,7 +279,6 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
         return SUCCESS;
     }
 
-    struct remote_node *gw = lookup_remote_node_by_id(node_id);
     if(gw == NULL)
     {
         DEBUG_MSG("Sending error for bad node");
@@ -278,9 +288,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     }
     
     if(pb_add_seq_num(gw->rec_seq_buffer, h_global_seq) == DUPLICATE) {
-        //TODO: This doesn't quite work yet, when a controller or gateway get out of sync
-        //this method will drop all packets because the sequence numbers start over
-        //return SUCCESS;
+        return SUCCESS;
     }
 
     remote_ife = find_interface_by_index(gw->head_interface, link_id);
@@ -306,15 +314,6 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     obtain_write_lock(&update_ife->rt_buffer.rwlock);
     pb_free_packets(&update_ife->rt_buffer, h_path_ack);
     release_write_lock(&update_ife->rt_buffer.rwlock);
-
-/*
-    DEBUG_MSG("Receive: %s,%u,%u,%u,%u",
-            update_ife->name,
-            recv_ts,
-            h_local_ts,
-            h_link_seq,
-            bufSize);
-*/
 
     update_burst(&update_ife->burst, recv_ts, h_local_ts, h_link_seq, pkt->data_size);
 
@@ -477,23 +476,28 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
         return SUCCESS;
     }
 
-    // Send on all interfaces
-    if((fe->action & POLICY_OP_DUPLICATE) != 0) {
-        //sendAllInterfaces(orig_packet, orig_size);
-        free_packet(pkt);
-        return SUCCESS;
-    }
-
-    // Interface lookup
-    struct interface *src_ife = select_src_interface(fe);
-    if(src_ife != NULL) {
-        fe->local_link_id = src_ife->index;
-    }
+    int node_id = get_unique_id();
 
     struct interface *dst_ife = select_dst_interface(fe);
     if(dst_ife != NULL) {
         fe->remote_link_id = dst_ife->index;
         fe->remote_node_id = dst_ife->node_id;
+    }
+
+    // Send on all interfaces
+    if((fe->action & POLICY_OP_MASK) == POLICY_OP_DUPLICATE) {
+        struct interface *curr_ife = interface_list;
+        while(curr_ife) {
+            send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, curr_ife, dst_ife, NULL);
+            curr_ife = curr_ife->next;
+        }
+        free_packet(pkt);
+        return SUCCESS;
+    }
+
+    struct interface *src_ife = select_src_interface(fe);
+    if(src_ife != NULL) {
+        fe->local_link_id = src_ife->index;
     }
 
     //Packet queuing if a rate limit is violated
@@ -509,7 +513,6 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
     }
 
     int output = FAILURE;
-    int node_id = get_unique_id();
     //Add a tunnel header to the packet
     if((fe->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
         output = send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, src_ife, dst_ife, NULL);

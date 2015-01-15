@@ -89,6 +89,21 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         goto failure_print;
     }
 
+    //--OPERATION--//
+    value = json_object_object_get(jobj_policy, "operation");
+    if(json_object_is_type(value, json_type_string)) {
+        const char * action = json_object_get_string(value);
+        if (strcmp(action, "multipath") == 0) {
+            pe->action |= POLICY_OP_MULTIPATH;
+        }
+        else if (strcmp(action, "duplicate") == 0) {
+            pe->action |= POLICY_OP_DUPLICATE;
+        }
+        else {
+            goto failure_print;
+        }
+    }
+
     //--PROTOCOL--//
     value = json_object_object_get(jobj_policy, "protocol");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
