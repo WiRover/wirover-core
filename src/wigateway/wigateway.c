@@ -172,32 +172,6 @@ int main(int argc, char* argv[])
                     }
                 }
 
-                uint32_t priv_ip;
-                uint32_t pub_ip;
-
-                ipaddr_to_ipv4(&lease.cinfo.priv_ip, &priv_ip);
-                ipaddr_to_ipv4(&lease.cinfo.pub_ip, &pub_ip);
-
-                result = tunnel_create(private_ip,
-                    private_netmask, get_mtu());
-                if(result == FAILURE) {
-                    DEBUG_MSG("Failed to bring up tunnel interface");
-                    exit(1);
-                }
-
-                tcp_mtu_clamp();
-                masquerade("tun0");
-
-                if(start_data_thread(getTunnel()) == FAILURE) {
-                    DEBUG_MSG("Failed to start data thread");
-                    exit(1);
-                }
-
-                if(start_ping_thread() == FAILURE) {
-                    DEBUG_MSG("Failed to start ping thread");
-                    exit(1);
-                }
-
                 state = GATEWAY_LEASE_OBTAINED;
                 lease_retry_delay = MIN_LEASE_RETRY_DELAY;
             }
@@ -219,23 +193,47 @@ int main(int argc, char* argv[])
         }
 
         if(state == GATEWAY_LEASE_OBTAINED) {
-            if(find_active_interface(interface_list)) {
-                DEBUG_MSG("Sending startup message to controller");
-                result = send_startup_notification();
-                if(result == FAILURE) {
-                    lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
-                    continue;
-                }
-
-                result = add_route(0, 0, 0, 0, TUN_DEVICE);
-                // EEXIST means the route was already present -> not a failure
-                if(result < 0 && result != -EEXIST) {
-                    DEBUG_MSG("add_route failed");
-                    exit(1);
-                }
-
-                state = GATEWAY_PING_SUCCEEDED;
+            DEBUG_MSG("Sending startup message to controller");
+            result = send_startup_notification();
+            if(result == FAILURE) {
+                lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
+                continue;
             }
+
+            uint32_t priv_ip;
+            uint32_t pub_ip;
+
+            ipaddr_to_ipv4(&lease.cinfo.priv_ip, &priv_ip);
+            ipaddr_to_ipv4(&lease.cinfo.pub_ip, &pub_ip);
+
+            result = tunnel_create(private_ip,
+                private_netmask, get_mtu());
+            if(result == FAILURE) {
+                DEBUG_MSG("Failed to bring up tunnel interface");
+                exit(1);
+            }
+
+            tcp_mtu_clamp();
+            masquerade("tun0");
+
+            if(start_data_thread(getTunnel()) == FAILURE) {
+                DEBUG_MSG("Failed to start data thread");
+                exit(1);
+            }
+
+            if(start_ping_thread() == FAILURE) {
+                DEBUG_MSG("Failed to start ping thread");
+                exit(1);
+            }
+
+            result = add_route(0, 0, 0, 0, TUN_DEVICE);
+            // EEXIST means the route was already present -> not a failure
+            if(result < 0 && result != -EEXIST) {
+                DEBUG_MSG("add_route failed");
+                exit(1);
+            }
+
+            state = GATEWAY_PING_SUCCEEDED;
         }
 
         if(state == GATEWAY_PING_SUCCEEDED) {

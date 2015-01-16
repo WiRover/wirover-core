@@ -270,10 +270,14 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
         // The sequence number buffer is invalid if the remote node has no record for us
         if(error == TUNERROR_BAD_NODE && gw != NULL) {
             pb_clear_buffer(gw->rec_seq_buffer);
+#ifdef GATEWAY
+            send_startup_notification();
+#endif
         }
 
 #ifdef GATEWAY
-        send_notification(1);
+        if(error == TUNERROR_BAD_LINK)
+            send_notification(1);
 #endif
         free_packet(pkt);
         return SUCCESS;

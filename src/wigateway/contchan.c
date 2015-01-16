@@ -28,9 +28,6 @@ static int _send_notification(const char *ifname);
 //Requries a lock on the interface list
 int send_notification(int max_tries)
 {
-    FILE *fp = fopen("/etc/wirover.d/node_id","r");
-    fgets(node_hash,sizeof(node_hash),fp);
-    fclose(fp);
     assert(max_tries > 0);
 
     int i;
@@ -59,6 +56,21 @@ int send_notification(int max_tries)
     }
 
     return -1;
+}
+
+static void _fill_cchan_notification(struct cchan_notification * notif, uint8_t type) {
+    notif->type = type;
+    notif->len = sizeof(struct cchan_notification);
+
+    notif->ver_maj = WIROVER_VERSION_MAJOR;
+    notif->ver_min = WIROVER_VERSION_MINOR;
+    notif->ver_rev = htons(WIROVER_VERSION_REVISION);
+
+    get_private_ip(&notif->priv_ip);
+    notif->unique_id = htons(get_unique_id());
+
+    memcpy(notif->key, private_key, sizeof(notif->key));
+    memcpy(notif->hash, node_hash, sizeof(notif->hash));
 }
 
 /*
@@ -91,19 +103,8 @@ static int _send_notification(const char *ifname)
     space_left -= sizeof(struct cchan_notification);
     offset += sizeof(struct cchan_notification);
 
-    notif->type = CCHAN_NOTIFICATION;
-    notif->len = sizeof(struct cchan_notification);
+    _fill_cchan_notification(notif, CCHAN_NOTIFICATION);
 
-    notif->ver_maj = WIROVER_VERSION_MAJOR;
-    notif->ver_min = WIROVER_VERSION_MINOR;
-    notif->ver_rev = htons(WIROVER_VERSION_REVISION);
-
-    get_private_ip(&notif->priv_ip);
-    notif->unique_id = htons(get_unique_id());
-
-    memcpy(notif->key, private_key, sizeof(notif->key));
-    memcpy(notif->hash, node_hash, sizeof(notif->hash));
-    
     struct interface* ife = interface_list;
     while(ife && space_left > sizeof(struct cchan_notification)) {
         /* Avoid sending interfaces that have not passed the init state. */
@@ -223,6 +224,10 @@ close_and_fail:
 
 int send_startup_notification()
 {
+    FILE *fp = fopen("/etc/wirover.d/node_id","r");
+    fgets(node_hash,sizeof(node_hash),fp);
+    fclose(fp);
+
     int sockfd;
     struct sockaddr_storage cont_dest;
     build_control_sockaddr(get_controller_ife(), &cont_dest);
@@ -239,12 +244,7 @@ int send_startup_notification()
     struct cchan_notification notif;
     memset(&notif, 0, sizeof(notif));
 
-    notif.type = CCHAN_STARTUP;
-    notif.len = sizeof(notif);
-
-    get_private_ip(&notif.priv_ip);
-    notif.unique_id = htons(get_unique_id());
-    memcpy(notif.key, private_key, sizeof(notif.key));
+    _fill_cchan_notification(&notif, CCHAN_STARTUP);
     
     int bytes = send(sockfd, &notif, sizeof(notif), 0);
 
