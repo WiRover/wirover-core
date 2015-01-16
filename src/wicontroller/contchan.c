@@ -10,18 +10,13 @@
 #include "rootchan.h"
 #include "utlist.h"
 
-static int process_notification_v2(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port);
-static struct remote_node *update_remote_node_v2(const struct cchan_notification_v2 *notif);
-static void update_interface_v2(struct remote_node *gw, const struct interface_info_v2 *ifinfo);
+static int _process_notification(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port);
+static struct remote_node *update_remote_node(const struct cchan_notification *notif);
+static void update_interface(struct remote_node *gw, const struct interface_info *ifinfo);
 static void remove_dead_interfaces(struct remote_node *gw);
-static int send_response_v2(int sockfd, const struct remote_node *gw, uint16_t bw_port);
+static int send_response(int sockfd, const struct remote_node *gw, uint16_t bw_port);
 
 static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len);
-
-static int process_notification_v1(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port);
-static struct remote_node* make_remote_node_v1(const struct cchan_notification_v1* notif);
-static void update_remote_node_v1(struct remote_node* gw, const struct cchan_notification_v1* notif);
-static int send_response_v1(int sockfd, const struct remote_node *gw, uint16_t bw_port);
 
 /*
  * TODO: 
@@ -48,11 +43,10 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len, u
 
     const struct cchan_header *hdr = (const struct cchan_header*)packet;
     switch(hdr->type) {
-        case CCHAN_NOTIFICATION_V1:
-            ret = process_notification_v1(sockfd, packet, pkt_len, bw_port);
+            case CCHAN_STARTUP:
             break;
-        case CCHAN_NOTIFICATION_V2:
-            ret = process_notification_v2(sockfd, packet, pkt_len, bw_port);
+        case CCHAN_NOTIFICATION:
+            ret = _process_notification(sockfd, packet, pkt_len, bw_port);
             break;
         case CCHAN_INTERFACE:
             DEBUG_MSG("Received orphaned interface update message");
@@ -69,17 +63,17 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len, u
     return ret;
 }
 
-static int process_notification_v2(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port)
+static int _process_notification(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port)
 {
-    const struct cchan_notification_v2 *notif = (const struct cchan_notification_v2 *)packet;
-    if(pkt_len < MIN_NOTIFICATION_V2_LEN || notif->len < MIN_NOTIFICATION_V2_LEN) {
+    const struct cchan_notification *notif = (const struct cchan_notification *)packet;
+    if(pkt_len < MIN_NOTIFICATION_LEN || notif->len < MIN_NOTIFICATION_LEN) {
         DEBUG_MSG("Notification packet is too small (size %u)", pkt_len);
         return -1;
     }
     
     int gw_state_change = 0;
 
-    struct remote_node *gw = update_remote_node_v2(notif);
+    struct remote_node *gw = update_remote_node(notif);
     if(!gw)
         return -1;
 
@@ -94,20 +88,19 @@ static int process_notification_v2(int sockfd, const char *packet, unsigned int 
             break;
 
         switch(hdr->type) {
-            case CCHAN_NOTIFICATION_V1:
-            case CCHAN_NOTIFICATION_V2:
+            case CCHAN_NOTIFICATION:
                 DEBUG_MSG("Expected interface update but received another notification");
                 break;
             case CCHAN_INTERFACE:
                 {
-                    if(hdr->len < MIN_INTERFACE_INFO_V2_LEN) {
+                    if(hdr->len < MIN_INTERFACE_INFO_LEN) {
                         DEBUG_MSG("Interface info structure too small (size %hhu)", hdr->len);
                         break;
                     }
 
-                    const struct interface_info_v2 *ifinfo = 
-                        (const struct interface_info_v2 *)(packet + offset);
-                    update_interface_v2(gw, ifinfo);
+                    const struct interface_info *ifinfo = 
+                        (const struct interface_info *)(packet + offset);
+                    update_interface(gw, ifinfo);
                     break;
                 }
             default:
@@ -119,7 +112,7 @@ static int process_notification_v2(int sockfd, const char *packet, unsigned int 
 
     remove_dead_interfaces(gw);
 
-    send_response_v2(sockfd, gw, bw_port);
+    send_response(sockfd, gw, bw_port);
 
 #ifdef WITH_DATABASE
     db_update_gateway(gw, gw_state_change);
@@ -131,7 +124,7 @@ static int process_notification_v2(int sockfd, const char *packet, unsigned int 
 /*
  * Update a remote_node based on the received notification message.
  */
-static struct remote_node *update_remote_node_v2(const struct cchan_notification_v2 *notif)
+static struct remote_node *update_remote_node(const struct cchan_notification *notif)
 {
     assert(notif);
 
@@ -188,7 +181,7 @@ static struct remote_node *update_remote_node_v2(const struct cchan_notification
 /*
  * Update an interface from the notification.
  */
-static void update_interface_v2(struct remote_node *gw, const struct interface_info_v2 *ifinfo)
+static void update_interface(struct remote_node *gw, const struct interface_info *ifinfo)
 {
     struct interface *ife;
 
@@ -259,12 +252,12 @@ static void remove_dead_interfaces(struct remote_node *gw)
     }
 }
 
-static int send_response_v2(int sockfd, const struct remote_node *gw, uint16_t bw_port)
+static int send_response(int sockfd, const struct remote_node *gw, uint16_t bw_port)
 {
-    struct cchan_notification_v2 response;
+    struct cchan_notification response;
     memset(&response, 0, sizeof(response));
 
-    response.type = CCHAN_NOTIFICATION_V2;
+    response.type = CCHAN_NOTIFICATION;
     response.len = sizeof(response);
 
     response.ver_maj = WIROVER_VERSION_MAJOR;
@@ -309,194 +302,4 @@ static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len
 
     return 0;
 }
-
-
-
-static int process_notification_v1(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port)
-{
-    if(pkt_len < MIN_NOTIFICATION_LEN) {
-        DEBUG_MSG("Notification packet is too small (size %u)", pkt_len);
-        return -1;
-    }
-
-    const struct cchan_notification_v1* notif = (const struct cchan_notification_v1*)packet;
-
-    // Make sure the packet is not shorter than the remote_node is claiming based
-    // on the number of interfaces.  It may be longer than we expect though!
-    // We can still accept the packet but not read in more than MAX_INTERFACES.
-    const int expected_len = MIN_NOTIFICATION_LEN +
-            notif->interfaces * sizeof(struct interface_info_v1);
-    if(pkt_len < expected_len) {
-        DEBUG_MSG("Received a malformed notification packet");
-        return -1;
-    }
-    
-    int state_change = 0;
-
-    struct remote_node* gw = lookup_remote_node_by_id(ntohs(notif->unique_id));
-    if(gw) {
-        update_remote_node_v1(gw, notif);
-    } else {
-        gw = make_remote_node_v1(notif);
-        if(gw)
-            add_remote_node(gw);
-
-        state_change = 1;
-    }
-
-    if(gw) {
-        send_response_v1(sockfd, gw, bw_port);
-
-#ifdef WITH_DATABASE
-        db_update_gateway(gw, state_change);
-
-        // TODO: We really only need to update links that have changed
-        const struct interface *ife;
-        DL_FOREACH(gw->head_interface, ife) {
-            db_update_link(gw, ife);
-        }
-#endif
-
-        DEBUG_MSG("Interface list for node %d:", gw->unique_id);
-        dump_interfaces(gw->head_interface, "  ");
-    }
-
-    return 0;
-}
-
-/*
- * Makes a new remote_node based on the received notification message.
- */
-static struct remote_node* make_remote_node_v1(const struct cchan_notification_v1* notif)
-{
-    assert(notif);
-
-    struct remote_node* gw = alloc_remote_node();
-
-    gw->state = ACTIVE;
-    copy_ipaddr(&notif->priv_ip, &gw->private_ip);
-    gw->unique_id = ntohs(notif->unique_id);
-
-    memcpy(gw->private_key, notif->key, sizeof(gw->private_key));
-
-    struct in_addr priv_ip;
-    ipaddr_to_ipv4(&notif->priv_ip, (uint32_t *)&priv_ip.s_addr);
-
-    int i;
-    for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
-        struct interface* ife = alloc_interface(gw->unique_id);
-
-        strncpy(ife->name, notif->if_info[i].ifname, sizeof(ife->name));
-        strncpy(ife->network, notif->if_info[i].network, sizeof(ife->network));
-        ife->state = notif->if_info[i].state;
-        ife->index = ntohl(notif->if_info[i].link_id);
-        ife->data_port = notif->if_info[i].data_port;
-        ife->public_ip.s_addr = notif->if_info[i].local_ip;
-
-        if(ife->state == ACTIVE) {
-            gw->active_interfaces++;
-        }
-
-        DL_APPEND(gw->head_interface, ife);
-    }
-    
-    char ip_string[INET6_ADDRSTRLEN];
-    ipaddr_to_string(&gw->private_ip, ip_string, sizeof(ip_string));
-
-    DEBUG_MSG("Registered new remote_node %s (uid %d) with %d active interfaces",
-              ip_string, gw->unique_id, gw->active_interfaces);
-
-    return gw;
-}
-
-/*
- * Update an exisiting remote_node based on the notification message.
- */
-static void update_remote_node_v1(struct remote_node* gw, const struct cchan_notification_v1* notif)
-{
-    assert(gw && notif);
-
-    gw->state = ACTIVE;
-
-    memcpy(gw->private_key, notif->key, sizeof(gw->private_key));
-
-    struct interface* ife;
-    DL_FOREACH(gw->head_interface, ife) {
-        ife->state = DEAD;
-    }
-    gw->active_interfaces = 0;
-
-    struct in_addr priv_ip;
-    ipaddr_to_ipv4(&notif->priv_ip, (uint32_t *)&priv_ip.s_addr);
-
-    int i;
-    for(i = 0; i < notif->interfaces && i < MAX_INTERFACES; i++) {
-        ife = find_interface_by_name(gw->head_interface, notif->if_info[i].ifname);
-        if(!ife) {
-            ife = alloc_interface(gw->unique_id);
-            
-            strncpy(ife->name, notif->if_info[i].ifname, sizeof(ife->name));
-            ife->public_ip.s_addr = notif->if_info[i].local_ip;
-            ife->data_port = notif->if_info[i].data_port;
-            ife->state = DEAD; // will be changed by the following code
-
-            DL_APPEND(gw->head_interface, ife);
-        }
-        
-        strncpy(ife->network, notif->if_info[i].network, sizeof(ife->network));
-        ife->index = ntohl(notif->if_info[i].link_id);
-        int new_state = notif->if_info[i].state;
-
-        if(ife->state != ACTIVE && new_state == ACTIVE) {
-            gw->active_interfaces++;
-        }
-
-        ife->state = new_state;
-#ifdef WITH_DATABASE
-        db_update_link(gw, ife);
-#endif
-    }
-
-    struct interface* tmp;
-    DL_FOREACH_SAFE(gw->head_interface, ife, tmp) {
-        if(ife->state == DEAD) {
-
-#ifdef WITH_DATABASE
-            db_update_link(gw, ife);
-#endif
-
-            DL_DELETE(gw->head_interface, ife);
-            free(ife);
-        }
-    }
-    
-    char p_ip[INET6_ADDRSTRLEN];
-    ipaddr_to_string(&gw->private_ip, p_ip, sizeof(p_ip));
-
-    DEBUG_MSG("Updated remote_node %s (uid %d) with %d active interfaces",
-              p_ip, gw->unique_id, gw->active_interfaces);
-}
-
-static int send_response_v1(int sockfd, const struct remote_node *gw, uint16_t bw_port)
-{
-    struct cchan_notification_v1 response;
-    memset(&response, 0, sizeof(response));
-
-    response.type = CCHAN_NOTIFICATION_V1;
-    get_private_ip(&response.priv_ip);
-    response.unique_id = htons(get_unique_id());
-    response.bw_port = htons(bw_port);
-    response.interfaces = 0;
-
-    memset(response.key, 0, sizeof(response.key));
-
-    int result = send(sockfd, &response, MIN_NOTIFICATION_LEN, 0);
-    if(result < 0) {
-        ERROR_MSG("Sending notification response failed");
-        return -1;
-    }
-
-    return 0;
-}
-
 
