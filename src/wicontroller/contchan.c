@@ -16,7 +16,8 @@ static void update_interface(struct remote_node *gw, const struct interface_info
 static void remove_dead_interfaces(struct remote_node *gw);
 static int send_response(int sockfd, const struct remote_node *gw, uint16_t bw_port);
 
-static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len);
+static int process_startup(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port);
+static int process_shutdown(const char *packet, unsigned int pkt_len);
 
 /*
  * TODO: 
@@ -44,6 +45,7 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len, u
     const struct cchan_header *hdr = (const struct cchan_header*)packet;
     switch(hdr->type) {
             case CCHAN_STARTUP:
+            ret = process_startup(sockfd, packet, pkt_len, bw_port);
             break;
         case CCHAN_NOTIFICATION:
             ret = _process_notification(sockfd, packet, pkt_len, bw_port);
@@ -52,7 +54,7 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len, u
             DEBUG_MSG("Received orphaned interface update message");
             break;
         case CCHAN_SHUTDOWN:
-            ret = process_shutdown(sockfd, packet, pkt_len);
+            ret = process_shutdown(packet, pkt_len);
             break;
         default:
             DEBUG_MSG("Unrecognized control channel message type: %hhu", hdr->type);
@@ -73,7 +75,7 @@ static int _process_notification(int sockfd, const char *packet, unsigned int pk
     
     int gw_state_change = 0;
 
-    struct remote_node *gw = update_remote_node(notif);
+    struct remote_node *gw = lookup_remote_node_by_id(ntohs(notif->unique_id));
     if(!gw)
         return -1;
 
@@ -136,14 +138,21 @@ static struct remote_node *update_remote_node(const struct cchan_notification *n
 
         copy_ipaddr(&notif->priv_ip, &gw->private_ip);
         gw->unique_id = ntohs(notif->unique_id);
+        
+        /*gw->hash is size NODE_HASH_SIZE + 1 and is initialized to 0
+          this null terminates the string*/
         memcpy(gw->hash, notif->hash, NODE_HASH_SIZE);
 
         add_remote_node(gw);
     }
 
+    //Clear the sequence buffer so we don't drop the gateway's packets,
+    //it will start its sequence numbers over
+    pb_clear_buffer(gw->rec_seq_buffer);
+
     // Don't update a remote node if it's sent a hash you didn't expect!
     char notif_hash[NODE_HASH_SIZE + 1];
-    notif_hash[NODE_HASH_SIZE -1] = 0;
+    memset(notif_hash, 0, NODE_HASH_SIZE+1);
     memcpy(notif_hash, notif->hash, NODE_HASH_SIZE);
 
     if(strcmp(gw->hash, notif_hash))
@@ -153,8 +162,6 @@ static struct remote_node *update_remote_node(const struct cchan_notification *n
     }
 
     memcpy(gw->private_key, notif->key, sizeof(gw->private_key));
-    /*gw->hash is size NODE_HASH_SIZE + 1 and is initialized to 0
-      this null terminates the string*/
     
     int state_change = 0;
 
@@ -278,7 +285,7 @@ static int send_response(int sockfd, const struct remote_node *gw, uint16_t bw_p
     return 0;
 }
 
-static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len)
+static int process_shutdown(const char *packet, unsigned int pkt_len)
 {
     const struct cchan_shutdown *notif = (const struct cchan_shutdown *)packet;
     if(pkt_len < sizeof(struct cchan_shutdown) || notif->len < sizeof(struct cchan_shutdown)) {
@@ -303,3 +310,18 @@ static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len
     return 0;
 }
 
+
+static int process_startup(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port)
+{
+    const struct cchan_notification *notif = (const struct cchan_notification *)packet;
+    if(pkt_len < MIN_NOTIFICATION_LEN || notif->len < MIN_NOTIFICATION_LEN) {
+        DEBUG_MSG("Notification packet is too small (size %u)", pkt_len);
+        return -1;
+    }
+
+    struct remote_node *gw = update_remote_node(notif);
+    if(!gw)
+        return FAILURE;
+
+    return send_response(sockfd, gw, bw_port);
+}

@@ -489,19 +489,31 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
         return SUCCESS;
     }
 
+
+    //Packet queuing if a flow rate limit is violated
+    if(fe->rate_control != NULL && !has_capacity(fe->rate_control)) {
+        if (allow_flow_enqueue)
+            packet_queue_append(&fe->packet_queue_head, &fe->packet_queue_head, pkt);
+        return SEND_QUEUE;
+    }
+
     int node_id = get_unique_id();
 
     struct interface *dst_ife = select_dst_interface(fe);
-    if(dst_ife != NULL) {
-        fe->remote_link_id = dst_ife->index;
-        fe->remote_node_id = dst_ife->node_id;
-    }
+    struct remote_node *remote_node = NULL;
 
-    struct remote_node *remote_node = lookup_remote_node_by_id(dst_ife->node_id);
+    if(dst_ife == NULL)
+        return FAILURE;
+
+    fe->remote_link_id = dst_ife->index;
+    fe->remote_node_id = dst_ife->node_id;
+    remote_node = lookup_remote_node_by_id(dst_ife->node_id);
+
     if(remote_node == NULL) {
         DEBUG_MSG("Destination interface %s had bad remote_node id %d", dst_ife->name, dst_ife->node_id);
         return FAILURE;
     }
+
 
     // Send on all interfaces
     if((fe->action & POLICY_OP_MASK) == POLICY_OP_DUPLICATE) {
@@ -520,13 +532,7 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
         fe->local_link_id = src_ife->index;
     }
 
-    //Packet queuing if a rate limit is violated
-    if(fe->rate_control != NULL && !has_capacity(fe->rate_control)) {
-        if (allow_flow_enqueue)
-            packet_queue_append(&fe->packet_queue_head, &fe->packet_queue_head, pkt);
-        return SEND_QUEUE;
-    }
-    if (!src_ife || !dst_ife) {
+    if (!src_ife) {
         if (allow_ife_enqueue)
             packet_queue_append(&tx_queue_head, &tx_queue_tail, pkt);
         return SEND_QUEUE;
