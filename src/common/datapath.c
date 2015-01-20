@@ -95,6 +95,13 @@ int start_data_thread(struct tunnel *tun_in)
 
     pthread_attr_destroy(&attr);
     return 0;
+}/*
+* WAIT FOR DATAPATH THREAD
+*/
+int stop_datapath_thread()
+{
+    running = 0;
+    return pthread_join(data_thread, 0);
 }
 void logPacket(struct timeval *arrival_time, int size, const char *direction, struct interface *local_ife, struct interface *remote_ife)
 {
@@ -112,7 +119,7 @@ int handlePackets()
     timeout.tv_sec = 0;
     timeout.tv_nsec = 20 * NSECS_PER_MSEC;
 
-    while( 1 )
+    while( running )
     {
         FD_ZERO(&read_set);
         FD_SET(tun->tunnelfd, &read_set);

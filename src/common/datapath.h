@@ -9,6 +9,7 @@
 struct packet;
 
 int start_data_thread(struct tunnel *tun_in);
+int stop_datapath_thread();
 int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueue);
 int send_encap_packet_ife(uint8_t flags, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife,
     uint32_t *remote_ts, uint32_t global_seq);

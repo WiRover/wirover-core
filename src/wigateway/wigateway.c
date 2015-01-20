@@ -374,11 +374,12 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
 
 static void shutdown_handler(int signo)
 {
+    stop_datapath_thread();
+    send_shutdown_notification();
     remove_tcp_mtu_clamp();
     remove_masquerade("tun0");
     stop_netlink_thread();
     free_flow_table();
-    send_shutdown_notification();
     exit(0);
 }
 
