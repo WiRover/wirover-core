@@ -61,8 +61,8 @@ struct interface {
     double              est_downlink_bw;
     double              est_uplink_bw;
 
-    unsigned int        tx_bytes;
-    unsigned int        rx_bytes;
+    unsigned long       tx_bytes;
+    unsigned long       rx_bytes;
 
     unsigned int        packets;
     unsigned int        packets_lost;

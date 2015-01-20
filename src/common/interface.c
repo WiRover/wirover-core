@@ -422,7 +422,7 @@ int interface_to_string(const struct interface *ife, char *str, int size)
     ipv4_to_ipaddr(ife->public_ip.s_addr, &addr);
     ipaddr_to_string(&addr, ip_string, INET6_ADDRSTRLEN);
 
-    return snprintf(str, size, "%-3d %-8s %-12s %-8s %-4hhd %-5hhd %-10d %-10d %-15s %-10f %-10f",
+    return snprintf(str, size, "%-3d %-8s %-12s %-8s %-4hhd %-5hhd %-10lu %-10lu %-15s %-10f %-10f",
         ife->index, ife->name, ife->network, state, ife->priority, ife->packets_since_ack, 
         ife->tx_bytes, ife->rx_bytes, ip_string, ife->est_uplink_bw, ife->est_downlink_bw);
 }
