@@ -14,10 +14,10 @@ static int _process_notification(int sockfd, const char *packet, unsigned int pk
 static struct remote_node *update_remote_node(const struct cchan_notification *notif);
 static void update_interface(struct remote_node *gw, const struct interface_info *ifinfo);
 static void remove_dead_interfaces(struct remote_node *gw);
-static int send_response(int sockfd, const struct remote_node *gw, uint16_t bw_port);
+static int send_response(int sockfd, uint16_t bw_port);
 
 static int process_startup(int sockfd, const char *packet, unsigned int pkt_len, uint16_t bw_port);
-static int process_shutdown(const char *packet, unsigned int pkt_len);
+static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len);
 
 /*
  * TODO: 
@@ -54,7 +54,7 @@ int process_notification(int sockfd, const char *packet, unsigned int pkt_len, u
             DEBUG_MSG("Received orphaned interface update message");
             break;
         case CCHAN_SHUTDOWN:
-            ret = process_shutdown(packet, pkt_len);
+            ret = process_shutdown(sockfd, packet, pkt_len);
             break;
         default:
             DEBUG_MSG("Unrecognized control channel message type: %hhu", hdr->type);
@@ -114,7 +114,7 @@ static int _process_notification(int sockfd, const char *packet, unsigned int pk
 
     remove_dead_interfaces(gw);
 
-    send_response(sockfd, gw, bw_port);
+    send_response(sockfd, bw_port);
 
 #ifdef WITH_DATABASE
     db_update_gateway(gw, gw_state_change);
@@ -259,7 +259,7 @@ static void remove_dead_interfaces(struct remote_node *gw)
     }
 }
 
-static int send_response(int sockfd, const struct remote_node *gw, uint16_t bw_port)
+static int send_response(int sockfd, uint16_t bw_port)
 {
     struct cchan_notification response;
     memset(&response, 0, sizeof(response));
@@ -285,11 +285,28 @@ static int send_response(int sockfd, const struct remote_node *gw, uint16_t bw_p
     return 0;
 }
 
-static int process_shutdown(const char *packet, unsigned int pkt_len)
+static int send_short_response(int sockfd, uint8_t response_code)
+{
+    struct cchan_header response;
+    memset(&response, 0, sizeof(response));
+
+    response.type = response_code;
+    response.len = sizeof(response);
+
+    int result = send(sockfd, &response, sizeof(response), 0);
+    if(result < 0) {
+        ERROR_MSG("Sending notification response failed");
+        return -1;
+    }
+
+    return 0;
+}
+
+static int process_shutdown(int sockfd, const char *packet, unsigned int pkt_len)
 {
     const struct cchan_shutdown *notif = (const struct cchan_shutdown *)packet;
     if(pkt_len < sizeof(struct cchan_shutdown) || notif->len < sizeof(struct cchan_shutdown)) {
-        DEBUG_MSG("Notification packet is too small (size %u)", pkt_len);
+        DEBUG_MSG("Notification packet is too small (size %u/%u)", pkt_len, sizeof(struct cchan_shutdown));
         return -1;
     }
 
@@ -306,7 +323,7 @@ static int process_shutdown(const char *packet, unsigned int pkt_len)
 
     DEBUG_MSG("Received shutdown for remote_node %hhu", gw->unique_id);
     remove_remote_node(gw);
-
+    send_short_response(sockfd, CCHAN_RESPONSE_OK);
     return 0;
 }
 
@@ -323,5 +340,5 @@ static int process_startup(int sockfd, const char *packet, unsigned int pkt_len,
     if(!gw)
         return FAILURE;
 
-    return send_response(sockfd, gw, bw_port);
+    return send_response(sockfd, bw_port);
 }

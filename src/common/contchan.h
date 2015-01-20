@@ -27,6 +27,8 @@
 #define CCHAN_STARTUP           0x11
 #define CCHAN_INTERFACE         0x12
 #define CCHAN_SHUTDOWN          0x13
+#define CCHAN_RESPONSE_OK       0x21
+#define CCHAN_RESPONSE_FAILURE  0x22
 
 #define SHUTDOWN_REASON_NORMAL  0x01
 #define SHUTDOWN_REASON_CRASH   0x02
@@ -48,12 +50,12 @@
 /* Minimal header used during notification parsing. */
 struct cchan_header {
     uint8_t     type;
-    uint8_t     len;
+    uint16_t    len;
 } __attribute__((__packed__));
 
 struct cchan_notification {
     uint8_t     type;
-    uint16_t     len;
+    uint16_t    len;
 
     uint8_t     ver_maj;
     uint8_t     ver_min;
@@ -71,7 +73,7 @@ struct cchan_notification {
 
 struct interface_info {
     uint8_t     type;
-    uint16_t     len;
+    uint16_t    len;
     
     uint32_t    link_id;
     char        ifname[IFNAMSIZ];
@@ -86,7 +88,7 @@ struct interface_info {
 
 struct cchan_shutdown {
     uint8_t     type;
-    uint16_t     len;
+    uint16_t    len;
 
     ipaddr_t    priv_ip;
     uint16_t    unique_id;
