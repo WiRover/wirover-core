@@ -80,7 +80,7 @@ int pb_add_seq_num(uint32_t *packet_buffer, uint32_t seq) {
     
     uint32_t prev_seq = packet_buffer[index];
     //The last case is if the sequence number overflows
-    if(seq > prev_seq || (seq <= prev_seq && seq > prev_seq - WRAP_AROUND_BOUND)) {
+    if(pb_seq_is_larger(prev_seq, seq)) {
         packet_buffer[index] = seq;
         return NOT_DUPLICATE;
     }
