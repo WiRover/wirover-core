@@ -26,6 +26,8 @@ struct flow_entry {
     int count;
     uint32_t action;
     char alg_name[MAX_ALG_NAME_LEN];
+    //Count of packets to include flow info in
+    uint8_t requires_flow_info;
 
     // Rate limiting and packet queueing
     struct rate_control * rate_control;
@@ -43,15 +45,16 @@ struct flow_tuple {
     uint16_t local_port;
 };
 
-int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short reverse);
+int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress);
 
+struct flow_entry *add_entry(struct flow_tuple* tuple);
 struct flow_entry *get_flow_entry(struct flow_tuple *);
 struct flow_entry *get_flow_table();
 
 int update_flow_entry(struct flow_entry *fe);
 
 int set_flow_table_timeout(int);
-
+void print_flow_tuple(struct flow_tuple *);
 void free_flow_entry(struct flow_entry * fe);
 void free_flow_table();
 

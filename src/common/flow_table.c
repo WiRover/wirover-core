@@ -59,6 +59,10 @@ struct flow_entry *add_entry(struct flow_tuple* tuple) {
         memset(&pd, 0, sizeof(policy_entry));
         get_policy_by_tuple(tuple,  &pd, tuple->ingress ? DIR_INGRESS : DIR_EGRESS);
         fe->action = pd.action;
+        if((fe->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP)
+        {
+            fe->requires_flow_info = 3;
+        }
         if(pd.rate_limit != 0)
         {
             fe->rate_control = (struct rate_control *)malloc(sizeof(struct rate_control));
@@ -78,8 +82,7 @@ struct flow_entry *get_flow_entry(struct flow_tuple *ft) {
 
     HASH_FIND(hh, flow_table, ft, sizeof(struct flow_tuple), fe);
     if(fe == NULL) {
-        fe = add_entry(ft);
-        if(fe == NULL) { return NULL; }
+        return NULL;
     }
     fe->last_visit_time = time(NULL);
 
@@ -144,19 +147,30 @@ int set_flow_table_timeout(int value) {
     return 0;
 }
 
-
-int flow_entry_to_string(const struct flow_entry *fe, char *str, int size) {
+int flow_tuple_to_string(const struct flow_tuple *ft, char *str, int size) {
     char local_ip[INET6_ADDRSTRLEN];
     char remote_ip[INET6_ADDRSTRLEN];
-    inet_ntop(AF_INET, &fe->id->local, local_ip, INET6_ADDRSTRLEN);
-    inet_ntop(AF_INET, &fe->id->remote, remote_ip, INET6_ADDRSTRLEN);
-    char * dir_string = fe->id->ingress ? "<-" : "->";
-    return snprintf(str, size, "%s:%d %s %s:%d Proto: %d Action: %d remote: %d:%d Local link: %d hits: %d",
-        local_ip, ntohs(fe->id->local_port), dir_string, remote_ip, ntohs(fe->id->remote_port),
-        fe->id->proto, fe->action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
+    inet_ntop(AF_INET, &ft->local, local_ip, INET6_ADDRSTRLEN);
+    inet_ntop(AF_INET, &ft->remote, remote_ip, INET6_ADDRSTRLEN);
+    char * dir_string = ft->ingress ? "<-" : "->";
+    return snprintf(str, size, "%s:%d %s %s:%d Proto: %d",
+        local_ip, ntohs(ft->local_port), dir_string, remote_ip, ntohs(ft->remote_port),
+        ft->proto);
+
+}
+int flow_entry_to_string(const struct flow_entry *fe, char *str, int size) {
+    char buffer[128];
+    flow_tuple_to_string(fe->id, buffer, sizeof(buffer));
+    return snprintf(str, size, "%s Action: %d remote: %d:%d Local link: %d hits: %d",
+        buffer, fe->action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
     );
 }
 //All methods below here are for debugging purposes
+void print_flow_tuple(struct flow_tuple *ft) {
+    char buffer[128];
+    flow_tuple_to_string(ft, buffer, sizeof(buffer));
+    DEBUG_MSG("%s\n", buffer);
+}
 void print_flow_entry(struct flow_entry *fe) {
     char buffer[128];
     flow_entry_to_string(fe, buffer, sizeof(buffer));
@@ -169,7 +183,6 @@ void print_flow_table() {
         print_flow_entry(current_key);
     }
 }
-
 
 int dump_flow_table_to_file(const char *filename)
 {

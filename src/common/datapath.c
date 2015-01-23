@@ -227,50 +227,27 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
 {
     struct  tunhdr n_tun_hdr;
 
-    unsigned int h_header_len = ntohs(((struct tunhdr *)pkt->data)->header_len);
-
-    if(h_header_len == 0)
-        h_header_len = sizeof(struct tunhdr);
-
     // Get the tunhdr (should be the first n bytes in the packet)
     // store network format in temporary struct
-    memcpy(&n_tun_hdr, pkt->data, h_header_len);
-
-    //Stripe the tunnel header from our packet
-    packet_pull(pkt, h_header_len);
-
+    memcpy(&n_tun_hdr, pkt->data, sizeof(struct tunhdr));
     // Copy temporary to host format
+    uint8_t tun_type = n_tun_hdr.type & TUNTYPE_TYPE_MASK;
+    uint8_t tun_ctl = n_tun_hdr.type & TUNTYPE_CONTROL_MASK;
     unsigned int h_global_seq = ntohl(n_tun_hdr.global_seq);
     unsigned int h_link_seq = ntohl(n_tun_hdr.link_seq);
     unsigned int h_path_ack = ntohl(n_tun_hdr.path_ack);
     unsigned int h_remote_ts = ntohl(n_tun_hdr.remote_ts);
     unsigned int h_local_ts = ntohl(n_tun_hdr.local_ts);
 
-    //Remote_ts is the remote send time in our local clock domain
-    uint32_t recv_ts = timeval_to_usec(&pkt->created);
-    if(h_remote_ts != 0) {
-        long diff = (long)recv_ts - (long)h_remote_ts;
-
-        ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
-    }
-
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
-    struct interface *remote_ife = NULL;
 
-    // Update the flow entry information
-    struct flow_tuple ft;
-    fill_flow_tuple(pkt->data, &ft, 1);
-
-    struct flow_entry *fe = get_flow_entry(&ft);
-    fe->remote_node_id = node_id;
-    fe->remote_link_id = link_id;
-    fe->local_link_id = ife->index;
-
+    //Strip the tunnel header from our packet
+    packet_pull(pkt, sizeof(struct tunhdr));
 
     struct remote_node *gw = lookup_remote_node_by_id(node_id);
 
-    if(n_tun_hdr.type == TUNTYPE_ERROR){
+    if(tun_type == TUNTYPE_ERROR){
         int error = pkt->data[0];
         DEBUG_MSG("Received an error: %d", error);
 
@@ -281,14 +258,30 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
             send_startup_notification();
 #endif
         }
-
+        else if(error == TUNERROR_BAD_LINK)
+        {
 #ifdef GATEWAY
-        if(error == TUNERROR_BAD_LINK)
             send_notification(1);
 #endif
+        }
+        else if(error == TUNERROR_BAD_FLOW)
+        {
+            DEBUG_MSG("Got flow error");
+            //fe->requires_flow_info++;
+        }
         free_packet(pkt);
         return SUCCESS;
     }
+
+    //Remote_ts is the remote send time in our local clock domain
+    uint32_t recv_ts = timeval_to_usec(&pkt->created);
+    if(h_remote_ts != 0) {
+        long diff = (long)recv_ts - (long)h_remote_ts;
+
+        ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
+    }
+
+    struct interface *remote_ife = NULL;
 
     if(gw == NULL)
     {
@@ -307,9 +300,56 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
         return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, from);
     }
 
+    // If the flow is data, make sure we have an entry for it in our
+    // flow table
+    if(tun_type == TUNTYPE_DATA)
+    {
+        struct flow_tuple ft;
+
+        if(tun_ctl == TUNTYPE_FLOW_INFO)
+        {
+            ft = *(struct flow_tuple *)(pkt->data);
+            packet_pull(pkt, sizeof(struct flow_tuple));
+            struct tunhdr_flow_info * ingress_info = (struct tunhdr_flow_info *)pkt->data;
+            packet_pull(pkt, sizeof(struct tunhdr_flow_info));
+            struct tunhdr_flow_info * egress_info = (struct tunhdr_flow_info *)pkt->data;
+            int temp;
+            temp = ft.local;
+            ft.local = ft.remote;
+            ft.remote = temp;
+            temp = ft.local_port;
+            ft.local_port = ft.remote_port;
+            ft.remote_port = temp;
+            ft.ingress = 1;
+            struct flow_entry * fe = add_entry(&ft);
+            fe->action = ingress_info->action;
+            ft.ingress = 0;
+            fe = add_entry(&ft);
+            fe->action = egress_info->action;
+            return SUCCESS;
+        }
+
+        fill_flow_tuple(pkt->data, &ft, 1);
+
+        struct flow_entry *fe = get_flow_entry(&ft);
+        if(fe == NULL) {
+            DEBUG_MSG("Bad flow");
+            print_flow_tuple(&ft);
+            free_packet(pkt);
+            char error[sizeof(struct flow_tuple) + 1];
+            error[0] = TUNERROR_BAD_FLOW;
+            *(struct flow_tuple *)&error[1] = ft;
+            return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, from);
+        }
+        fe->remote_node_id = node_id;
+        fe->remote_link_id = link_id;
+        fe->local_link_id = ife->index;
+        fe->requires_flow_info = 0;
+    }
+
+    // Verify the packet isn't a duplicate. Even if it is, send an ack
+    // so that the remote link won't stall
     if(pb_add_seq_num(gw->rec_seq_buffer, h_global_seq) == DUPLICATE) {
-        // Send an ack anyway so that if one interface always has a lower RTT
-        // it won't time out
         send_encap_packet_ife(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife, &h_local_ts, 0);
         return SUCCESS;
     }
@@ -487,6 +527,12 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
     fill_flow_tuple(pkt->data, &ft, 0);
 
     struct flow_entry *fe = get_flow_entry(&ft);
+    if(fe == NULL) {
+        ft.ingress = 1;
+        add_entry(&ft);
+        ft.ingress = 0;
+        fe = add_entry(&ft);
+    }
 
     update_flow_entry(fe);
 
@@ -608,6 +654,44 @@ int send_encap_packet_dst_noinfo(uint8_t type, char *packet, int size, struct in
 int send_encap_packet_dst(uint8_t type, char *packet, int size, struct interface *src_ife,
     struct sockaddr_storage *dst, struct interface *update_ife, uint32_t global_seq, uint32_t *remote_ts)
 {
+    if(type == TUNTYPE_DATA) {
+        struct flow_tuple ft;
+        fill_flow_tuple(packet, &ft, 0);
+        struct flow_entry *fe = get_flow_entry(&ft);
+        print_flow_tuple(&ft);
+        if(fe == NULL){
+            DEBUG_MSG("No flow entry");
+        }
+        else{
+            DEBUG_MSG("Requires flow info %d", fe->requires_flow_info);
+        }
+        if(fe != NULL && fe->requires_flow_info)
+        {
+            struct packet *info_pkt = alloc_packet(sizeof(struct flow_tuple) + sizeof(struct tunhdr_flow_info) * 2, 0);
+            ft.ingress = 1;
+            fe = add_entry(&ft);
+            struct tunhdr_flow_info ingress_info;
+            ingress_info.action = fe->action;
+            ingress_info.rate_limit = 0;
+            ft.ingress = 0;
+            fe = add_entry(&ft);
+            struct tunhdr_flow_info egress_info;
+            egress_info.action = fe->action;
+            egress_info.rate_limit = 0;
+
+            packet_push(info_pkt, sizeof(struct tunhdr_flow_info));
+            *(struct tunhdr_flow_info *)info_pkt->data = ingress_info;
+
+            packet_push(info_pkt, sizeof(struct tunhdr_flow_info));
+            *(struct tunhdr_flow_info *)info_pkt->data = egress_info;
+            packet_push(info_pkt, sizeof(struct flow_tuple));
+            *(struct flow_tuple*)info_pkt->data = ft;
+            send_encap_packet_dst(TUNTYPE_FLOW_INFO | TUNTYPE_DATA, info_pkt->data, info_pkt->data_size, src_ife, dst, NULL, 0, 0);
+            free_packet(info_pkt);
+            fe->requires_flow_info--;
+        }
+    }
+
     int output = FAILURE;
     char new_packet[size + sizeof(struct tunhdr)];
     memset(new_packet, 0, sizeof(new_packet));

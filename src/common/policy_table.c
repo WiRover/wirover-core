@@ -28,7 +28,7 @@ static void update_policies() {
 int init_policy_table() {
     default_ingress_policy = alloc_policy();
     default_egress_policy = alloc_policy();
-    default_ingress_policy->action = POLICY_ACT_DECAP;
+    default_ingress_policy->action = POLICY_ACT_ENCAP;
     default_egress_policy->action = POLICY_ACT_ENCAP;
     update_policies();
     init = 1;
@@ -66,9 +66,6 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         const char * action = json_object_get_string(value);
         if (strcmp(action, "encap") == 0) {
             pe->action = POLICY_ACT_ENCAP;
-        }
-        else if (strcmp(action, "decap") == 0) {
-            pe->action = POLICY_ACT_DECAP;
         }
         else if (strcmp(action, "nat") == 0) {
             pe->action = POLICY_ACT_NAT;
