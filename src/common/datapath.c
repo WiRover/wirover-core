@@ -266,7 +266,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
         }
         else if(error == TUNERROR_BAD_FLOW)
         {
-            DEBUG_MSG("Got flow error");
+            //TODO: Parse flow tuple and send response
             //fe->requires_flow_info++;
         }
         free_packet(pkt);
@@ -658,13 +658,7 @@ int send_encap_packet_dst(uint8_t type, char *packet, int size, struct interface
         struct flow_tuple ft;
         fill_flow_tuple(packet, &ft, 0);
         struct flow_entry *fe = get_flow_entry(&ft);
-        print_flow_tuple(&ft);
-        if(fe == NULL){
-            DEBUG_MSG("No flow entry");
-        }
-        else{
-            DEBUG_MSG("Requires flow info %d", fe->requires_flow_info);
-        }
+
         if(fe != NULL && fe->requires_flow_info)
         {
             struct packet *info_pkt = alloc_packet(sizeof(struct flow_tuple) + sizeof(struct tunhdr_flow_info) * 2, 0);
