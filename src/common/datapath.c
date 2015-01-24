@@ -326,6 +326,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
             ft.ingress = 0;
             fe = add_entry(&ft);
             fe->action = egress_info->action;
+            free_packet(pkt);
             return SUCCESS;
         }
 
