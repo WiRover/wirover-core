@@ -340,7 +340,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
             char error[sizeof(struct flow_tuple) + 1];
             error[0] = TUNERROR_BAD_FLOW;
             *(struct flow_tuple *)&error[1] = ft;
-            return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, from);
+            return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, sizeof(error), ife, from);
         }
         fe->remote_node_id = node_id;
         fe->remote_link_id = link_id;
