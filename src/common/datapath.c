@@ -571,10 +571,15 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
 
     // Send on all interfaces
     if((fe->action & POLICY_OP_MASK) == POLICY_OP_DUPLICATE) {
-        struct interface *curr_ife = interface_list;
-        while(curr_ife) {
-            send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, curr_ife, dst_ife, NULL, remote_node->global_seq);
-            curr_ife = curr_ife->next;
+        struct interface *local_ife = interface_list;
+        struct interface *remote_ife;
+        while(local_ife) {
+            remote_ife = remote_node->head_interface;
+            while(remote_ife) {
+                send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, local_ife, remote_ife, NULL, remote_node->global_seq);
+                remote_ife = remote_ife->next;
+            }
+            local_ife = local_ife->next;
         }
         remote_node->global_seq++;
         free_packet(pkt);
