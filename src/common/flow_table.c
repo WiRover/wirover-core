@@ -140,6 +140,17 @@ int update_flow_entry(struct flow_entry *fe) {
     return SUCCESS;
 }
 
+void flow_tuple_invert(struct flow_tuple *ft)
+{
+    int temp;
+    temp = ft->local;
+    ft->local = ft->remote;
+    ft->remote = temp;
+    temp = ft->local_port;
+    ft->local_port = ft->remote_port;
+    ft->remote_port = temp;
+    ft->ingress = !ft->ingress;
+}
 
 int set_flow_table_timeout(int value) {
     flow_table_timeout = value;

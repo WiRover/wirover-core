@@ -52,6 +52,7 @@ struct flow_entry *get_flow_entry(struct flow_tuple *);
 struct flow_entry *get_flow_table();
 
 int update_flow_entry(struct flow_entry *fe);
+void flow_tuple_invert(struct flow_tuple *ft);
 
 int set_flow_table_timeout(int);
 void print_flow_tuple(struct flow_tuple *);

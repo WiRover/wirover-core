@@ -266,8 +266,11 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
         }
         else if(error == TUNERROR_BAD_FLOW)
         {
-            //TODO: Parse flow tuple and send response
-            //fe->requires_flow_info++;
+            struct flow_tuple ft;
+            ft = *(struct flow_tuple*)&pkt->data[1];
+            flow_tuple_invert(&ft);
+            struct flow_entry *fe = get_flow_entry(&ft);
+            fe->requires_flow_info++;
         }
         free_packet(pkt);
         return SUCCESS;
@@ -313,13 +316,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
             struct tunhdr_flow_info * ingress_info = (struct tunhdr_flow_info *)pkt->data;
             packet_pull(pkt, sizeof(struct tunhdr_flow_info));
             struct tunhdr_flow_info * egress_info = (struct tunhdr_flow_info *)pkt->data;
-            int temp;
-            temp = ft.local;
-            ft.local = ft.remote;
-            ft.remote = temp;
-            temp = ft.local_port;
-            ft.local_port = ft.remote_port;
-            ft.remote_port = temp;
+            flow_tuple_invert(&ft);
             ft.ingress = 1;
             struct flow_entry * fe = add_entry(&ft);
             fe->action = ingress_info->action;
