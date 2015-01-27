@@ -9,6 +9,7 @@ add_executable(wicontroller
     ping.c
 	select_interface.c
     ${COMMON}/bandwidth.c
+    ${COMMON}/circular_buffer.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
 	${COMMON}/datapath.c

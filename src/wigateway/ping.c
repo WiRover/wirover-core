@@ -289,12 +289,12 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
         DEBUG_MSG("Ping response for unknown interface %u", link_id);
         return SUCCESS;
     }
-    if(pkt->type == PING_TAILGATE) {
-        long time_diff = timeval_diff(&recv_time, &local_ife->last_ping_success);
-        float bw = size * 1.0f / time_diff;
-        ife->est_downlink_bw = ewma_update(ife->est_downlink_bw, (double)bw, BW_EWMA_WEIGHT);
-        return SUCCESS;
-    }
+    //if(pkt->type == PING_TAILGATE) {
+    //    long time_diff = timeval_diff(&recv_time, &local_ife->last_ping_success);
+    //    float bw = size * 1.0f / time_diff;
+    //    ife->est_downlink_bw = ewma_update(ife->est_downlink_bw, (double)bw, BW_EWMA_WEIGHT);
+    //    return SUCCESS;
+    //}
     if(send_response) {
         if(send_second_response(ife, buffer, size, get_controller_ife()) < 0) {
             ERROR_MSG("send_second_response failed");

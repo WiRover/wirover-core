@@ -98,6 +98,8 @@ struct interface {
 
     /* Information for controlling transmit rate. */
     struct rate_control rate_control;
+    float base_rtt_diff;
+    struct circular_buffer rtt_buffer;
 
     /* Track the most recent burst of packets received. */
     struct packet_burst burst;

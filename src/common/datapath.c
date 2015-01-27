@@ -283,6 +283,21 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
 
         ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
     }
+    if(pkt->data_size > 800 && h_local_ts != 0) {
+        float *current = cbuffer_current(&ife->rtt_buffer);
+        float diff = 1.0f * ((long)h_local_ts - (long)recv_ts);
+        if(*current == 0 || diff < *current)
+        {
+            *current = diff;
+        }
+        float queing_delay = diff - cbuffer_min(&ife->rtt_buffer);
+        if(queing_delay != 0) {
+            ife->base_rtt_diff = ewma_update(ife->base_rtt_diff, (double)queing_delay, RTT_EWMA_WEIGHT);
+        }
+        if(ife->base_rtt_diff != 0) {
+            ife->est_downlink_bw = ewma_update(ife->est_downlink_bw, (double)pkt->data_size / (ife->base_rtt_diff) * 8.0, BW_EWMA_WEIGHT);
+        }
+    }
 
     struct interface *remote_ife = NULL;
 
