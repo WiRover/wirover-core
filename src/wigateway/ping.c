@@ -141,15 +141,6 @@ int send_ping(struct interface* ife)
     pkt->type = PING_TAILGATE;
     send_size = mtu;
     fill_ping_digest(pkt, buffer, send_size, private_key);
-    //Send a tailgate packet
-    if(send_encap_packet_ife(TUNTYPE_PING, buffer, send_size, get_unique_id(), ife, get_controller_ife(), NULL, 0)) {
-        /* We get an error ENETUNREACH if we try pinging out an interface which
-        * does not have an IP address.  That case is not interesting, so we
-        * suppress the error message. */
-        if(errno != ENETUNREACH)
-            ERROR_MSG("sending ping packet on %s failed", ife->name);
-        return -1;
-    }
 
     // This last_ping_time timestamp will be compared to the timestamp in the ping
     // response packet to make sure the response is for the most recent
@@ -289,12 +280,7 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
         DEBUG_MSG("Ping response for unknown interface %u", link_id);
         return SUCCESS;
     }
-    //if(pkt->type == PING_TAILGATE) {
-    //    long time_diff = timeval_diff(&recv_time, &local_ife->last_ping_success);
-    //    float bw = size * 1.0f / time_diff;
-    //    ife->est_downlink_bw = ewma_update(ife->est_downlink_bw, (double)bw, BW_EWMA_WEIGHT);
-    //    return SUCCESS;
-    //}
+
     if(send_response) {
         if(send_second_response(ife, buffer, size, get_controller_ife()) < 0) {
             ERROR_MSG("send_second_response failed");

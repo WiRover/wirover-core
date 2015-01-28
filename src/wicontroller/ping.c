@@ -150,15 +150,13 @@ struct interface *remote_ife, char *buffer, int bytes_recvd)
         process_ping_request(buffer, bytes_recvd, 
             (struct sockaddr *)from_addr, from_len);
 
-        break;
-    case PING_TAILGATE:
         if(send_response(local_ife, gw, PING_RESPONSE, from_addr,
             buffer, bytes_recvd, bw) < 0) {
                 ERROR_MSG("Failed to send ping response");
                 return 0;
         }
         break;
-    case PING_SECOND_RESPONSE:                    
+    case PING_SECOND_RESPONSE:
         process_ping_response(buffer, bytes_recvd,
             (struct sockaddr *)from_addr, from_len, &recv_time);
 
@@ -258,20 +256,7 @@ static int send_response(struct interface *local_ife, const struct remote_node *
     } else {
         memset(ping->digest, 0, sizeof(ping->digest));
     }
-    if(send_encap_packet_dst_noinfo(TUNTYPE_PING, response_buffer, MIN_PING_PACKET_SIZE, interface_list, from) != SUCCESS)
-    {
-        return FAILURE;
-    }
-
-    //Send a tailgate packet for the client to measure bandwidth
-    ping->type = PING_TAILGATE;
-    if(gw) {
-        fill_ping_digest(ping, response_buffer, mtu, gw->private_key);
-    } else {
-        memset(ping->digest, 0, sizeof(ping->digest));
-    }
-    return send_encap_packet_dst_noinfo(TUNTYPE_PING, response_buffer, mtu, interface_list, from);
-    //return sendto(sockfd, response_buffer, MIN_PING_PACKET_SIZE, 0, to, to_len);
+    return send_encap_packet_dst_noinfo(TUNTYPE_PING, response_buffer, MIN_PING_PACKET_SIZE, interface_list, from);
 }
 
 /*
