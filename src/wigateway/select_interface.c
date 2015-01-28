@@ -47,15 +47,15 @@ struct interface *select_src_interface(struct flow_entry *fe)
             curr_ife = curr_ife->next;
         }
         if(ife_count == 0) { return NULL; }
-        long sum_weights = 0;
-        long weights[ife_count];
-        long weight;
+        double sum_weights = 0;
+        double weights[ife_count];
+        double weight;
         for(int i = 0; i < ife_count; i++){
-            weight = calc_bw_hint(interfaces[i]);
+            weight = calc_bw_down(interfaces[i]);
             weights[i] = weight;
             sum_weights += weight;
         }
-        long choice = round(rand() / (double)RAND_MAX * sum_weights);
+        double choice = round(rand() / (double)RAND_MAX * sum_weights);
         int i = 0;
         for(; i < ife_count; i++){
             choice -= weights[i];

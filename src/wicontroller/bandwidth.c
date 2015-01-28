@@ -203,14 +203,8 @@ static int handle_stats_packet(struct bw_server_info *server, struct bw_session 
                 session->key.link_id);
         if(ife) {
             if(gw_downlink_bw > 0) {
-                long bps;
 
-                if(gw_downlink_bw < (LONG_MAX / 1000000))
-                    bps = (long)round(1000000.0 * gw_downlink_bw);
-                else
-                    bps = LONG_MAX;
-
-                ife->meas_bw = bps;
+                ife->meas_bw_down = gw_downlink_bw;
                 ife->meas_bw_time = time(NULL);
 
                 //TODO: Handle bandwidth hint

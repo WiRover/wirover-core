@@ -259,13 +259,6 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
 
     session.measured_bw = stats->downlink_bw;
 
-    obtain_write_lock(&interface_list_lock);
-    struct interface *ife = find_interface_by_index(interface_list, stats->link_id);
-    if(ife != NULL) { 
-        ife->meas_bw = session.measured_bw;
-    }
-    release_write_lock(&interface_list_lock);
-
     rtn = session_send_stats(&session, sockfd_data);
     if(rtn <= 0) {
         DEBUG_MSG("Failed at sendMeasurement");

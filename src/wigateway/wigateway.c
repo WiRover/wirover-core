@@ -397,17 +397,10 @@ static void shutdown_handler(int signo)
 static void update_bandwidth(struct bw_client_info *client, struct interface *ife,
 struct bw_stats *stats)
 {
-    if(stats->uplink_bw > 0) {
-        long bps;
-
-        if(stats->uplink_bw < (LONG_MAX / 1000000))
-            bps = (long)round(1000000.0 * stats->uplink_bw);
-        else
-            bps = LONG_MAX;
-
-        ife->meas_bw = bps;
+    if(stats->downlink_bw > 0) {
+        ife->meas_bw_down = stats->downlink_bw;
+        ife->meas_bw_up = stats->uplink_bw;
         ife->meas_bw_time = time(NULL);
-
     }
 }
 

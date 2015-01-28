@@ -366,24 +366,14 @@ int copy_active_interfaces(const struct interface *head, struct interface_copy *
     return num_active;
 }
 
-long calc_bw_hint(struct interface *ife)
+double calc_bw_up(const struct interface *ife)
 {
-    long bw_hint;
+    return ife->est_uplink_bw * .5 + ife->meas_bw_up * .5;
+}
 
-    bw_hint = ife->est_uplink_bw * 1000000 + ife->est_downlink_bw * 1000000;
-    /*if(ife->meas_bw > 0 && ife->pred_bw > 0) {
-    double w = exp(BANDWIDTH_MEASUREMENT_DECAY * 
-    (time(NULL) - ife->meas_bw_time));
-    bw_hint = (long)round(w * ife->meas_bw + (1.0 - w) * ife->pred_bw);
-    } else if(ife->meas_bw > 0) {
-    bw_hint = ife->meas_bw;
-    } else if(ife->pred_bw > 0) {
-    bw_hint = ife->pred_bw;
-    } else {
-    bw_hint = 0;
-    }*/
-
-    return bw_hint;
+double calc_bw_down(const struct interface *ife)
+{
+    return ife->est_downlink_bw * .5 + ife->meas_bw_down * .5;
 }
 
 /*
@@ -425,7 +415,7 @@ int interface_to_string(const struct interface *ife, char *str, int size)
 
     return snprintf(str, size, "%-3d %-8s %-12s %-8s %-4hhd %-5hhd %-10lu %-10lu %-15s %-10f %-10f",
         ife->index, ife->name, ife->network, state, ife->priority, ife->packets_since_ack, 
-        ife->tx_bytes, ife->rx_bytes, ip_string, ife->est_uplink_bw, ife->est_downlink_bw);
+        ife->tx_bytes, ife->rx_bytes, ip_string, calc_bw_up(ife), calc_bw_down(ife));
 }
 void dump_interface(const struct interface *ife, const char *prepend)
 {

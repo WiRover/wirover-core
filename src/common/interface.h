@@ -92,8 +92,8 @@ struct interface {
     int update_num;
 #endif /* CONTROLLER */
 
-    long meas_bw;
-    long pred_bw;
+    double meas_bw_up;
+    double meas_bw_down;
     time_t meas_bw_time;
 
     /* Information for controlling transmit rate. */
@@ -138,7 +138,8 @@ struct interface *find_active_interface(struct interface *head);
 int copy_all_interfaces(const struct interface *head, struct interface_copy **out);
 int copy_active_interfaces(const struct interface *head, struct interface_copy **out);
 
-long calc_bw_hint(struct interface *ife);
+double calc_bw_up(const struct interface *ife);
+double calc_bw_down(const struct interface *ife);
 
 double ewma_update(double old_val, double new_val, double new_weight);
 
