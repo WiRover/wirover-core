@@ -30,7 +30,6 @@ int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress)
     struct tcphdr   *tcp_hdr = (struct tcphdr *)(packet + (ip_hdr->ihl * 4));
 
     memset(ft, 0, sizeof(struct flow_tuple));
-    ft->ingress = ingress;
     ft->net_proto = ip_hdr->version;
     ft->remote = ingress ? ip_hdr->saddr : ip_hdr->daddr;
     ft->local = ingress ? ip_hdr->daddr : ip_hdr->saddr;
@@ -43,7 +42,19 @@ int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress)
     return 0;
 }
 
-struct flow_entry *add_entry(struct flow_tuple* tuple) {
+void fill_flow_entry_data(struct flow_entry_data *fed, policy_entry * pd)
+{
+    fed->action = pd->action;
+    if(pd->rate_limit != 0)
+    {
+        fed->rate_control = (struct rate_control *)malloc(sizeof(struct rate_control));
+        rc_init(fed->rate_control, 10, 20000, pd->rate_limit);
+
+    }
+    strcpy(fed->alg_name, pd->alg_name);
+}
+
+struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner) {
     struct flow_entry *fe;
 
     struct flow_tuple *newKey = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
@@ -54,22 +65,19 @@ struct flow_entry *add_entry(struct flow_tuple* tuple) {
         fe = (struct flow_entry *) malloc(sizeof(struct flow_entry));
         memset(fe, 0, sizeof(struct flow_entry));
         fe->id = newKey;
+        fe->owner = owner;
 
         policy_entry pd;
         memset(&pd, 0, sizeof(policy_entry));
-        get_policy_by_tuple(tuple,  &pd, tuple->ingress ? DIR_INGRESS : DIR_EGRESS);
-        fe->action = pd.action;
-        if((fe->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP)
+        get_policy_by_tuple(tuple,  &pd, DIR_EGRESS);
+        fill_flow_entry_data(&fe->egress, &pd);
+        get_policy_by_tuple(tuple,  &pd, DIR_INGRESS);
+        fill_flow_entry_data(&fe->ingress, &pd);
+
+        if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP)
         {
             fe->requires_flow_info = 3;
         }
-        if(pd.rate_limit != 0)
-        {
-            fe->rate_control = (struct rate_control *)malloc(sizeof(struct rate_control));
-            rc_init(fe->rate_control, 10, 20000, pd.rate_limit);
-
-        }
-        strcpy(fe->alg_name, pd.alg_name);
 
         fe->last_visit_time = time(NULL);
         HASH_ADD_KEYPTR(hh, flow_table, newKey, sizeof(struct flow_tuple), fe);
@@ -105,9 +113,14 @@ void free_flow_entry(struct flow_entry * fe) {
     obtain_write_lock(&flow_table_lock);
     HASH_DEL(flow_table, fe);
     free(fe->id);
-    while(fe->packet_queue_head) {
-        struct packet * pkt = fe->packet_queue_head;
-        packet_queue_dequeue(&fe->packet_queue_head);
+    while(fe->ingress.packet_queue_head) {
+        struct packet * pkt = fe->ingress.packet_queue_head;
+        packet_queue_dequeue(&fe->ingress.packet_queue_head);
+        free_packet(pkt);
+    }
+    while(fe->egress.packet_queue_head) {
+        struct packet * pkt = fe->egress.packet_queue_head;
+        packet_queue_dequeue(&fe->egress.packet_queue_head);
         free_packet(pkt);
     }
     free(fe);
@@ -126,8 +139,6 @@ void expiration_time_check() {
 
 //Updates an entry and expires old entries in the flow table
 int update_flow_entry(struct flow_entry *fe) {
-
-    fe->count++;
 
     if(last_expiration_check == 0) {
         last_expiration_check = time(NULL);
@@ -149,7 +160,6 @@ void flow_tuple_invert(struct flow_tuple *ft)
     temp = ft->local_port;
     ft->local_port = ft->remote_port;
     ft->remote_port = temp;
-    ft->ingress = !ft->ingress;
 }
 
 int set_flow_table_timeout(int value) {
@@ -163,18 +173,26 @@ int flow_tuple_to_string(const struct flow_tuple *ft, char *str, int size) {
     char remote_ip[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &ft->local, local_ip, INET6_ADDRSTRLEN);
     inet_ntop(AF_INET, &ft->remote, remote_ip, INET6_ADDRSTRLEN);
-    char * dir_string = ft->ingress ? "<-" : "->";
-    return snprintf(str, size, "%s:%d %s %s:%d Proto: %d",
-        local_ip, ntohs(ft->local_port), dir_string, remote_ip, ntohs(ft->remote_port),
+    return snprintf(str, size, "%s:%d <-> %s:%d Proto: %d",
+        local_ip, ntohs(ft->local_port), remote_ip, ntohs(ft->remote_port),
         ft->proto);
 
 }
-int flow_entry_to_string(const struct flow_entry *fe, char *str, int size) {
-    char buffer[128];
-    flow_tuple_to_string(fe->id, buffer, sizeof(buffer));
-    return snprintf(str, size, "%s Action: %d remote: %d:%d Local link: %d hits: %d",
-        buffer, fe->action, fe->remote_node_id, fe->remote_link_id, fe->local_link_id, fe->count
+int flow_data_to_string(const struct flow_entry_data *fed, char *str, int size) {
+    return snprintf(str, size, "Action: %d remote: %d:%d Local link: %d hits: %d",
+        fed->action, fed->remote_node_id, fed->remote_link_id, fed->local_link_id, fed->count
     );
+}
+int flow_entry_to_string(const struct flow_entry *fe, char *str, int size)
+{
+    char ft_buffer[128];
+    char egress_buffer[128];
+    char ingress_buffer[128];
+
+    flow_tuple_to_string(fe->id, ft_buffer, sizeof(ft_buffer));
+    flow_data_to_string(&fe->ingress, ingress_buffer, sizeof(ingress_buffer));
+    flow_data_to_string(&fe->egress, egress_buffer, sizeof(egress_buffer));
+    return snprintf(str, size, "%s\n\tIngress: %s\n\tEgress: %s", ft_buffer, ingress_buffer, egress_buffer);
 }
 //All methods below here are for debugging purposes
 void print_flow_tuple(struct flow_tuple *ft) {

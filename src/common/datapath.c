@@ -270,7 +270,12 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
             ft = *(struct flow_tuple*)&pkt->data[1];
             flow_tuple_invert(&ft);
             struct flow_entry *fe = get_flow_entry(&ft);
-            fe->requires_flow_info++;
+            if(fe == NULL) {
+                DEBUG_MSG("Received flow error for unknown flow");
+            }
+            else {
+                fe->requires_flow_info++;
+            }
         }
         free_packet(pkt);
         return SUCCESS;
@@ -332,12 +337,16 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
             packet_pull(pkt, sizeof(struct tunhdr_flow_info));
             struct tunhdr_flow_info * egress_info = (struct tunhdr_flow_info *)pkt->data;
             flow_tuple_invert(&ft);
-            ft.ingress = 1;
-            struct flow_entry * fe = add_entry(&ft);
-            fe->action = ingress_info->action;
-            ft.ingress = 0;
-            fe = add_entry(&ft);
-            fe->action = egress_info->action;
+            struct flow_entry * fe = add_entry(&ft, 0);
+            fe->ingress.action = ingress_info->action;
+            fe->ingress.remote_node_id = node_id;
+            fe->ingress.remote_link_id = ingress_info->local_link_id;
+            fe->ingress.local_link_id = ingress_info->remote_link_id;
+
+            fe->egress.action = egress_info->action;
+            fe->egress.remote_node_id = node_id;
+            fe->egress.remote_link_id = egress_info->local_link_id;
+            fe->egress.local_link_id = egress_info->remote_link_id;
             free_packet(pkt);
             return SUCCESS;
         }
@@ -354,9 +363,6 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
             *(struct flow_tuple *)&error[1] = ft;
             return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, sizeof(error), ife, from);
         }
-        fe->remote_node_id = node_id;
-        fe->remote_link_id = link_id;
-        fe->local_link_id = ife->index;
         fe->requires_flow_info = 0;
     }
 
@@ -460,9 +466,9 @@ int handle_ife_packet(struct packet *pkt, struct interface *ife, int allow_enque
 
 int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_enqueue) {
     //Packet queuing if a rate limit is violated
-    if(fe->rate_control != NULL && !has_capacity(fe->rate_control)) {
+    if(fe->ingress.rate_control != NULL && !has_capacity(fe->ingress.rate_control)) {
         if(allow_enqueue)
-            packet_queue_append(&fe->packet_queue_head, &fe->packet_queue_tail, pkt);
+            packet_queue_append(&fe->ingress.packet_queue_head, &fe->ingress.packet_queue_tail, pkt);
         return SEND_QUEUE;
     }
 
@@ -499,8 +505,8 @@ int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_en
 
     // Update flow statistics
     update_flow_entry(fe);
-    if(fe->rate_control != NULL) {
-        update_tx_rate(fe->rate_control, pkt->data_size);
+    if(fe->ingress.rate_control != NULL) {
+        update_tx_rate(fe->ingress.rate_control, pkt->data_size);
     }
 
     free_packet(pkt);
@@ -541,25 +547,22 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
 
     struct flow_entry *fe = get_flow_entry(&ft);
     if(fe == NULL) {
-        ft.ingress = 1;
-        add_entry(&ft);
-        ft.ingress = 0;
-        fe = add_entry(&ft);
+        fe = add_entry(&ft, 1);
     }
 
     update_flow_entry(fe);
 
     // Check for drop
-    if((fe->action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
+    if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
         free_packet(pkt);
         return SUCCESS;
     }
 
 
     //Packet queuing if a flow rate limit is violated
-    if(fe->rate_control != NULL && !has_capacity(fe->rate_control)) {
+    if(fe->egress.rate_control != NULL && !has_capacity(fe->egress.rate_control)) {
         if (allow_flow_enqueue)
-            packet_queue_append(&fe->packet_queue_head, &fe->packet_queue_head, pkt);
+            packet_queue_append(&fe->egress.packet_queue_head, &fe->egress.packet_queue_head, pkt);
         return SEND_QUEUE;
     }
 
@@ -570,9 +573,10 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
 
     if(dst_ife == NULL)
         return FAILURE;
-
-    fe->remote_link_id = dst_ife->index;
-    fe->remote_node_id = dst_ife->node_id;
+    if(fe->owner) {
+        fe->egress.remote_link_id = dst_ife->index;
+        fe->egress.remote_node_id = dst_ife->node_id;
+    }
     remote_node = lookup_remote_node_by_id(dst_ife->node_id);
 
     if(remote_node == NULL) {
@@ -582,7 +586,7 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
 
 
     // Send on all interfaces
-    if((fe->action & POLICY_OP_MASK) == POLICY_OP_DUPLICATE) {
+    if((fe->egress.action & POLICY_OP_MASK) == POLICY_OP_DUPLICATE) {
         struct interface *local_ife = interface_list;
         struct interface *remote_ife;
         while(local_ife) {
@@ -600,7 +604,7 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
 
     struct interface *src_ife = select_src_interface(fe);
     if(src_ife != NULL) {
-        fe->local_link_id = src_ife->index;
+        fe->egress.local_link_id = src_ife->index;
     }
 
     if (!src_ife) {
@@ -611,19 +615,19 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
 
     int output = FAILURE;
     //Add a tunnel header to the packet
-    if((fe->action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
+    if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
         output = send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, src_ife, dst_ife, NULL, remote_node->global_seq);
         remote_node->global_seq++;
     }
-    else if((fe->action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
+    else if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
         struct interface *src_ife = select_src_interface(fe);
         if(src_ife != NULL) {
             output = send_nat_packet(pkt->data, pkt->data_size, src_ife);
         }
     }
     //Update rate information for the flow entry
-    if(output == SUCCESS && fe->rate_control != NULL) {
-        update_tx_rate(fe->rate_control, pkt->data_size);
+    if(output == SUCCESS && fe->egress.rate_control != NULL) {
+        update_tx_rate(fe->egress.rate_control, pkt->data_size);
     }
     free_packet(pkt);
     return output;
@@ -677,18 +681,14 @@ int send_encap_packet_dst(uint8_t type, char *packet, int size, struct interface
         fill_flow_tuple(packet, &ft, 0);
         struct flow_entry *fe = get_flow_entry(&ft);
 
-        if(fe != NULL && fe->requires_flow_info)
+        if(fe != NULL && fe->owner && fe->requires_flow_info)
         {
             struct packet *info_pkt = alloc_packet(sizeof(struct flow_tuple) + sizeof(struct tunhdr_flow_info) * 2, 0);
-            ft.ingress = 1;
-            fe = add_entry(&ft);
             struct tunhdr_flow_info ingress_info;
-            ingress_info.action = fe->action;
+            ingress_info.action = fe->ingress.action;
             ingress_info.rate_limit = 0;
-            ft.ingress = 0;
-            fe = add_entry(&ft);
             struct tunhdr_flow_info egress_info;
-            egress_info.action = fe->action;
+            egress_info.action = fe->egress.action;
             egress_info.rate_limit = 0;
 
             packet_push(info_pkt, sizeof(struct tunhdr_flow_info));
@@ -804,7 +804,7 @@ void service_tx_queue(struct packet ** head, struct timeval *now, int allow_ife_
 }
 
 void service_flow_rx_queue(struct flow_entry * fe, struct timeval *now) {
-    struct packet **head = &fe->packet_queue_head;
+    struct packet **head = &fe->ingress.packet_queue_head;
     while (*head) {
         struct packet *pkt = *head;
         if(handle_flow_packet(pkt, fe, 0) == SEND_QUEUE) {
@@ -827,12 +827,8 @@ int service_queues()
     gettimeofday(&now, NULL);
     struct flow_entry *flow_entry, *tmp;
     HASH_ITER(hh, get_flow_table(), flow_entry, tmp) {
-        if(flow_entry->packet_queue_head != NULL) {
-            if(flow_entry->id->ingress)
-                service_flow_rx_queue(flow_entry, &now);
-            else
-                service_tx_queue(&flow_entry->packet_queue_head, &now, 1, 0);
-        }
+        service_flow_rx_queue(flow_entry, &now);
+        service_tx_queue(&flow_entry->egress.packet_queue_head, &now, 1, 0);
     }
     service_tx_queue(&tx_queue_head, &now, 0, 0);
 

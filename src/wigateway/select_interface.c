@@ -13,12 +13,12 @@
 
 struct interface *select_src_interface(struct flow_entry *fe)
 {
-    if (fe->action & POLICY_OP_MULTIPATH) {
+    if (fe->egress.action & POLICY_OP_MULTIPATH) {
         return select_mp_interface(interface_list);
     }
 
     int max_priority = max_active_interface_priority(interface_list);
-    struct interface *output = find_interface_by_index(interface_list, fe->local_link_id);
+    struct interface *output = find_interface_by_index(interface_list, fe->egress.local_link_id);
     if(output == NULL || output->state != ACTIVE || output->priority < max_priority || !has_capacity(&output->rate_control))
     {
         //Find the subset of interfaces with the highest priority

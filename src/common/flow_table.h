@@ -16,18 +16,13 @@
 
 #define MAX_ALG_NAME_LEN   16
 
-struct flow_entry {
-    struct flow_tuple *id;
-    time_t last_visit_time;
-    UT_hash_handle hh;
+struct flow_entry_data {
     uint16_t remote_node_id;
     uint16_t remote_link_id;
     uint16_t local_link_id;
     int count;
     uint32_t action;
     char alg_name[MAX_ALG_NAME_LEN];
-    //Count of packets to include flow info in
-    uint8_t requires_flow_info;
 
     // Rate limiting and packet queueing
     struct rate_control * rate_control;
@@ -35,8 +30,18 @@ struct flow_entry {
     struct packet * packet_queue_tail;
 };
 
+struct flow_entry {
+    struct flow_tuple *id;
+    time_t last_visit_time;
+    UT_hash_handle hh;
+    uint8_t owner;
+    //Count of packets to include flow info in
+    uint8_t requires_flow_info;
+    struct flow_entry_data egress;
+    struct flow_entry_data ingress;
+};
+
 struct flow_tuple {
-    uint8_t ingress;
     uint8_t net_proto;
     uint32_t remote;
     uint32_t local;
@@ -45,9 +50,16 @@ struct flow_tuple {
     uint16_t local_port;
 };
 
+struct tunhdr_flow_info {
+    __be32      action;
+    __be32      rate_limit;
+    uint16_t    local_link_id;
+    uint16_t    remote_link_id;
+} __attribute__((__packed__));
+
 int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress);
 
-struct flow_entry *add_entry(struct flow_tuple* tuple);
+struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner);
 struct flow_entry *get_flow_entry(struct flow_tuple *);
 struct flow_entry *get_flow_table();
 

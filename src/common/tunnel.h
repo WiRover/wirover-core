@@ -41,12 +41,6 @@ struct tunhdr {
     __be32      remote_ts;
 } __attribute__((__packed__));
 
-struct tunhdr_flow_info {
-    __be32    action;
-    __be32    rate_limit;
-} __attribute__((__packed__));
-
-
 struct tunnel {
     char name[IFNAMSIZ];
     __be32 n_private_ip;
