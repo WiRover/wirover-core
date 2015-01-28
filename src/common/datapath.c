@@ -363,6 +363,11 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
             *(struct flow_tuple *)&error[1] = ft;
             return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, sizeof(error), ife, from);
         }
+        if(!fe->owner) {
+            fe->ingress.remote_link_id = link_id;
+            fe->ingress.remote_node_id = node_id;
+            fe->ingress.local_link_id = ife->index;
+        }
         fe->requires_flow_info = 0;
     }
 
@@ -603,7 +608,7 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
     }
 
     struct interface *src_ife = select_src_interface(fe);
-    if(src_ife != NULL) {
+    if(fe->owner && src_ife != NULL) {
         fe->egress.local_link_id = src_ife->index;
     }
 
@@ -686,9 +691,14 @@ int send_encap_packet_dst(uint8_t type, char *packet, int size, struct interface
             struct packet *info_pkt = alloc_packet(sizeof(struct flow_tuple) + sizeof(struct tunhdr_flow_info) * 2, 0);
             struct tunhdr_flow_info ingress_info;
             ingress_info.action = fe->ingress.action;
+            ingress_info.local_link_id = fe->ingress.local_link_id;
+            ingress_info.remote_link_id = fe->ingress.remote_link_id;
             ingress_info.rate_limit = 0;
+
             struct tunhdr_flow_info egress_info;
             egress_info.action = fe->egress.action;
+            egress_info.local_link_id = fe->egress.local_link_id;
+            egress_info.remote_link_id = fe->egress.remote_link_id;
             egress_info.rate_limit = 0;
 
             packet_push(info_pkt, sizeof(struct tunhdr_flow_info));

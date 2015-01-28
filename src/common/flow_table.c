@@ -185,9 +185,9 @@ int flow_data_to_string(const struct flow_entry_data *fed, char *str, int size) 
 }
 int flow_entry_to_string(const struct flow_entry *fe, char *str, int size)
 {
-    char ft_buffer[128];
-    char egress_buffer[128];
-    char ingress_buffer[128];
+    char ft_buffer[1024];
+    char egress_buffer[1024];
+    char ingress_buffer[1024];
 
     flow_tuple_to_string(fe->id, ft_buffer, sizeof(ft_buffer));
     flow_data_to_string(&fe->ingress, ingress_buffer, sizeof(ingress_buffer));
@@ -196,12 +196,12 @@ int flow_entry_to_string(const struct flow_entry *fe, char *str, int size)
 }
 //All methods below here are for debugging purposes
 void print_flow_tuple(struct flow_tuple *ft) {
-    char buffer[128];
+    char buffer[1024];
     flow_tuple_to_string(ft, buffer, sizeof(buffer));
     DEBUG_MSG("%s\n", buffer);
 }
 void print_flow_entry(struct flow_entry *fe) {
-    char buffer[128];
+    char buffer[1024];
     flow_entry_to_string(fe, buffer, sizeof(buffer));
     DEBUG_MSG("%s\n", buffer);
 }
@@ -218,7 +218,7 @@ int dump_flow_table_to_file(const char *filename)
     FILE *ft_file = fopen(filename, "w");
     if(ft_file == NULL)
         return FAILURE;
-    char buffer[128];
+    char buffer[1024];
     struct flow_entry *current_key, *tmp;
     obtain_read_lock(&flow_table_lock);
     HASH_ITER(hh, flow_table, current_key, tmp) {
