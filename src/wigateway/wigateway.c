@@ -282,6 +282,17 @@ int main(int argc, char* argv[])
                             tmp, max_timeout);
                     }
                 }
+
+                found = config_lookup_int_compat(config, "bandwidth-test-interval", &tmp);
+                if(found == CONFIG_TRUE) {
+                    if(tmp > 0) {
+                        bw_client.interval = tmp;
+                    }
+                    else {
+                        DEBUG_MSG("Invalid value for bandwidth-test-interval (%d): must be positive",
+                            tmp);
+                    }
+                }
             }
 
             if(start_bandwidth_client_thread(&bw_client) < 0) {
