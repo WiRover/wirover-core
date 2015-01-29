@@ -19,7 +19,7 @@ struct interface *select_dst_interface(struct flow_entry *fe)
 {
     struct remote_node *gw = NULL;
     struct interface * dst_ife = NULL;
-    gw = lookup_remote_node_by_id(fe->remote_node_id);
+    gw = lookup_remote_node_by_id(fe->egress.remote_node_id);
     //Case where a flow isn't inititated by a gateway
     if(gw == NULL) 
     {
@@ -42,17 +42,17 @@ struct interface *select_dst_interface(struct flow_entry *fe)
     }
     else
     {
-        if (fe->action & POLICY_OP_MULTIPATH) {
+        if (fe->egress.action & POLICY_OP_MULTIPATH) {
             return select_mp_interface(interface_list);
         }
 
-        dst_ife = find_interface_by_index(gw->head_interface, fe->remote_link_id);
+        dst_ife = find_interface_by_index(gw->head_interface, fe->egress.remote_link_id);
         if(dst_ife == NULL || dst_ife->state == INACTIVE)
         {
             dst_ife = find_active_interface(gw->head_interface);
         }
     }
-    if(dst_ife != NULL) { fe->remote_link_id = dst_ife->index; }
+    if(dst_ife != NULL && fe->owner) { fe->egress.remote_link_id = dst_ife->index; }
     return dst_ife;
 }
 

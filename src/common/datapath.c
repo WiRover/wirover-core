@@ -413,13 +413,6 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
         return SUCCESS;
     }
 
-    //If it's not a ping and we don't have an entry, it's an error
-    if(remote_ife == NULL) { 
-        DEBUG_MSG("Received packet from unknown node %d link %d", node_id, link_id);
-        free_packet(pkt);
-        return FAILURE;
-    }
-
     //Send an ack and return if the packet was only requesting an ack
     send_encap_packet_ife(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife, &h_local_ts, 0);
     if((n_tun_hdr.type == TUNTYPE_ACKREQ)){
