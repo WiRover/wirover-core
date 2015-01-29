@@ -582,21 +582,25 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
     if(src_ife_count > 0) {
         //Add a tunnel header to the packet
         if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
-            struct remote_node *remote_node = NULL;
-            for(int i = 0; i < src_ife_count; i++)
-            {
-                for(int j = 0; j < dst_ife_count; j++)
-                {
-                    remote_node = lookup_remote_node_by_id(dst_ife[j]->node_id);
-                    if(remote_node == NULL) {
-                        DEBUG_MSG("Destination interface %s had bad remote_node id %d", dst_ife[j]->name, dst_ife[j]->node_id);
-                        continue;
-                    }
-                    send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, src_ife[i], dst_ife[j], NULL, remote_node->global_seq);
+            if(dst_ife_count > 0) {
+                //TODO: This only works where the dst_ifes are all from the same remote_node
+                //perhaps change this functionality
+                struct remote_node *remote_node = lookup_remote_node_by_id(dst_ife[0]->node_id);
+                if(remote_node == NULL) {
+                    DEBUG_MSG("Destination interface %s had bad remote_node id %d", dst_ife[0]->name, dst_ife[0]->node_id);
+                    free_packet(pkt);
+                    return FAILURE;
                 }
+                for(int i = 0; i < src_ife_count; i++)
+                {
+                    for(int j = 0; j < dst_ife_count; j++)
+                    {
+                        send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, src_ife[i], dst_ife[j], NULL, remote_node->global_seq);
+                    }
+                }
+                remote_node->global_seq++;
+                output = SUCCESS;
             }
-            remote_node->global_seq++;
-            output = SUCCESS;
         }
         else if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
             output = send_nat_packet(pkt->data, pkt->data_size, src_ife[0]);
