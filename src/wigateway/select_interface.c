@@ -28,7 +28,6 @@ struct interface *select_src_interface(struct flow_entry *fe)
         struct interface *curr_ife = interface_list;
         int highest_priority = 0;
         int ife_count = 0;
-
         //TODO: This is total shit
         while(curr_ife) {
             if(curr_ife->state != ACTIVE || !has_capacity(&curr_ife->rate_control)) {
@@ -55,11 +54,15 @@ struct interface *select_src_interface(struct flow_entry *fe)
             weights[i] = weight;
             sum_weights += weight;
         }
-        double choice = round(rand() / (double)RAND_MAX * sum_weights);
+        double choice = rand() / (double)RAND_MAX * sum_weights;
         int i = 0;
         for(; i < ife_count; i++){
             choice -= weights[i];
             if(choice <= 0) { break; }
+        }
+        if(i >= ife_count){
+            DEBUG_MSG("Link selection algorithm failure!");
+            return NULL;
         }
         output = interfaces[i];
     }
