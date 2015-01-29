@@ -374,7 +374,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     // Verify the packet isn't a duplicate. Even if it is, send an ack
     // so that the remote link won't stall
     if(pb_add_seq_num(gw->rec_seq_buffer, h_global_seq) == DUPLICATE) {
-        send_encap_packet_ife(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife, &h_local_ts, 0);
+        send_encap_packet_ife(TUNTYPE_ACK, "", 0, ife, remote_ife, &h_local_ts, 0);
         return SUCCESS;
     }
 
@@ -414,7 +414,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     }
 
     //Send an ack and return if the packet was only requesting an ack
-    send_encap_packet_ife(TUNTYPE_ACK, "", 0, get_unique_id(), ife, remote_ife, &h_local_ts, 0);
+    send_encap_packet_ife(TUNTYPE_ACK, "", 0, ife, remote_ife, &h_local_ts, 0);
     if((n_tun_hdr.type == TUNTYPE_ACKREQ)){
         free_packet(pkt);
         return SUCCESS;
@@ -432,11 +432,12 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
 int handle_nat_packet(struct packet * pkt, struct interface * ife)
 {
     struct flow_tuple ft;
-    fill_flow_tuple(pkt->data, &ft, 0);
+    fill_flow_tuple(pkt->data, &ft, 1);
 
-    policy_entry pe;
-    get_policy_by_tuple(&ft,  &pe, DIR_INGRESS);
-    if(pe.action != POLICY_ACT_NAT) {
+    //TODO: Flow entry doesn't match up! The local IP is intead the interface's public IP
+    // because the packet is received before reverse masquerade is applied
+    struct flow_entry *fe = get_flow_entry(&ft);
+    if(fe == NULL || (fe->ingress.action & POLICY_ACT_MASK) != POLICY_ACT_NAT) {
         free_packet(pkt);
         return SUCCESS;
     }
@@ -564,74 +565,52 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
         return SEND_QUEUE;
     }
 
-    int node_id = get_unique_id();
+    struct interface *dst_ife[8];
+    int dst_ife_count = select_dst_interface(fe, dst_ife, sizeof(dst_ife));
 
-    struct interface *dst_ife = select_dst_interface(fe);
-    struct remote_node *remote_node = NULL;
+    //TODO: Check the interface rate limit and queue if needed
+    //if (!src_ife) {
+    //    if (allow_ife_enqueue)
+    //        packet_queue_append(&tx_queue_head, &tx_queue_tail, pkt);
+    //    return SEND_QUEUE;
+    //}
 
-    if(dst_ife == NULL)
-        return FAILURE;
-    if(fe->owner) {
-        fe->egress.remote_link_id = dst_ife->index;
-        fe->egress.remote_node_id = dst_ife->node_id;
-    }
-    remote_node = lookup_remote_node_by_id(dst_ife->node_id);
-
-    if(remote_node == NULL) {
-        DEBUG_MSG("Destination interface %s had bad remote_node id %d", dst_ife->name, dst_ife->node_id);
-        return FAILURE;
-    }
-
-
-    // Send on all interfaces
-    if((fe->egress.action & POLICY_OP_MASK) == POLICY_OP_DUPLICATE) {
-        struct interface *local_ife = interface_list;
-        struct interface *remote_ife;
-        while(local_ife) {
-            remote_ife = remote_node->head_interface;
-            while(remote_ife) {
-                send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, local_ife, remote_ife, NULL, remote_node->global_seq);
-                remote_ife = remote_ife->next;
-            }
-            local_ife = local_ife->next;
-        }
-        remote_node->global_seq++;
-        free_packet(pkt);
-        return SUCCESS;
-    }
-
-    struct interface *src_ife = select_src_interface(fe);
-    if(fe->owner && src_ife != NULL) {
-        fe->egress.local_link_id = src_ife->index;
-    }
-
-    if (!src_ife) {
-        if (allow_ife_enqueue)
-            packet_queue_append(&tx_queue_head, &tx_queue_tail, pkt);
-        return SEND_QUEUE;
-    }
+    struct interface *src_ife[8];
+    int src_ife_count = select_src_interface(fe, src_ife, sizeof(src_ife));
 
     int output = FAILURE;
-    //Add a tunnel header to the packet
-    if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
-        output = send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, node_id, src_ife, dst_ife, NULL, remote_node->global_seq);
-        remote_node->global_seq++;
-    }
-    else if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
-        struct interface *src_ife = select_src_interface(fe);
-        if(src_ife != NULL) {
-            output = send_nat_packet(pkt->data, pkt->data_size, src_ife);
+    if(src_ife_count > 0) {
+        //Add a tunnel header to the packet
+        if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
+            struct remote_node *remote_node = NULL;
+            for(int i = 0; i < src_ife_count; i++)
+            {
+                for(int j = 0; j < dst_ife_count; j++)
+                {
+                    remote_node = lookup_remote_node_by_id(dst_ife[j]->node_id);
+                    if(remote_node == NULL) {
+                        DEBUG_MSG("Destination interface %s had bad remote_node id %d", dst_ife[j]->name, dst_ife[j]->node_id);
+                        continue;
+                    }
+                    send_encap_packet_ife(TUNTYPE_DATA, pkt->data, pkt->data_size, src_ife[i], dst_ife[j], NULL, remote_node->global_seq);
+                }
+            }
+            remote_node->global_seq++;
+            output = SUCCESS;
         }
-    }
-    //Update rate information for the flow entry
-    if(output == SUCCESS && fe->egress.rate_control != NULL) {
-        update_tx_rate(fe->egress.rate_control, pkt->data_size);
+        else if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
+            output = send_nat_packet(pkt->data, pkt->data_size, src_ife[0]);
+        }
+        //Update rate information for the flow entry
+        if(output == SUCCESS && fe->egress.rate_control != NULL) {
+            update_tx_rate(fe->egress.rate_control, pkt->data_size);
+        }
     }
     free_packet(pkt);
     return output;
 }
 
-int send_encap_packet_ife(uint8_t type, char *packet, int size, uint16_t node_id, struct interface *src_ife, struct interface *dst_ife,
+int send_encap_packet_ife(uint8_t type, char *packet, int size, struct interface *src_ife, struct interface *dst_ife,
     uint32_t *remote_ts, uint32_t global_seq)
 {
     if(dst_ife == NULL || src_ife == NULL)
@@ -679,7 +658,7 @@ int send_encap_packet_dst(uint8_t type, char *packet, int size, struct interface
         fill_flow_tuple(packet, &ft, 0);
         struct flow_entry *fe = get_flow_entry(&ft);
 
-        if(fe != NULL && fe->owner && fe->requires_flow_info)
+        if(fe != NULL && fe->owner && fe->requires_flow_info > 0)
         {
             struct packet *info_pkt = alloc_packet(sizeof(struct flow_tuple) + sizeof(struct tunhdr_flow_info) * 2, 0);
             struct tunhdr_flow_info ingress_info;
@@ -748,7 +727,6 @@ int send_nat_packet(char *orig_packet, int orig_size, struct interface *src_ife)
         sockfd = src_ife->raw_udp_sockfd;
         ((struct udphdr *)new_packet)->check = 0;
     }
-
     //Determine the destination
     struct sockaddr_in dst;
     memset(&dst, 0, sizeof(struct sockaddr_in));

@@ -11,64 +11,54 @@
 #include "tunnel.h"
 
 
-struct interface *select_src_interface(struct flow_entry *fe)
+int select_src_interface(struct flow_entry *fe, struct interface **dst, int size)
 {
+    assert(size > 0);
     if (fe->egress.action & POLICY_OP_MULTIPATH) {
-        return select_mp_interface(interface_list);
+        dst[0] = select_mp_interface(interface_list);
+        return 1;
     }
-
-    int max_priority = max_active_interface_priority(interface_list);
-    struct interface *output = find_interface_by_index(interface_list, fe->egress.local_link_id);
-    if(output == NULL || output->state != ACTIVE || output->priority < max_priority || !has_capacity(&output->rate_control))
+    if((fe->egress.action & POLICY_OP_MASK) == POLICY_OP_DUPLICATE)
     {
-        //Find the subset of interfaces with the highest priority
-        int size = count_active_interfaces(interface_list);
-        if(size == 0) { return NULL; }
-        struct interface *interfaces[size];
-        struct interface *curr_ife = interface_list;
-        int highest_priority = 0;
-        int ife_count = 0;
-        //TODO: This is total shit
-        while(curr_ife) {
-            if(curr_ife->state != ACTIVE || !has_capacity(&curr_ife->rate_control)) {
-                curr_ife = curr_ife->next;
-                continue;
-            }
-            if(curr_ife->priority > highest_priority){
-                highest_priority = curr_ife->priority;
-                ife_count = 0;
-            }
-
-            if(curr_ife->priority == highest_priority){
-                interfaces[ife_count] = curr_ife;
-                ife_count++;
-            }
-            curr_ife = curr_ife->next;
-        }
-        if(ife_count == 0) { return NULL; }
-        double sum_weights = 0;
-        double weights[ife_count];
-        double weight;
-        for(int i = 0; i < ife_count; i++){
-            weight = calc_bw_down(interfaces[i]);
-            weights[i] = weight;
-            sum_weights += weight;
-        }
-        double choice = rand() / (double)RAND_MAX * sum_weights;
-        int i = 0;
-        for(; i < ife_count; i++){
-            choice -= weights[i];
-            if(choice <= 0) { break; }
-        }
-        if(i >= ife_count){
-            DEBUG_MSG("Link selection algorithm failure!");
-            return NULL;
-        }
-        output = interfaces[i];
+        return select_all_interfaces(interface_list, dst, size);
     }
-    return output;
+
+    dst[0] = find_interface_by_index(interface_list, fe->egress.local_link_id);
+
+    // In the case of NAT, we only assign an interface if we haven't already,
+    // no failover occurs.
+    if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
+        if(fe->egress.local_link_id == 0){
+            dst[0] = select_wrr_interface(interface_list);
+            if(dst[0] != NULL)
+                fe->egress.local_link_id = dst[0]->index;
+        }
+        return dst[0] != NULL;
+    }
+    else if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
+        //Single interface case
+        int max_priority = max_active_interface_priority(interface_list);
+        if(dst[0] == NULL || dst[0]->state != ACTIVE || dst[0]->priority < max_priority)
+        {
+            dst[0] = select_wrr_interface(interface_list);
+            if(dst[0] != NULL)
+            {
+                if(fe->owner) {
+                    fe->requires_flow_info++;
+                    fe->egress.local_link_id = dst[0]->index;
+                    fe->ingress.local_link_id = dst[0]->index;
+                }
+                return 1;
+            }
+        }
+        else { return 1; }
+    }
+    return 0;
 }
-struct interface *select_dst_interface(struct flow_entry *fe)
+int select_dst_interface(struct flow_entry *fe, struct interface **dst, int size)
 {
-    return get_controller_ife();
+    dst[0] = get_controller_ife();
+    if(dst[0] != NULL)
+        return 1;
+    return 0;
 }

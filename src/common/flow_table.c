@@ -192,7 +192,7 @@ int flow_entry_to_string(const struct flow_entry *fe, char *str, int size)
     flow_tuple_to_string(fe->id, ft_buffer, sizeof(ft_buffer));
     flow_data_to_string(&fe->ingress, ingress_buffer, sizeof(ingress_buffer));
     flow_data_to_string(&fe->egress, egress_buffer, sizeof(egress_buffer));
-    return snprintf(str, size, "%s\n\tIngress: %s\n\tEgress: %s", ft_buffer, ingress_buffer, egress_buffer);
+    return snprintf(str, size, "%s RFI: %d Owner: %d\n\tIngress: %s\n\tEgress: %s", ft_buffer, fe->requires_flow_info, fe->owner, ingress_buffer, egress_buffer);
 }
 //All methods below here are for debugging purposes
 void print_flow_tuple(struct flow_tuple *ft) {
