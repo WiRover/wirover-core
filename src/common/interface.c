@@ -26,6 +26,8 @@
 
 struct interface*   interface_list = 0;
 struct rwlock       interface_list_lock = RWLOCK_INITIALIZER;
+int ping_interval = -1;
+int ping_timeout = -1;
 
 /*
 * ALLOC INTERFACE
@@ -48,8 +50,12 @@ struct interface* alloc_interface(int node_id)
     gettimeofday(&ife->rx_time, NULL);
     gettimeofday(&ife->tx_time, NULL);
 
-    ife->ping_interval = get_ping_interval();
-    ife->ping_timeout = get_ping_timeout();
+    if(ping_interval == -1)
+        ping_interval = get_ping_interval();
+    ife->ping_interval = ping_interval;
+    if(ping_timeout == -1)
+        ping_timeout = get_ping_timeout();
+    ife->ping_timeout = ping_timeout;
 
     // Prevent early timeouts
     struct timeval now;
