@@ -55,8 +55,6 @@ static unsigned int         outbound_mtu = 0;
 static FILE *               packet_log_file;
 static int                  packet_log_enabled = 0;
 static char *               send_buffer;
-static struct packet *      tx_queue_head;
-static struct packet *      tx_queue_tail;
 
 int start_data_thread(struct tunnel *tun_in)
 {
@@ -328,30 +326,15 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     // flow table
     if(tun_type == TUNTYPE_DATA)
     {
-        struct flow_tuple ft;
 
         if(tun_ctl == TUNTYPE_FLOW_INFO)
         {
-            ft = *(struct flow_tuple *)(pkt->data);
-            packet_pull(pkt, sizeof(struct flow_tuple));
-            struct tunhdr_flow_info * ingress_info = (struct tunhdr_flow_info *)pkt->data;
-            packet_pull(pkt, sizeof(struct tunhdr_flow_info));
-            struct tunhdr_flow_info * egress_info = (struct tunhdr_flow_info *)pkt->data;
-            flow_tuple_invert(&ft);
-            struct flow_entry * fe = add_entry(&ft, 0);
-            fe->ingress.action = ingress_info->action;
-            fe->ingress.remote_node_id = node_id;
-            fe->ingress.remote_link_id = ingress_info->local_link_id;
-            fe->ingress.local_link_id = ingress_info->remote_link_id;
-
-            fe->egress.action = egress_info->action;
-            fe->egress.remote_node_id = node_id;
-            fe->egress.remote_link_id = egress_info->local_link_id;
-            fe->egress.local_link_id = egress_info->remote_link_id;
+            add_entry_info(pkt, node_id);
             free_packet(pkt);
             return SUCCESS;
         }
 
+        struct flow_tuple ft;
         fill_flow_tuple(pkt->data, &ft, 1);
 
         struct flow_entry *fe = get_flow_entry(&ft);
@@ -668,25 +651,7 @@ int send_encap_packet_dst(uint8_t type, char *packet, int size, struct interface
         if(fe != NULL && fe->owner && fe->requires_flow_info > 0)
         {
             struct packet *info_pkt = alloc_packet(sizeof(struct flow_tuple) + sizeof(struct tunhdr_flow_info) * 2, 0);
-            struct tunhdr_flow_info ingress_info;
-            ingress_info.action = fe->ingress.action;
-            ingress_info.local_link_id = fe->ingress.local_link_id;
-            ingress_info.remote_link_id = fe->ingress.remote_link_id;
-            ingress_info.rate_limit = 0;
-
-            struct tunhdr_flow_info egress_info;
-            egress_info.action = fe->egress.action;
-            egress_info.local_link_id = fe->egress.local_link_id;
-            egress_info.remote_link_id = fe->egress.remote_link_id;
-            egress_info.rate_limit = 0;
-
-            packet_push(info_pkt, sizeof(struct tunhdr_flow_info));
-            *(struct tunhdr_flow_info *)info_pkt->data = ingress_info;
-
-            packet_push(info_pkt, sizeof(struct tunhdr_flow_info));
-            *(struct tunhdr_flow_info *)info_pkt->data = egress_info;
-            packet_push(info_pkt, sizeof(struct flow_tuple));
-            *(struct flow_tuple*)info_pkt->data = ft;
+            fill_flow_info(fe, info_pkt);
             send_encap_packet_dst(TUNTYPE_FLOW_INFO | TUNTYPE_DATA, info_pkt->data, info_pkt->data_size, src_ife, dst, NULL, 0, 0);
             free_packet(info_pkt);
             fe->requires_flow_info--;
@@ -822,7 +787,7 @@ int service_queues()
         if(flow_entry->egress.rate_control != NULL)
             service_tx_queue(&flow_entry->egress.rate_control->packet_queue_head, &now, 1, 0);
     }
-    service_tx_queue(&tx_queue_head, &now, 0, 0);
+    //TODO: Handle the queues on each interface
 
     return 0;
 }
