@@ -26,8 +26,6 @@ struct flow_entry_data {
 
     // Rate limiting and packet queueing
     struct rate_control * rate_control;
-    struct packet * packet_queue_head;
-    struct packet * packet_queue_tail;
 };
 
 struct flow_entry {

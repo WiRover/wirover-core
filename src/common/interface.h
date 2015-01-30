@@ -97,7 +97,10 @@ struct interface {
     time_t meas_bw_time;
 
     /* Information for controlling transmit rate. */
-    struct rate_control rate_control;
+    struct rate_control ingress_rate_control;
+    struct rate_control egress_rate_control;
+
+    /* Information for estimating downlink rate */
     float base_rtt_diff;
     struct circular_buffer rtt_buffer;
 

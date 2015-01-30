@@ -113,16 +113,10 @@ void free_flow_entry(struct flow_entry * fe) {
     obtain_write_lock(&flow_table_lock);
     HASH_DEL(flow_table, fe);
     free(fe->id);
-    while(fe->ingress.packet_queue_head) {
-        struct packet * pkt = fe->ingress.packet_queue_head;
-        packet_queue_dequeue(&fe->ingress.packet_queue_head);
-        free_packet(pkt);
-    }
-    while(fe->egress.packet_queue_head) {
-        struct packet * pkt = fe->egress.packet_queue_head;
-        packet_queue_dequeue(&fe->egress.packet_queue_head);
-        free_packet(pkt);
-    }
+    if(fe->ingress.rate_control)
+        rc_destroy(fe->ingress.rate_control);
+    if(fe->egress.rate_control)
+        rc_destroy(fe->egress.rate_control);
     free(fe);
     release_write_lock(&flow_table_lock);
 }

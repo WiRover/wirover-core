@@ -275,6 +275,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
             }
             else {
                 fe->requires_flow_info++;
+                fe->owner = 1;
             }
         }
         free_packet(pkt);
@@ -465,9 +466,10 @@ int handle_ife_packet(struct packet *pkt, struct interface *ife, int allow_enque
 
 int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_enqueue) {
     //Packet queuing if a rate limit is violated
-    if(fe->ingress.rate_control != NULL && !has_capacity(fe->ingress.rate_control)) {
+    struct rate_control *rate_control = fe->ingress.rate_control;
+    if(rate_control != NULL && !has_capacity(rate_control)) {
         if(allow_enqueue)
-            packet_queue_append(&fe->ingress.packet_queue_head, &fe->ingress.packet_queue_tail, pkt);
+            packet_queue_append(&rate_control->packet_queue_head, &rate_control->packet_queue_tail, pkt);
         return SEND_QUEUE;
     }
 
@@ -559,9 +561,10 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
 
 
     //Packet queuing if a flow rate limit is violated
-    if(fe->egress.rate_control != NULL && !has_capacity(fe->egress.rate_control)) {
-        if (allow_flow_enqueue)
-            packet_queue_append(&fe->egress.packet_queue_head, &fe->egress.packet_queue_head, pkt);
+    struct rate_control *rate_control = fe->egress.rate_control;
+    if(rate_control != NULL && !has_capacity(rate_control)) {
+        if(allow_flow_enqueue)
+            packet_queue_append(&rate_control->packet_queue_head, &rate_control->packet_queue_tail, pkt);
         return SEND_QUEUE;
     }
 
@@ -765,7 +768,7 @@ int send_ife_packet(char *packet, int size, struct interface *ife, int sockfd, s
     }
     if(ife != NULL) {
         ife->tx_bytes += size;
-        update_tx_rate(&ife->rate_control, size);
+        update_tx_rate(&ife->egress_rate_control, size);
     }
     return SUCCESS;
 }
@@ -788,8 +791,10 @@ void service_tx_queue(struct packet ** head, struct timeval *now, int allow_ife_
     }
 }
 
-void service_flow_rx_queue(struct flow_entry * fe, struct timeval *now) {
-    struct packet **head = &fe->ingress.packet_queue_head;
+void service_flow_rx_queue(struct flow_entry *fe, struct timeval *now) {
+    if(fe->ingress.rate_control == NULL)
+        return;
+    struct packet **head = &fe->ingress.rate_control->packet_queue_head;
     while (*head) {
         struct packet *pkt = *head;
         if(handle_flow_packet(pkt, fe, 0) == SEND_QUEUE) {
@@ -812,8 +817,10 @@ int service_queues()
     gettimeofday(&now, NULL);
     struct flow_entry *flow_entry, *tmp;
     HASH_ITER(hh, get_flow_table(), flow_entry, tmp) {
-        service_flow_rx_queue(flow_entry, &now);
-        service_tx_queue(&flow_entry->egress.packet_queue_head, &now, 1, 0);
+        if(flow_entry->ingress.rate_control != NULL)
+            service_flow_rx_queue(flow_entry, &now);
+        if(flow_entry->egress.rate_control != NULL)
+            service_tx_queue(&flow_entry->egress.rate_control->packet_queue_head, &now, 1, 0);
     }
     service_tx_queue(&tx_queue_head, &now, 0, 0);
 

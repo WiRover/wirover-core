@@ -16,7 +16,7 @@ struct interface *select_mp_interface(struct interface *head)
     int ife_count = 0;
 
     while(curr_ife) {
-        if(curr_ife->state != ACTIVE || !has_capacity(&curr_ife->rate_control)) {
+        if(curr_ife->state != ACTIVE || !has_capacity(&curr_ife->egress_rate_control)) {
             curr_ife = curr_ife->next;
             continue;
         }
@@ -61,7 +61,7 @@ struct interface *select_wrr_interface(struct interface *head)
     int ife_count = 0;
     //TODO: This is total shit
     while(curr_ife) {
-        if(curr_ife->state != ACTIVE || !has_capacity(&curr_ife->rate_control)) {
+        if(curr_ife->state != ACTIVE || !has_capacity(&curr_ife->egress_rate_control)) {
             curr_ife = curr_ife->next;
             continue;
         }
