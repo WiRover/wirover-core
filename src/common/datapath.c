@@ -322,6 +322,8 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
         return send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, 1, ife, from);
     }
 
+    update_interface_public_address(remote_ife, (const struct sockaddr *)from, sizeof(struct sockaddr_storage));
+
     // If the flow is data, make sure we have an entry for it in our
     // flow table
     if(tun_type == TUNTYPE_DATA)

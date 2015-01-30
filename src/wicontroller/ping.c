@@ -34,8 +34,7 @@ static void* ping_thread_func(void* arg);
 static int ping_request_valid(char *buffer, int len);
 static int send_response(struct interface *local_ife, const struct remote_node *gw,
                          unsigned char type, struct sockaddr_storage *from, char *buffer, int len, float bw);
-static void process_ping_request(char *buffer, int len, 
-                                 const struct sockaddr *from, socklen_t from_len);
+static void process_ping_request(char *buffer, int len);
 static void process_ping_response(char *buffer, int len, 
                                   const struct sockaddr *from, socklen_t from_len,
                                   const struct timeval *recv_time);
@@ -147,8 +146,7 @@ struct interface *remote_ife, char *buffer, int bytes_recvd)
     case PING_REQUEST:
         remote_ife->last_ping_time = recv_time;
 
-        process_ping_request(buffer, bytes_recvd, 
-            (struct sockaddr *)from_addr, from_len);
+        process_ping_request(buffer, bytes_recvd);
 
         if(send_response(local_ife, gw, PING_RESPONSE, from_addr,
             buffer, bytes_recvd, bw) < 0) {
@@ -265,8 +263,7 @@ static int send_response(struct interface *local_ife, const struct remote_node *
 * was present but with a different IP address, we can update it.  The latter
 * case is especially relevent when the remote_node is behind a NAT.
 */
-static void process_ping_request(char *buffer, int len, 
-                                 const struct sockaddr *from, socklen_t from_len)
+static void process_ping_request(char *buffer, int len)
 {
     struct ping_packet *ping = (struct ping_packet *)
         (buffer);
@@ -286,50 +283,6 @@ static void process_ping_request(char *buffer, int len,
     if(!ife) {
         DEBUG_MSG("Error: interface not recognized");
         return;
-    }
-
-    // TODO: Add IPv6 support
-    struct sockaddr_in from_in;
-
-    if(sockaddr_to_sockaddr_in(from, sizeof(struct sockaddr), &from_in) < 0) {
-        char p_ip[INET6_ADDRSTRLEN];
-        getnameinfo(from, from_len, p_ip, sizeof(p_ip), 0, 0, NI_NUMERICHOST);
-
-        DEBUG_MSG("Unable to add interface with address %s (IPv6?)", p_ip);
-        return;
-    }
-
-    /* The main reason for this check is if the remote_node is behind a NAT,
-    * then the IP address and port that it sends in its notification are
-    * not the same as its public IP address and port. */
-    if(memcmp(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr)) ||
-        ife->data_port != from_in.sin_port) {
-            struct in_addr private_ip;
-            ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
-
-            DEBUG_MSG("Changing node %hu link %hu from %x:%hu to %x:%hu",
-                gw->unique_id, ife->index,
-                ntohl(ife->public_ip.s_addr), ntohs(ife->data_port),
-                ntohl(from_in.sin_addr.s_addr), ntohs(from_in.sin_port));
-
-            memcpy(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr));
-            ife->data_port  = from_in.sin_port;
-            ife->state      = ping->link_state;
-
-            /* We now know that ife->public_ip and ife->data_port are correct. */
-            ife->flags |= IFFLAG_SOURCE_VERIFIED;
-
-#ifdef WITH_DATABASE
-            db_update_link(gw, ife);
-#endif
-    } else if((ife->flags & IFFLAG_SOURCE_VERIFIED) == 0) {
-        /* The source was correct, but now we can say it has been verified. */
-        ife->flags |= IFFLAG_SOURCE_VERIFIED;
-
-        if(ife->state == ACTIVE) {
-            struct in_addr private_ip;
-            ipaddr_to_ipv4(&gw->private_ip, (uint32_t *)&private_ip.s_addr);
-        }
     }
 
     process_ping_payload(buffer, len, gw, ife);

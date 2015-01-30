@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <netdb.h>
 #include <linux/if_packet.h>
 #include <linux/if_ether.h>
 #include <linux/if.h>
@@ -95,6 +96,46 @@ int change_interface_state(struct interface *ife, enum if_state state)
     send_notification(1);
 #endif
     return 0;
+}
+
+void update_interface_public_address(struct interface *ife, const struct sockaddr *from, socklen_t from_len)
+{
+    // TODO: Add IPv6 support
+    struct sockaddr_in from_in;
+
+    if(sockaddr_to_sockaddr_in(from, sizeof(struct sockaddr), &from_in) < 0) {
+        char p_ip[INET6_ADDRSTRLEN];
+        getnameinfo(from, from_len, p_ip, sizeof(p_ip), 0, 0, NI_NUMERICHOST);
+
+        DEBUG_MSG("Unable to add interface with address %s (IPv6?)", p_ip);
+        return;
+    }
+
+    /* The main reason for this check is if the remote_node is behind a NAT,
+    * then the IP address and port that it sends in its notification are
+    * not the same as its public IP address and port. */
+    if(memcmp(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr)) ||
+        ife->data_port != from_in.sin_port) {
+            DEBUG_MSG("Changing node %hu link %hu from %x:%hu to %x:%hu",
+                ife->node_id, ife->index,
+                ntohl(ife->public_ip.s_addr), ntohs(ife->data_port),
+                ntohl(from_in.sin_addr.s_addr), ntohs(from_in.sin_port));
+
+            memcpy(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr));
+            ife->data_port  = from_in.sin_port;
+
+            /* We now know that ife->public_ip and ife->data_port are correct. */
+            ife->flags |= IFFLAG_SOURCE_VERIFIED;
+
+#ifdef CONTROLER
+#ifdef WITH_DATABASE
+            db_update_link(gw, ife);
+#endif
+#endif
+    } else if((ife->flags & IFFLAG_SOURCE_VERIFIED) == 0) {
+        /* The source was correct, but now we can say it has been verified. */
+        ife->flags |= IFFLAG_SOURCE_VERIFIED;
+    }
 }
 
 static int configure_socket(int sock_type, int proto, const char * ife_name, int bind_port, int reuse) {

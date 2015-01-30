@@ -122,6 +122,7 @@ extern struct rwlock        interface_list_lock;
 
 struct interface* alloc_interface(int node_id);
 int change_interface_state(struct interface *ife, enum if_state state);
+void update_interface_public_address(struct interface *ife, const struct sockaddr *from, socklen_t from_len);
 int interface_bind(struct interface *ife, int bind_port);
 void free_interface(struct interface* ife);
 
