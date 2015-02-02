@@ -44,15 +44,15 @@ int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress)
 
 void fill_flow_info(struct flow_entry *fe, struct packet *info_pkt) {
     struct tunhdr_flow_info ingress_info;
-    ingress_info.action = fe->ingress.action;
-    ingress_info.local_link_id = fe->ingress.local_link_id;
-    ingress_info.remote_link_id = fe->ingress.remote_link_id;
+    ingress_info.action = htonl(fe->ingress.action);
+    ingress_info.local_link_id = htons(fe->ingress.local_link_id);
+    ingress_info.remote_link_id = htons(fe->ingress.remote_link_id);
     ingress_info.rate_limit = 0;
 
     struct tunhdr_flow_info egress_info;
-    egress_info.action = fe->egress.action;
-    egress_info.local_link_id = fe->egress.local_link_id;
-    egress_info.remote_link_id = fe->egress.remote_link_id;
+    egress_info.action = htonl(fe->egress.action);
+    egress_info.local_link_id = htons(fe->egress.local_link_id);
+    egress_info.remote_link_id = htons(fe->egress.remote_link_id);
     egress_info.rate_limit = 0;
 
     packet_push(info_pkt, sizeof(struct tunhdr_flow_info));
@@ -61,7 +61,25 @@ void fill_flow_info(struct flow_entry *fe, struct packet *info_pkt) {
     packet_push(info_pkt, sizeof(struct tunhdr_flow_info));
     *(struct tunhdr_flow_info *)info_pkt->data = egress_info;
     packet_push(info_pkt, sizeof(struct flow_tuple));
-    *(struct flow_tuple*)info_pkt->data = *fe->id;
+    hton_flow_tuple(fe->id , (struct flow_tuple*)info_pkt->data);
+}
+
+void hton_flow_tuple(struct flow_tuple *src, struct flow_tuple *dst) {
+    dst->net_proto = src->net_proto;
+    dst->remote = htonl(src->remote);
+    dst->local = htonl(src->local);
+    dst->proto = src->proto;
+    dst->remote_port = htons(src->remote_port);
+    dst->local_port = htons(src->local_port);
+}
+
+void ntoh_flow_tuple(struct flow_tuple *src, struct flow_tuple *dst) {
+    dst->net_proto = src->net_proto;
+    dst->remote = ntohl(src->remote);
+    dst->local = ntohl(src->local);
+    dst->proto = src->proto;
+    dst->remote_port = ntohs(src->remote_port);
+    dst->local_port = ntohs(src->local_port);
 }
 
 void fill_flow_entry_data(struct flow_entry_data *fed, policy_entry * pd)
@@ -108,22 +126,23 @@ struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner) {
 }
 struct flow_entry *add_entry_info(struct packet *pkt, int remote_node_id) {
     struct flow_tuple ft;
-    ft = *(struct flow_tuple *)(pkt->data);
+    ntoh_flow_tuple((struct flow_tuple *)(pkt->data), &ft);
     packet_pull(pkt, sizeof(struct flow_tuple));
     struct tunhdr_flow_info * ingress_info = (struct tunhdr_flow_info *)pkt->data;
     packet_pull(pkt, sizeof(struct tunhdr_flow_info));
     struct tunhdr_flow_info * egress_info = (struct tunhdr_flow_info *)pkt->data;
     flow_tuple_invert(&ft);
     struct flow_entry * fe = add_entry(&ft, 0);
-    fe->ingress.action = ingress_info->action;
-    fe->ingress.remote_node_id = remote_node_id;
-    fe->ingress.remote_link_id = ingress_info->local_link_id;
-    fe->ingress.local_link_id = ingress_info->remote_link_id;
 
-    fe->egress.action = egress_info->action;
+    fe->ingress.action = ntohl(ingress_info->action);
+    fe->ingress.remote_node_id = remote_node_id;
+    fe->ingress.remote_link_id = ntohs(ingress_info->local_link_id);
+    fe->ingress.local_link_id = ntohs(ingress_info->remote_link_id);
+
+    fe->egress.action = ntohl(egress_info->action);
     fe->egress.remote_node_id = remote_node_id;
-    fe->egress.remote_link_id = egress_info->local_link_id;
-    fe->egress.local_link_id = egress_info->remote_link_id;
+    fe->egress.remote_link_id = ntohs(egress_info->local_link_id);
+    fe->egress.local_link_id = ntohs(egress_info->remote_link_id);
     return fe;
 }
 

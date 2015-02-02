@@ -46,7 +46,7 @@ struct flow_tuple {
     uint8_t proto;
     uint16_t remote_port;
     uint16_t local_port;
-};
+} __attribute__((__packed__));
 
 struct tunhdr_flow_info {
     __be32      action;
@@ -61,6 +61,9 @@ struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner);
 struct flow_entry *add_entry_info(struct packet *pkt, int remote_node_id);
 struct flow_entry *get_flow_entry(struct flow_tuple *);
 struct flow_entry *get_flow_table();
+
+void hton_flow_tuple(struct flow_tuple *src, struct flow_tuple *dst);
+void ntoh_flow_tuple(struct flow_tuple *src, struct flow_tuple *dst);
 
 void fill_flow_info(struct flow_entry *fe, struct packet *dst);
 
