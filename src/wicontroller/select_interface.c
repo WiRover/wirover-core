@@ -55,7 +55,7 @@ int select_dst_interface(struct flow_entry *fe, struct interface **dst, int size
         }
         if((fe->egress.action & POLICY_OP_MASK) == POLICY_OP_DUPLICATE)
         {
-            return select_all_interfaces(interface_list, dst, size);
+            return select_all_interfaces(gw->head_interface, dst, size);
         }
 
         dst[0] = find_interface_by_index(gw->head_interface, fe->egress.remote_link_id);
@@ -63,7 +63,15 @@ int select_dst_interface(struct flow_entry *fe, struct interface **dst, int size
         {
             dst[0] = find_active_interface(gw->head_interface);
         }
-        return dst[0] != NULL;
+        if(dst[0] != NULL) {
+            if(fe->owner)
+            {
+                fe->ingress.remote_link_id = dst[0]->index;
+                fe->egress.remote_link_id = dst[0]->index;
+            }
+            return 1;
+        }
+        return 0;
     }
     return 0;
 }

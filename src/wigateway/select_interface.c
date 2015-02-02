@@ -58,7 +58,12 @@ int select_src_interface(struct flow_entry *fe, struct interface **dst, int size
 int select_dst_interface(struct flow_entry *fe, struct interface **dst, int size)
 {
     dst[0] = get_controller_ife();
-    if(dst[0] != NULL)
+    if(dst[0] != NULL) {
+        if(fe->owner) {
+            fe->ingress.remote_link_id = dst[0]->index;
+            fe->egress.remote_link_id = dst[0]->index;
+        }
         return 1;
+    }
     return 0;
 }
