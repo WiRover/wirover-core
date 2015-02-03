@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "debug.h"
 #include "packet.h"
 
 struct packet *alloc_packet(int head_size, int tail_size)

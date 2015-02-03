@@ -19,6 +19,7 @@
 #include "gps_handler.h"
 #include "interface.h"
 #include "netlink.h"
+#include "packet.h"
 #include "ping.h"
 #include "rootchan.h"
 #include "rwlock.h"
@@ -101,36 +102,35 @@ int ping_all_interfaces()
 */
 int send_ping(struct interface* ife)
 {
-    char buffer[mtu];
+    struct packet *pkt = alloc_packet(sizeof(struct tunhdr), MIN_PING_PACKET_SIZE + sizeof(struct gps_payload));
 
-    memset(buffer, 0, mtu);
-    unsigned send_size = MIN_PING_PACKET_SIZE;
+    packet_put(pkt, MIN_PING_PACKET_SIZE);
 
-    struct ping_packet *pkt = (struct ping_packet *)(buffer);
-    pkt->seq_no = htonl(ife->next_ping_seq_no++);
-    pkt->link_state = ife->state;
-    pkt->src_id = htons(get_unique_id());
-    pkt->link_id = htonl(ife->index);
+    struct ping_packet *ping_pkt = (struct ping_packet *)(pkt->data);
+    ping_pkt->seq_no = htonl(ife->next_ping_seq_no++);
+    ping_pkt->link_state = ife->state;
+    ping_pkt->src_id = htons(get_unique_id());
+    ping_pkt->link_id = htonl(ife->index);
 
     struct gps_payload *gps = (struct gps_payload *)
-        ((char *)pkt + sizeof(struct ping_packet));
+        ((char *)ping_pkt + sizeof(struct ping_packet));
     gps->next = PING_NO_PAYLOAD;
 
     // Attempt to stuff GPS data into the packet
+    packet_put(pkt, sizeof(struct gps_payload));
     if(fill_gps_payload(gps) < 0) {
-        pkt->type = PING_REQUEST;
-        send_size = MIN_PING_PACKET_SIZE;
+        ping_pkt->type = PING_REQUEST;
+        packet_pull_tail(pkt, sizeof(struct gps_payload));
     } else {
-        pkt->type = PING_REQUEST | PING_GPS_PAYLOAD;
-        send_size = MIN_PING_PACKET_SIZE + sizeof(struct gps_payload);
+        ping_pkt->type = PING_REQUEST | PING_GPS_PAYLOAD;
     }
 
     // Store a timestamp in the packet for calculating RTT.
-    pkt->sender_ts = htonl(timeval_to_usec(0));
-    pkt->receiver_ts = 0;
-    fill_ping_digest(pkt, buffer, send_size, private_key);
+    ping_pkt->sender_ts = htonl(timeval_to_usec(0));
+    ping_pkt->receiver_ts = 0;
+    fill_ping_digest(ping_pkt, pkt->data, pkt->data_size, private_key);
 
-    if(send_encap_packet_ife(TUNTYPE_PING, buffer, send_size, ife, get_controller_ife(), NULL, 0)) {
+    if(send_encap_packet_ife(TUNTYPE_PING, pkt, ife, get_controller_ife(), NULL, 0)) {
         /* We get an error ENETUNREACH if we try pinging out an interface which
         * does not have an IP address.  That case is not interesting, so we
         * suppress the error message. */
@@ -138,14 +138,6 @@ int send_ping(struct interface* ife)
             ERROR_MSG("sending ping packet on %s failed", ife->name);
         return -1;
     }
-    pkt->type = PING_TAILGATE;
-    send_size = mtu;
-    fill_ping_digest(pkt, buffer, send_size, private_key);
-
-    // This last_ping_time timestamp will be compared to the timestamp in the ping
-    // response packet to make sure the response is for the most recent
-    // request.
-    //ife->last_ping_time = now.tv_sec;
 
     gettimeofday(&ife->last_ping_time, NULL);
 
@@ -194,7 +186,7 @@ void* ping_thread_func(void* arg)
         while(inactive_interface)
         {
             if(inactive_interface->state != ACTIVE && timeval_diff(&now, &inactive_interface->tx_time) >= stall_retry_interval){
-                send_encap_packet_ife(TUNTYPE_ACKREQ, "", 0, inactive_interface, get_controller_ife(), NULL, 0);
+                send_encap_packet_ife(TUNTYPE_ACKREQ, alloc_packet(sizeof(struct tunhdr),0), inactive_interface, get_controller_ife(), NULL, 0);
             }
             inactive_interface = inactive_interface->next;
         }
@@ -317,32 +309,31 @@ static int send_second_response(struct interface *ife,
     assert(len >= MIN_PING_PACKET_SIZE);
 
     int send_size = MIN_PING_PACKET_SIZE + sizeof(struct passive_payload);
-    char *response = malloc(send_size);
-    if(!response) {
+    struct packet* pkt = alloc_packet(sizeof(struct tunhdr), send_size);
+    if(!pkt) {
         DEBUG_MSG("out of memory");
         return -1;
     }
+    packet_put(pkt, MIN_PING_PACKET_SIZE);
+    memcpy(pkt->data, buffer, MIN_PING_PACKET_SIZE);
 
-    memcpy(response, buffer, MIN_PING_PACKET_SIZE);
-
-    struct ping_packet *ping = (struct ping_packet *)(response);
+    struct ping_packet *ping = (struct ping_packet *)(pkt->data);
 
     ping->type = PING_SECOND_RESPONSE | PING_PASSIVE_PAYLOAD;
     ping->src_id = htons(get_unique_id());
     ping->sender_ts = 0;
 
+    packet_put(pkt, sizeof(struct passive_payload));
     struct passive_payload *passive = (struct passive_payload *)
-        ((char *)ping + sizeof(struct ping_packet));
+        ((char *)pkt->data + sizeof(struct ping_packet));
 
     if(fill_passive_payload(ife->name, passive) < 0) {
-        send_size = MIN_PING_PACKET_SIZE;
+        packet_pull_tail(pkt, sizeof(struct ping_packet));
     }
 
-    fill_ping_digest(ping, response, send_size, private_key);
-    int result = send_encap_packet_ife(TUNTYPE_PING, response, send_size, ife, dst_ife, NULL, 0);
+    fill_ping_digest(ping, pkt->data, pkt->data_size, private_key);
+    int result = send_encap_packet_ife(TUNTYPE_PING, pkt, ife, dst_ife, NULL, 0);
     //int result = sendto(sockfd, response, send_size, 0, to, to_len);
-
-    free(response);
 
     if(result < 0) {
         ERROR_MSG("sendto failed");

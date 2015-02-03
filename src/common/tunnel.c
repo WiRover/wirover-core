@@ -27,6 +27,7 @@
 #include "configuration.h"
 #include "debug.h"
 #include "interface.h"
+#include "packet.h"
 #include "rootchan.h"
 #include "timing.h"
 #include "tunnel.h"
@@ -234,7 +235,7 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
     return SUCCESS;
 } // End function tunnelCreate()
 
-int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packet, 
+void add_tunnel_header(uint8_t type, struct packet *pkt, 
     struct interface *src_ife, struct interface *update_ife, uint32_t global_seq, uint32_t *remote_ts)
 {
     // Getting a sequence number should be done as close to sending as possible
@@ -242,7 +243,6 @@ int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packe
     memset(&tun_hdr, 0, sizeof(struct tunhdr));
 
     tun_hdr.type = type;
-    //tun_hdr.client_id = 0; // TODO: Add a client ID.
     tun_hdr.node_id = htons(get_unique_id());
     tun_hdr.link_id = htons(src_ife->index);
     tun_hdr.global_seq = htonl(global_seq);
@@ -258,8 +258,6 @@ int add_tunnel_header(uint8_t type, char *orig_packet, int size, char *dst_packe
 
     if(remote_ts != NULL)
         tun_hdr.remote_ts = htonl(*remote_ts);
-
-    memcpy(dst_packet, &tun_hdr, sizeof(struct tunhdr));
-    memcpy(&dst_packet[sizeof(struct tunhdr)], orig_packet, size);
-    return (size) + sizeof(struct tunhdr);
+    packet_push(pkt, sizeof(struct tunhdr));
+    *(struct tunhdr *)pkt->data = tun_hdr;
 }

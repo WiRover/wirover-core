@@ -233,16 +233,17 @@ static int ping_request_valid(char *buffer, int len)
 static int send_response(struct interface *local_ife, const struct remote_node *gw,
                          unsigned char type, struct sockaddr_storage *from, char *buffer, int len, float bw)
 {
-    char response_buffer[mtu];
+    struct packet *pkt = alloc_packet(sizeof(struct tunhdr), mtu);
 
-    if(len < sizeof(response_buffer)) {
-        memset(response_buffer, 0, sizeof(response_buffer));
-        memcpy(response_buffer, buffer, len);
+    if(len < sizeof(pkt->tail_size)) {
+        packet_put(pkt, len);
+        memcpy(pkt->data, buffer, len);
     } else {
-        memcpy(response_buffer, buffer, sizeof(response_buffer));
+        packet_put(pkt, pkt->tail_size);
+        memcpy(pkt->data, buffer, pkt->data_size);
     }
 
-    struct ping_packet *ping = (struct ping_packet *)(response_buffer);
+    struct ping_packet *ping = (struct ping_packet *)(pkt->data);
 
     ping->type = type;
     ping->src_id = htons(get_unique_id());
@@ -250,11 +251,11 @@ static int send_response(struct interface *local_ife, const struct remote_node *
     ping->est_bw = htonl(bw_to_int(bw));
 
     if(gw) {
-        fill_ping_digest(ping, response_buffer, MIN_PING_PACKET_SIZE, gw->private_key);
+        fill_ping_digest(ping, pkt->data, MIN_PING_PACKET_SIZE, gw->private_key);
     } else {
         memset(ping->digest, 0, sizeof(ping->digest));
     }
-    return send_encap_packet_dst_noinfo(TUNTYPE_PING, response_buffer, MIN_PING_PACKET_SIZE, interface_list, from);
+    return send_encap_packet_dst_noinfo(TUNTYPE_PING, pkt, interface_list, from);
 }
 
 /*
