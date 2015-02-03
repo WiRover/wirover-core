@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "debug.h"
+#include "packet.h"
 #include "packet_buffer.h"
 #include "rwlock.h"
 
@@ -10,7 +11,7 @@
 
 int pb_seq_is_larger(uint32_t seq, uint32_t next_seq)
 {
-    return next_seq > seq || (seq > INTEGER_WRAP_AROUND && next_seq < seq - INTEGER_WRAP_AROUND);
+    return next_seq >= seq || (seq > INTEGER_WRAP_AROUND && next_seq < seq - INTEGER_WRAP_AROUND);
 }
 
 int pb_free_head(struct retrans_buffer *rt_buffer)
@@ -18,15 +19,18 @@ int pb_free_head(struct retrans_buffer *rt_buffer)
     if(rt_buffer->head == NULL) { return FAILURE; }
     struct retrans_buffer_entry *to_remove = rt_buffer->head;
     rt_buffer->head = to_remove->next;
-    free(to_remove->packet);
+    free_packet(to_remove->pkt);
     free(to_remove);
     rt_buffer->length--;
     return SUCCESS;
 }
 
-int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, char* packet, int size)
+int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, struct packet *pkt)
 {
-    if(seq == 0 || size == 0){ return rt_buffer->length; }
+    if(seq == 0 || pkt->data_size == 0){ 
+        free_packet(pkt);
+        return rt_buffer->length;
+    }
     
     if(rt_buffer->length > 0 && !pb_seq_is_larger(rt_buffer->tail->seq, seq)){
         DEBUG_MSG("Prev sequence number %d is greater than new sequence number %d",rt_buffer->tail->seq, seq);
@@ -41,9 +45,7 @@ int pb_add_packet(struct retrans_buffer *rt_buffer, uint32_t seq, char* packet, 
     struct retrans_buffer_entry *to_add = (struct retrans_buffer_entry *)malloc(sizeof(struct retrans_buffer_entry));
 
     to_add->seq = seq;
-    to_add->packet = (char *)malloc(size);
-    memcpy(to_add->packet, packet, size);
-    to_add->size = size;
+    to_add->pkt = pkt;
     to_add->next = NULL;
     if(rt_buffer->length == 0) {
         rt_buffer->head = to_add;

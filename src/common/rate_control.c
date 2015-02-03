@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "packet.h"
 #include "rate_control.h"
 #include "timing.h"
 #include "debug.h"
@@ -19,10 +20,18 @@ int rc_init(struct rate_control *rc, int window_size, long bin_size, double capa
 
     return 0;
 }
-
+void rc_destroy(struct rate_control *rc)
+{
+    while(rc->packet_queue_head) {
+        struct packet * pkt = rc->packet_queue_head;
+        packet_queue_dequeue(&rc->packet_queue_head);
+        free_packet(pkt);
+    }
+    destroy_cbuffer(&rc->cbuffer);
+}
 void free_rc(struct rate_control *rc)
 {
-    destroy_cbuffer(&rc->cbuffer);
+    rc_destroy(rc);
     free(rc);
 }
 

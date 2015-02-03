@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <netdb.h>
 #include <linux/if_packet.h>
 #include <linux/if_ether.h>
 #include <linux/if.h>
@@ -26,6 +27,8 @@
 
 struct interface*   interface_list = 0;
 struct rwlock       interface_list_lock = RWLOCK_INITIALIZER;
+int ping_interval = -1;
+int ping_timeout = -1;
 
 /*
 * ALLOC INTERFACE
@@ -48,8 +51,12 @@ struct interface* alloc_interface(int node_id)
     gettimeofday(&ife->rx_time, NULL);
     gettimeofday(&ife->tx_time, NULL);
 
-    ife->ping_interval = get_ping_interval();
-    ife->ping_timeout = get_ping_timeout();
+    if(ping_interval == -1)
+        ping_interval = get_ping_interval();
+    ife->ping_interval = ping_interval;
+    if(ping_timeout == -1)
+        ping_timeout = get_ping_timeout();
+    ife->ping_timeout = ping_timeout;
 
     // Prevent early timeouts
     struct timeval now;
@@ -59,7 +66,8 @@ struct interface* alloc_interface(int node_id)
     struct rwlock lock = RWLOCK_INITIALIZER;
     ife->rt_buffer.rwlock = lock;
 
-    rc_init(&ife->rate_control, 10, 20000, 1.0);
+    rc_init(&ife->ingress_rate_control, 10, 20000, 1.0);
+    rc_init(&ife->egress_rate_control, 10, 20000, 1.0);
     cbuffer_init(&ife->rtt_buffer, 10, 20000);
 
     return ife;
@@ -88,6 +96,46 @@ int change_interface_state(struct interface *ife, enum if_state state)
     send_notification(1);
 #endif
     return 0;
+}
+
+void update_interface_public_address(struct interface *ife, const struct sockaddr *from, socklen_t from_len)
+{
+    // TODO: Add IPv6 support
+    struct sockaddr_in from_in;
+
+    if(sockaddr_to_sockaddr_in(from, sizeof(struct sockaddr), &from_in) < 0) {
+        char p_ip[INET6_ADDRSTRLEN];
+        getnameinfo(from, from_len, p_ip, sizeof(p_ip), 0, 0, NI_NUMERICHOST);
+
+        DEBUG_MSG("Unable to add interface with address %s (IPv6?)", p_ip);
+        return;
+    }
+
+    /* The main reason for this check is if the remote_node is behind a NAT,
+    * then the IP address and port that it sends in its notification are
+    * not the same as its public IP address and port. */
+    if(memcmp(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr)) ||
+        ife->data_port != from_in.sin_port) {
+            DEBUG_MSG("Changing node %hu link %hu from %x:%hu to %x:%hu",
+                ife->node_id, ife->index,
+                ntohl(ife->public_ip.s_addr), ntohs(ife->data_port),
+                ntohl(from_in.sin_addr.s_addr), ntohs(from_in.sin_port));
+
+            memcpy(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr));
+            ife->data_port  = from_in.sin_port;
+
+            /* We now know that ife->public_ip and ife->data_port are correct. */
+            ife->flags |= IFFLAG_SOURCE_VERIFIED;
+
+#ifdef CONTROLER
+#ifdef WITH_DATABASE
+            db_update_link(gw, ife);
+#endif
+#endif
+    } else if((ife->flags & IFFLAG_SOURCE_VERIFIED) == 0) {
+        /* The source was correct, but now we can say it has been verified. */
+        ife->flags |= IFFLAG_SOURCE_VERIFIED;
+    }
 }
 
 static int configure_socket(int sock_type, int proto, const char * ife_name, int bind_port, int reuse) {
