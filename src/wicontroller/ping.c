@@ -234,12 +234,11 @@ static int send_response(struct interface *local_ife, const struct remote_node *
                          unsigned char type, struct sockaddr_storage *from, char *buffer, int len, float bw)
 {
     struct packet *pkt = alloc_packet(sizeof(struct tunhdr), mtu);
+    packet_put(pkt, MIN_PING_PACKET_SIZE);
 
-    if(len < sizeof(pkt->tail_size)) {
-        packet_put(pkt, len);
+    if(len < sizeof(pkt->data_size)) {
         memcpy(pkt->data, buffer, len);
     } else {
-        packet_put(pkt, pkt->tail_size);
         memcpy(pkt->data, buffer, pkt->data_size);
     }
 
