@@ -428,18 +428,17 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
 
 int handle_nat_packet(struct packet * pkt, struct interface * ife)
 {
+    struct iphdr * ip_hdr = (struct iphdr *)pkt->data;
+    ip_hdr->daddr = tun->n_private_ip;
+
     struct flow_tuple ft;
     fill_flow_tuple(pkt->data, &ft, 1);
 
-    //TODO: Flow entry doesn't match up! The local IP is intead the interface's public IP
-    // because the packet is received before reverse masquerade is applied
     struct flow_entry *fe = get_flow_entry(&ft);
     if(fe == NULL || (fe->ingress.action & POLICY_ACT_MASK) != POLICY_ACT_NAT) {
         free_packet(pkt);
         return SUCCESS;
     }
-    struct iphdr * ip_hdr = (struct iphdr *)pkt->data;
-    ip_hdr->daddr = tun->n_private_ip;
     compute_ip_checksum(ip_hdr);
     if(ip_hdr->protocol == 6) { 
         compute_tcp_checksum(&pkt->data[sizeof(struct iphdr)], pkt->data_size - sizeof(struct iphdr), ip_hdr->saddr, ip_hdr->daddr);
@@ -461,6 +460,11 @@ int handle_ife_packet(struct packet *pkt, struct interface *ife, int allow_enque
 }
 
 int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_enqueue) {
+    if(fe == NULL) {
+        DEBUG_MSG("Handle packet called with null flow entry");
+        free_packet(pkt);
+        return FAILURE;
+    }
     //Packet queuing if a rate limit is violated
     struct rate_control *rate_control = fe->ingress.rate_control;
     if(rate_control != NULL && !has_capacity(rate_control)) {
@@ -707,7 +711,7 @@ int send_nat_packet(struct packet *pkt, struct interface *src_ife) {
         sockfd = src_ife->raw_icmp_sockfd;
     else if(proto == 6) {
         sockfd = src_ife->raw_tcp_sockfd;
-        if(pkt->data[13] == 4) pkt->data[13] |= 2;
+        if((pkt->data[13] & 4) == 4) pkt->data[13] = 6;
         compute_tcp_checksum(pkt->data, pkt->data_size, src_ife->public_ip.s_addr, dst_ip);
 
     }

@@ -31,7 +31,6 @@ add_executable(wigateway
 	${COMMON}/packet.c
     ${COMMON}/select_interface.c
     ${COMMON}/tunnel.c
-    ${COMMON}/callback.c
     ${COMMON}/format.c
     ${COMMON}/version.c
 	${COMMON}/util.c

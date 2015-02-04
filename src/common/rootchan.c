@@ -265,7 +265,6 @@ static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
         ERROR_MSG("Could not set timeout");
         goto close_and_err_out;
     }
-
     result = send(sockfd, request, request_len, 0);
     if(result <= 0) {
         ERROR_MSG("error sending root channel message");
@@ -277,10 +276,9 @@ static int _rchan_message(const char *wiroot_ip, unsigned short wiroot_port,
         ERROR_MSG("error receiving root channel response");
         goto close_and_err_out;
     } else if(result < MIN_RESPONSE_LEN) {
-        DEBUG_MSG("root channel response was too small to be valid");
+        if(response[0] != -1)
+            DEBUG_MSG("root channel response was too small to be valid");
         goto close_and_err_out;
-        close(sockfd);
-        return FAILURE;
     }
 
     close(sockfd);

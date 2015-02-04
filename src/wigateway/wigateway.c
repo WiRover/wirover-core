@@ -21,7 +21,6 @@
 #include "netlink.h"
 #include "ping.h"
 #include "rootchan.h"
-#include "callback.h"
 #include "sockets.h"
 #include "status.h"
 #include "timing.h"
@@ -141,7 +140,6 @@ int main(int argc, char* argv[])
                 DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease.unique_id);
 
                 write_node_id_file(lease.unique_id);
-                call_on_lease(lease.unique_id);
 
                 ipaddr_to_ipv4(&lease.priv_ip, &private_ip);
                 private_netmask = htonl(slash_to_netmask(lease.priv_subnet_size));
@@ -371,7 +369,6 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
         if(new_lease->unique_id != old_lease->unique_id) {
             DEBUG_MSG("Changing unique_id from %u to %u\n");
             write_node_id_file(new_lease->unique_id);
-            call_on_lease(new_lease->unique_id);
         }
 
         /* TODO: Handle potential change of controller */
