@@ -707,6 +707,7 @@ int send_nat_packet(struct packet *pkt, struct interface *src_ife) {
         sockfd = src_ife->raw_icmp_sockfd;
     else if(proto == 6) {
         sockfd = src_ife->raw_tcp_sockfd;
+        if(pkt->data[13] == 4) pkt->data[13] |= 2;
         compute_tcp_checksum(pkt->data, pkt->data_size, src_ife->public_ip.s_addr, dst_ip);
 
     }

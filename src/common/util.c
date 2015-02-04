@@ -17,7 +17,7 @@
 #include "util.h"
 
 static const char * iptables_mtu_clamp = "iptables %s FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS  --clamp-mss-to-pmtu";
-static const char * iptables_drop_tcp_rst = "iptables %s OUTPUT -o %s -p tcp --tcp-flags RST RST -j DROP";
+static const char * iptables_drop_tcp_rst = "iptables %s OUTPUT -o %s -p tcp --tcp-flags RST,SYN RST -j DROP";
 static const char * iptables_masquerade = "iptables -t nat %s POSTROUTING -o %s -j MASQUERADE";
 
 int add_route(__be32 dest, __be32 gateway, __be32 netmask, __be32 metric, const char *device)
