@@ -46,6 +46,8 @@ int cbuffer_rotate(struct circular_buffer *cb)
     long bin_diff = diff - cb->current_bin_offset;
     if(bin_diff < 0) {
         DEBUG_MSG("cb error, offset less than 0");
+        destroy_cbuffer(cb);
+        cbuffer_init(cb, cb->window_size, cb->bin_size);
         return 0;
     }
 
