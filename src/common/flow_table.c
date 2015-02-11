@@ -153,7 +153,6 @@ struct flow_entry *get_flow_entry(struct flow_tuple *ft) {
     if(fe == NULL) {
         return NULL;
     }
-    fe->last_visit_time = time(NULL);
 
     return fe;
 } 
@@ -185,8 +184,10 @@ void free_flow_entry(struct flow_entry * fe) {
 void expiration_time_check() {
     struct flow_entry *current_key, *tmp;
 
+    // Double the time out for flows you don't own so that we don't,
+    // accidentally remove active flows
     HASH_ITER(hh, flow_table, current_key, tmp) {
-        if(time(NULL) - current_key->last_visit_time > flow_table_timeout) {
+        if(time(NULL) - current_key->last_visit_time > (current_key->owner ? flow_table_timeout : 2 * flow_table_timeout)) {
             free_flow_entry(current_key);
         }
     }
@@ -194,6 +195,8 @@ void expiration_time_check() {
 
 //Updates an entry and expires old entries in the flow table
 int update_flow_entry(struct flow_entry *fe) {
+
+    fe->last_visit_time = time(NULL);
 
     if(last_expiration_check == 0) {
         last_expiration_check = time(NULL);

@@ -505,10 +505,10 @@ int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_en
     }
 
     // Update flow statistics
-    update_flow_entry(fe);
     if(fe->ingress.rate_control != NULL) {
         update_tx_rate(fe->ingress.rate_control, pkt->data_size);
     }
+    update_flow_entry(fe);
 
     free_packet(pkt);
     return SUCCESS;
