@@ -247,6 +247,10 @@ static void handle_gateway_config(struct client* client, const char* packet, int
     if(unique_id <= 0 && auto_grant)
         unique_id = db_grant_privilege(node_id_hex, PRIV_REG_GATEWAY, pub_key);
 
+    if(unique_id <= 0) {
+        DEBUG_MSG("A MySQL error has occured, and a unique_id could not be assigned to a new gateway");
+    }
+
     const struct lease* lease;
     lease = grant_gw_lease(unique_id, gwreg->latitude, gwreg->longitude);
 
@@ -331,6 +335,10 @@ static void handle_controller_config(struct client* client, const char* packet, 
     int unique_id = db_check_privilege(node_id_hex, PRIV_REG_CONTROLLER);
     if(unique_id <= 0 && auto_grant)
         unique_id = db_grant_privilege(node_id_hex, PRIV_REG_CONTROLLER, pub_key);
+
+    if(unique_id <= 0) {
+        DEBUG_MSG("A MySQL error has occured, and a unique_id could not be assigned to a new controller");
+    }
 
     if(unique_id > 0) {
         db_update_pub_key(node_id_hex, pub_key);

@@ -12,25 +12,31 @@
 #include "uthash.h"
 #include "interface.h"
 #include "tunnel.h"
-
-#define SUCCESS 0
-#define DUPLICATE_ENTRY 1
-#define FILE_ERROR 2
+#include "packet.h"
 
 #define MAX_ALG_NAME_LEN   16
+
+struct flow_entry_data {
+    uint16_t remote_node_id;
+    uint16_t remote_link_id;
+    uint16_t local_link_id;
+    int count;
+    uint32_t action;
+    char alg_name[MAX_ALG_NAME_LEN];
+
+    // Rate limiting and packet queueing
+    struct rate_control * rate_control;
+};
 
 struct flow_entry {
     struct flow_tuple *id;
     time_t last_visit_time;
     UT_hash_handle hh;
-    uint16_t remote_node_id;
-    uint16_t remote_link_id;
-    uint16_t local_link_id;
-    int count;
-    uint32_t ingress_action;
-    uint32_t egress_action;
-    char ingress_alg_name[MAX_ALG_NAME_LEN];
-    char egress_alg_name[MAX_ALG_NAME_LEN];
+    uint8_t owner;
+    //Count of packets to include flow info in
+    uint8_t requires_flow_info;
+    struct flow_entry_data egress;
+    struct flow_entry_data ingress;
 };
 
 struct flow_tuple {
@@ -40,15 +46,33 @@ struct flow_tuple {
     uint8_t proto;
     uint16_t remote_port;
     uint16_t local_port;
-};
+} __attribute__((__packed__));
 
-int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short reverse);
+struct tunhdr_flow_info {
+    __be32      action;
+    __be32      rate_limit;
+    uint16_t    local_link_id;
+    uint16_t    remote_link_id;
+} __attribute__((__packed__));
 
+int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress);
+
+struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner);
+struct flow_entry *add_entry_info(struct packet *pkt, int remote_node_id);
 struct flow_entry *get_flow_entry(struct flow_tuple *);
+struct flow_entry *get_flow_table();
+
+void hton_flow_tuple(struct flow_tuple *src, struct flow_tuple *dst);
+void ntoh_flow_tuple(struct flow_tuple *src, struct flow_tuple *dst);
+
+void fill_flow_info(struct flow_entry *fe, struct packet *dst);
 
 int update_flow_entry(struct flow_entry *fe);
+void flow_tuple_invert(struct flow_tuple *ft);
 
-int set_flow_table_timeout(int);
+void print_flow_tuple(struct flow_tuple *);
+void free_flow_entry(struct flow_entry * fe);
+void free_flow_table();
 
 //Debug Methods
 int dump_flow_table_to_file(const char *filename);

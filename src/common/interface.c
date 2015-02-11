@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <netdb.h>
 #include <linux/if_packet.h>
 #include <linux/if_ether.h>
 #include <linux/if.h>
@@ -16,6 +17,7 @@
 #include "datapath.h"
 #include "debug.h"
 #include "interface.h"
+#include "rateinfer.h"
 #include "rwlock.h"
 #include "packet_buffer.h"
 #ifdef GATEWAY
@@ -25,6 +27,8 @@
 
 struct interface*   interface_list = 0;
 struct rwlock       interface_list_lock = RWLOCK_INITIALIZER;
+int ping_interval = -1;
+int ping_timeout = -1;
 
 /*
 * ALLOC INTERFACE
@@ -47,8 +51,12 @@ struct interface* alloc_interface(int node_id)
     gettimeofday(&ife->rx_time, NULL);
     gettimeofday(&ife->tx_time, NULL);
 
-    ife->ping_interval = get_ping_interval();
-    ife->ping_timeout = get_ping_timeout();
+    if(ping_interval == -1)
+        ping_interval = get_ping_interval();
+    ife->ping_interval = ping_interval;
+    if(ping_timeout == -1)
+        ping_timeout = get_ping_timeout();
+    ife->ping_timeout = ping_timeout;
 
     // Prevent early timeouts
     struct timeval now;
@@ -57,6 +65,10 @@ struct interface* alloc_interface(int node_id)
     ife->last_ping_success = now;
     struct rwlock lock = RWLOCK_INITIALIZER;
     ife->rt_buffer.rwlock = lock;
+
+    rc_init(&ife->ingress_rate_control, 10, 20000, 1.0);
+    rc_init(&ife->egress_rate_control, 10, 20000, 1.0);
+    cbuffer_init(&ife->rtt_buffer, 10, 20000);
 
     return ife;
 }
@@ -75,7 +87,8 @@ int change_interface_state(struct interface *ife, enum if_state state)
     {
         DEBUG_MSG("Retransmitting %d unacked packets", ife->rt_buffer.length);
         while(ife->rt_buffer.length > 0) {
-            send_packet(ife->rt_buffer.head->packet, ife->rt_buffer.head->size);
+            //TODO: Switch retransmit buffer to use struct packet
+            //send_packet(ife->rt_buffer.head->packet, ife->rt_buffer.head->size);
             pb_free_head(&ife->rt_buffer);
         }
     }
@@ -83,6 +96,46 @@ int change_interface_state(struct interface *ife, enum if_state state)
     send_notification(1);
 #endif
     return 0;
+}
+
+void update_interface_public_address(struct interface *ife, const struct sockaddr *from, socklen_t from_len)
+{
+    // TODO: Add IPv6 support
+    struct sockaddr_in from_in;
+
+    if(sockaddr_to_sockaddr_in(from, sizeof(struct sockaddr), &from_in) < 0) {
+        char p_ip[INET6_ADDRSTRLEN];
+        getnameinfo(from, from_len, p_ip, sizeof(p_ip), 0, 0, NI_NUMERICHOST);
+
+        DEBUG_MSG("Unable to add interface with address %s (IPv6?)", p_ip);
+        return;
+    }
+
+    /* The main reason for this check is if the remote_node is behind a NAT,
+    * then the IP address and port that it sends in its notification are
+    * not the same as its public IP address and port. */
+    if(memcmp(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr)) ||
+        ife->data_port != from_in.sin_port) {
+            DEBUG_MSG("Changing node %hu link %hu from %x:%hu to %x:%hu",
+                ife->node_id, ife->index,
+                ntohl(ife->public_ip.s_addr), ntohs(ife->data_port),
+                ntohl(from_in.sin_addr.s_addr), ntohs(from_in.sin_port));
+
+            memcpy(&ife->public_ip, &from_in.sin_addr, sizeof(struct in_addr));
+            ife->data_port  = from_in.sin_port;
+
+            /* We now know that ife->public_ip and ife->data_port are correct. */
+            ife->flags |= IFFLAG_SOURCE_VERIFIED;
+
+#ifdef CONTROLER
+#ifdef WITH_DATABASE
+            db_update_link(gw, ife);
+#endif
+#endif
+    } else if((ife->flags & IFFLAG_SOURCE_VERIFIED) == 0) {
+        /* The source was correct, but now we can say it has been verified. */
+        ife->flags |= IFFLAG_SOURCE_VERIFIED;
+    }
 }
 
 static int configure_socket(int sock_type, int proto, const char * ife_name, int bind_port, int reuse) {
@@ -108,7 +161,7 @@ static int configure_socket(int sock_type, int proto, const char * ife_name, int
             close(sockfd);
             return FAILURE;
         }
-        DEBUG_MSG("Bound to device");
+        DEBUG_MSG("Bound socket %d to device %s", sockfd, ife_name);
     }
     
     struct sockaddr_in myAddr;
@@ -361,24 +414,14 @@ int copy_active_interfaces(const struct interface *head, struct interface_copy *
     return num_active;
 }
 
-long calc_bw_hint(struct interface *ife)
+double calc_bw_up(const struct interface *ife)
 {
-    long bw_hint;
+    return ife->est_uplink_bw * .5 + ife->meas_bw_up * .5;
+}
 
-    bw_hint = ife->est_uplink_bw * 1000000 + ife->est_downlink_bw * 1000000;
-    /*if(ife->meas_bw > 0 && ife->pred_bw > 0) {
-    double w = exp(BANDWIDTH_MEASUREMENT_DECAY * 
-    (time(NULL) - ife->meas_bw_time));
-    bw_hint = (long)round(w * ife->meas_bw + (1.0 - w) * ife->pred_bw);
-    } else if(ife->meas_bw > 0) {
-    bw_hint = ife->meas_bw;
-    } else if(ife->pred_bw > 0) {
-    bw_hint = ife->pred_bw;
-    } else {
-    bw_hint = 0;
-    }*/
-
-    return bw_hint;
+double calc_bw_down(const struct interface *ife)
+{
+    return ife->est_downlink_bw * .5 + ife->meas_bw_down * .5;
 }
 
 /*
@@ -418,9 +461,9 @@ int interface_to_string(const struct interface *ife, char *str, int size)
     ipv4_to_ipaddr(ife->public_ip.s_addr, &addr);
     ipaddr_to_string(&addr, ip_string, INET6_ADDRSTRLEN);
 
-    return snprintf(str, size, "%-3d %-8s %-12s %-8s %-4hhd %-5hhd %-10d %-10d %-15s %-10f %-10f",
+    return snprintf(str, size, "%-3d %-8s %-12s %-8s %-4hhd %-5hhd %-10lu %-10lu %-15s %-10f %-10f",
         ife->index, ife->name, ife->network, state, ife->priority, ife->packets_since_ack, 
-        ife->tx_bytes, ife->rx_bytes, ip_string, ife->est_uplink_bw, ife->est_downlink_bw);
+        ife->tx_bytes, ife->rx_bytes, ip_string, calc_bw_up(ife), calc_bw_down(ife));
 }
 void dump_interface(const struct interface *ife, const char *prepend)
 {

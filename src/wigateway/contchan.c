@@ -7,6 +7,7 @@
 #include "configuration.h"
 #include "debug.h"
 #include "netlink.h"
+#include "packet.h"
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
@@ -22,31 +23,51 @@ uint16_t remote_unique_id = 0;
 char node_hash[NODE_HASH_SIZE+1];
 
 static uint16_t remote_bw_port = 0;
+static void _add_cchan_notification(struct packet *pkt, uint8_t type);
+static void _add_iface_data(struct packet *pkt);
+static int _send_notification(int max_tries, struct packet *pkt, int active_only);
+static int _send_ife_notification(const char *ifname, struct packet *pkt, struct cchan_notification *response);
 
-static int _send_notification(const char *ifname);
+int send_notification(int max_tries) {
+
+    struct packet *pkt = alloc_packet(0, BUFSIZ);
+
+    _add_cchan_notification(pkt, CCHAN_NOTIFICATION);
+    _add_iface_data(pkt);
+
+    int ret = _send_notification(max_tries, pkt, 1);
+    free_packet(pkt);
+    return ret;
+}
 
 //Requries a lock on the interface list
-int send_notification(int max_tries)
+static int _send_notification(int max_tries, struct packet *pkt, int active_only)
 {
-    FILE *fp = fopen("/etc/wirover.d/node_id","r");
-    fgets(node_hash,sizeof(node_hash),fp);
-    fclose(fp);
     assert(max_tries > 0);
 
     int i;
     for(i = 0; i < max_tries; i++) {
         struct interface_copy *active_list = NULL;
-        int num_active = copy_active_interfaces(interface_list, &active_list);
+        int num_active;
+        if(active_only)
+            num_active = copy_active_interfaces(interface_list, &active_list);
+        else
+            num_active = copy_all_interfaces(interface_list, &active_list);
 
         if(num_active <= 0) {
             if(num_active == 0)
-                DEBUG_MSG("Cannot send notification, no ACTIVE interfaces");
+                DEBUG_MSG("Cannot send notification, no available interfaces");
             return -1;
         }
 
         int j;
         for(j = 0; j < num_active; j++) {
-            int res = _send_notification(active_list[j].name);
+            struct cchan_notification response;
+            int res = _send_ife_notification(active_list[j].name, pkt, &response);
+
+            remote_unique_id = ntohs(response.unique_id);
+            remote_bw_port = ntohs(response.bw_port);
+
             if(res == 0) {
                 free(active_list);
                 return 0;
@@ -61,11 +82,56 @@ int send_notification(int max_tries)
     return -1;
 }
 
+static void _add_cchan_notification(struct packet *pkt, uint8_t type) {
+    packet_put(pkt, sizeof(struct cchan_notification));
+    struct cchan_notification *notif = (struct cchan_notification *)pkt->data;
+    notif->type = type;
+    notif->len = sizeof(struct cchan_notification);
+
+    notif->ver_maj = WIROVER_VERSION_MAJOR;
+    notif->ver_min = WIROVER_VERSION_MINOR;
+    notif->ver_rev = htons(WIROVER_VERSION_REVISION);
+
+    get_private_ip(&notif->priv_ip);
+    notif->unique_id = htons(get_unique_id());
+
+    memcpy(notif->key, private_key, sizeof(notif->key));
+    memcpy(notif->hash, node_hash, sizeof(notif->hash));
+
+    packet_pull(pkt, sizeof(struct cchan_notification));
+}
+
+static void _add_iface_data(struct packet *pkt) {
+    struct interface* ife = interface_list;
+    while(ife && pkt->tail_size > sizeof(struct cchan_notification)) {
+        /* Avoid sending interfaces that have not passed the init state. */
+        if(ife->state != INIT_INACTIVE) {
+            packet_put(pkt, sizeof(struct interface_info));
+            struct interface_info *dest = (struct interface_info *)(pkt->data);
+
+            dest->type = CCHAN_INTERFACE;
+            dest->len = sizeof(struct interface_info);
+
+            dest->link_id = htonl(ife->index);
+            strncpy(dest->ifname, ife->name, sizeof(dest->ifname));
+            strncpy(dest->network, ife->network, sizeof(dest->network));
+            dest->state = ife->state;
+            dest->priority = ife->priority;
+            dest->local_ip = ife->public_ip.s_addr;
+            dest->data_port = htons(get_data_port());
+
+            packet_pull(pkt, sizeof(struct interface_info));
+        }
+
+        ife = ife->next;
+    }
+}
+
 /*
  * Makes a single attempt at sending a notification.  The socket is bound
  * to the given interface.
  */
-static int _send_notification(const char *ifname)
+static int _send_ife_notification(const char *ifname, struct packet *pkt, struct cchan_notification *response)
 {
     int sockfd;
     struct sockaddr_storage cont_dest;
@@ -80,57 +146,10 @@ static int _send_notification(const char *ifname)
         DEBUG_MSG("Failed to open control channel with controller");
         return FAILURE;
     }
-
-    char *buffer = malloc(BUFSIZ);
-    memset(buffer, 0, BUFSIZ);
-
-    int space_left = BUFSIZ;
-    int offset = 0;
-
-    struct cchan_notification_v2 *notif = (struct cchan_notification_v2 *)buffer;
-    space_left -= sizeof(struct cchan_notification_v2);
-    offset += sizeof(struct cchan_notification_v2);
-
-    notif->type = CCHAN_NOTIFICATION_V2;
-    notif->len = sizeof(struct cchan_notification_v2);
-
-    notif->ver_maj = WIROVER_VERSION_MAJOR;
-    notif->ver_min = WIROVER_VERSION_MINOR;
-    notif->ver_rev = htons(WIROVER_VERSION_REVISION);
-
-    get_private_ip(&notif->priv_ip);
-    notif->unique_id = htons(get_unique_id());
-
-    memcpy(notif->key, private_key, sizeof(notif->key));
-    memcpy(notif->hash, node_hash, sizeof(notif->hash));
     
-    struct interface* ife = interface_list;
-    while(ife && space_left > sizeof(struct cchan_notification_v2)) {
-        /* Avoid sending interfaces that have not passed the init state. */
-        if(ife->state != INIT_INACTIVE) {
-            struct interface_info_v2 *dest = (struct interface_info_v2 *)(buffer + offset);
-            space_left -= sizeof(struct interface_info_v2);
-            offset += sizeof(struct interface_info_v2);
+    const size_t notification_len = pkt->head_size;
 
-            dest->type = CCHAN_INTERFACE;
-            dest->len = sizeof(struct interface_info_v2);
-
-            dest->link_id = htonl(ife->index);
-            strncpy(dest->ifname, ife->name, sizeof(dest->ifname));
-            strncpy(dest->network, ife->network, sizeof(dest->network));
-            dest->state = ife->state;
-            dest->priority = ife->priority;
-            dest->local_ip = ife->public_ip.s_addr;
-            dest->data_port = htons(get_data_port());
-        }
-
-        ife = ife->next;
-    }
-
-    const size_t notification_len = offset;
-
-    int bytes = send(sockfd, buffer, notification_len, 0);
-    free(buffer);
+    int bytes = send(sockfd, pkt->buffer, notification_len, 0);
 
     if(bytes < 0) {
         ERROR_MSG("sending notification failed");
@@ -150,21 +169,16 @@ static int _send_notification(const char *ifname)
     timeout.tv_sec = CCHAN_RESPONSE_TIMEOUT_SEC;
     timeout.tv_usec = 0;
 
-    struct cchan_notification_v2 response;
-
-    bytes = recv_timeout(sockfd, &response, 
-            sizeof(response), 0, &timeout);
-    if(bytes < 0) {
+    bytes = recv_timeout(sockfd, response, 
+            sizeof(struct cchan_notification), 0, &timeout);
+    if(bytes <= 0) {
         ERROR_MSG("Receiving notification response failed");
         close(sockfd);
         return -1;
     }
 
-    remote_unique_id = ntohs(response.unique_id);
-    remote_bw_port = ntohs(response.bw_port);
-
     close(sockfd);
-    return 0;
+    return SUCCESS;
 }
 
 uint16_t get_remote_bw_port()
@@ -174,50 +188,38 @@ uint16_t get_remote_bw_port()
 
 int send_shutdown_notification()
 {
-    int sockfd;
-    struct sockaddr_storage cont_dest;
-    build_control_sockaddr(get_controller_ife(), &cont_dest);
+    struct packet *pkt = alloc_packet(0, sizeof(struct cchan_shutdown));
+    packet_put(pkt, sizeof(struct cchan_shutdown));
+    struct cchan_shutdown *notif = (struct cchan_shutdown *)pkt->data;
 
-    struct timeval timeout;
-    timeout.tv_sec  = CCHAN_CONNECT_TIMEOUT_SEC;
-    timeout.tv_usec = 0;
+    notif->type = CCHAN_SHUTDOWN;
+    notif->len = sizeof(struct cchan_shutdown);
 
-    sockfd = tcp_active_open(&cont_dest, NULL, &timeout);
-    if(sockfd == -1) {
-        DEBUG_MSG("Failed to open control channel with controller");
-        return FAILURE;
-    }
+    get_private_ip(&notif->priv_ip);
+    notif->unique_id = htons(get_unique_id());
+    memcpy(notif->key, private_key, sizeof(notif->key));
 
-    struct cchan_shutdown notif;
-    memset(&notif, 0, sizeof(notif));
-
-    notif.type = CCHAN_SHUTDOWN;
-    notif.len = sizeof(notif);
-
-    get_private_ip(&notif.priv_ip);
-    notif.unique_id = htons(get_unique_id());
-    memcpy(notif.key, private_key, sizeof(notif.key));
-
-    notif.reason = SHUTDOWN_REASON_NORMAL;
+    notif->reason = SHUTDOWN_REASON_NORMAL;
+    packet_pull(pkt, sizeof(struct cchan_shutdown));
     
-    int bytes = send(sockfd, &notif, sizeof(notif), 0);
+    int ret = _send_notification(1, pkt, 0);
 
-    if(bytes < 0) {
-        ERROR_MSG("sending notification failed");
-        goto close_and_fail;
-    } else if(bytes == 0) {
-        DEBUG_MSG("Controller closed control channel");
-        goto close_and_fail;
-    } else if(bytes < sizeof(notif)) {
-        DEBUG_MSG("Full notification packet was not sent, investigate this.");
-        goto close_and_fail;
-    }
-
-    close(sockfd);
-    return 0;
-
-close_and_fail:
-    close(sockfd);
-    return FAILURE;
+    free_packet(pkt);
+    return ret;
 }
 
+int send_startup_notification()
+{
+    FILE *fp = fopen("/etc/wirover.d/node_id","r");
+    fgets(node_hash,sizeof(node_hash),fp);
+    fclose(fp);
+
+    struct packet *pkt = alloc_packet(0, sizeof(struct cchan_notification));
+
+    _add_cchan_notification(pkt, CCHAN_STARTUP);
+    
+    int ret = _send_notification(1, pkt, 0);
+
+    free_packet(pkt);
+    return ret;
+}

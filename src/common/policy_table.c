@@ -16,6 +16,7 @@ static policy_entry * alloc_policy() {
     policy_entry * output = ( policy_entry *)malloc(sizeof( policy_entry));
     memset(output, 0, sizeof( policy_entry));
     output->action = POLICY_ACT_ENCAP;
+    output->direction = DIR_BOTH;
     return output;
 }
 
@@ -27,7 +28,7 @@ static void update_policies() {
 int init_policy_table() {
     default_ingress_policy = alloc_policy();
     default_egress_policy = alloc_policy();
-    default_ingress_policy->action = POLICY_ACT_DECAP;
+    default_ingress_policy->action = POLICY_ACT_ENCAP;
     default_egress_policy->action = POLICY_ACT_ENCAP;
     update_policies();
     init = 1;
@@ -55,28 +56,51 @@ static json_object * get_table() {
 
 static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
     json_object * value;
+
     //--ACTION--//
     value = json_object_object_get(jobj_policy, "action");
-    if(value == NULL || !json_object_is_type(value, json_type_string)) { goto failure_print; }
-    const char * action = json_object_get_string(value);
-    if (strcmp(action, "encap") == 0) {
-        pe->action = POLICY_ACT_ENCAP;
-    }
-    else if (strcmp(action, "decap") == 0) {
-        pe->action = POLICY_ACT_DECAP;
-    }
-    else if (strcmp(action, "nat") == 0) {
-        pe->action = POLICY_ACT_NAT;
-    }
-    else if (strcmp(action, "pass") == 0) {
-        pe->action = POLICY_ACT_PASS;
-    }
-    else if (strcmp(action, "drop") == 0) {
-        pe->action = POLICY_ACT_DROP;
-    }
-    else {
+    if(!value)
+        goto failure_print;
+
+    if(json_object_is_type(value, json_type_string)) {
+        const char * action = json_object_get_string(value);
+        if (strcmp(action, "encap") == 0) {
+            pe->action = POLICY_ACT_ENCAP;
+        }
+        else if (strcmp(action, "nat") == 0) {
+            pe->action = POLICY_ACT_NAT;
+        }
+        else if (strcmp(action, "pass") == 0) {
+            pe->action = POLICY_ACT_PASS;
+        }
+        else if (strcmp(action, "drop") == 0) {
+            pe->action = POLICY_ACT_DROP;
+        }
+        else {
+            goto failure_print;
+        }
+    } else if(json_object_is_type(value, json_type_int)) {
+        // Allow direct input of integer values for experimental policies.
+        pe->action = json_object_get_int(value);
+    } else {
         goto failure_print;
     }
+
+    //--OPERATION--//
+    value = json_object_object_get(jobj_policy, "operation");
+    if(json_object_is_type(value, json_type_string)) {
+        const char * action = json_object_get_string(value);
+        if (strcmp(action, "multipath") == 0) {
+            pe->action |= POLICY_OP_MULTIPATH;
+        }
+        else if (strcmp(action, "duplicate") == 0) {
+            pe->action |= POLICY_OP_DUPLICATE;
+        }
+        else {
+            goto failure_print;
+        }
+    }
+
     //--PROTOCOL--//
     value = json_object_object_get(jobj_policy, "protocol");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
@@ -130,6 +154,12 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         pe->ft.local &= pe->local_netmask;
     }
 
+    //--LOCAL PORT--//
+    value = json_object_object_get(jobj_policy, "local_port");
+    if(value != NULL && json_object_is_type(value, json_type_int)) {
+        pe->ft.local_port = json_object_get_int(value);
+    }
+
     //--REMOTE--//
     value = json_object_object_get(jobj_policy, "remote");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
@@ -146,6 +176,21 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         pe->ft.remote &= pe->remote_netmask;
     }
 
+    //--LOCAL PORT--//
+    value = json_object_object_get(jobj_policy, "remote_port");
+    if(value != NULL && json_object_is_type(value, json_type_int)) {
+        pe->ft.remote_port = json_object_get_int(value);
+    }
+
+    //--RATE LIMIT--//
+    value = json_object_object_get(jobj_policy, "rate_limit");
+    if(value != NULL) {
+        if(json_object_is_type(value, json_type_double))
+            pe->rate_limit = json_object_get_double(value);
+        else if(json_object_is_type(value, json_type_int))
+            pe->rate_limit = json_object_get_int(value);
+
+    }
 
     return SUCCESS;
 failure_print:
@@ -172,7 +217,10 @@ int get_policy_by_tuple(struct flow_tuple *ft, policy_entry *policy, int dir) {
 static policy_entry** load_policies(int * count) {
     *count = 0;
     json_object * table = get_table();
-    if(table == 0) { return 0; }
+    if(table == 0) {
+        DEBUG_MSG("Policy table doesn't exist at /var/lib/wirover/policy_tbl");
+        goto default_return;
+    }
     if(!json_object_is_type(table, json_type_array)) {
         DEBUG_MSG("Policy table is formatted incorrectly");
         goto default_return;
@@ -188,11 +236,13 @@ static policy_entry** load_policies(int * count) {
             goto free_return;
         }
     }
+    free(table);
     return output;
 
 free_return:
     free(output);
 default_return:
+    free(table);
     *count = 1;
     output = ( policy_entry **)malloc(sizeof( policy_entry));
     output[0] = alloc_policy();
@@ -203,18 +253,31 @@ default_return:
 
 void print_policy_entry(policy_entry * pe) {
     char l_str[INET6_ADDRSTRLEN];
+    char l_str_port[INET6_ADDRSTRLEN + 10];
     inet_ntop(AF_INET, &pe->ft.local, l_str, sizeof(l_str));
+    if(pe->ft.local_port != 0)
+        snprintf(l_str_port, sizeof(l_str_port), "%s:%d", l_str, pe->ft.local_port);
+    else
+        snprintf(l_str_port, sizeof(l_str_port), "%s", l_str);
     char l_net_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &pe->local_netmask, l_net_str, sizeof(l_net_str));
+
     char r_str[INET6_ADDRSTRLEN];
+    char r_str_port[sizeof(r_str) + 10];
     inet_ntop(AF_INET, &pe->ft.remote, r_str, sizeof(r_str));
+    if(pe->ft.remote_port != 0)
+        snprintf(r_str_port, sizeof(r_str_port), "%s:%d", r_str, pe->ft.remote_port);
+    else
+        snprintf(r_str_port, sizeof(r_str_port), "%s", r_str);
+
     char r_net_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &pe->remote_netmask, r_net_str, sizeof(r_net_str));
     char *dir_str;
     if(pe->direction == DIR_INGRESS) { dir_str = "I"; }
     if(pe->direction == DIR_EGRESS) { dir_str = "O"; }
     if(pe->direction == DIR_BOTH) { dir_str = "*"; }
-    DEBUG_MSG("direction: %s local: %s local_net: %s remote: %s remote_net: %s proto: %d act: %d", dir_str, l_str, l_net_str, r_str, r_net_str, pe->ft.proto, pe->action);
+    DEBUG_MSG("direction: %s local: %s local_net: %s remote: %s remote_net: %s proto: %d act: %d rate: %f",
+        dir_str, l_str_port, l_net_str, r_str_port, r_net_str, pe->ft.proto, pe->action, pe->rate_limit);
 }
 
 void print_policies() {

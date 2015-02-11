@@ -1,7 +1,7 @@
 #ifndef _DATABASE_H_
 #define _DATABASE_H_
 
-#define MAX_QUERY_LEN 1024
+#define MAX_QUERY_LEN 4096
 
 // The unique id is stored as a char(16) in the database
 #define DB_UNIQUE_ID_LEN 16

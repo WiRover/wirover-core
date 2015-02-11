@@ -27,7 +27,6 @@
 #define POLICY_ACT_PASS    0x0001
 #define POLICY_ACT_NAT     0x0002
 #define POLICY_ACT_ENCAP   0x0003
-#define POLICY_ACT_DECAP   0x0004
 #define POLICY_ACT_DROP    0x0005
 #define POLICY_ACT_LISP    0x0006
 #define POLICY_ACT_MASK    0x000F
@@ -62,7 +61,7 @@ typedef struct{
     uint32_t remote_netmask;
 
     char dev_name[IFNAMSIZ];
-    int max_rate;
+    double rate_limit;
 
     char alg_name[MAX_ALG_NAME_LEN];
 }policy_entry;

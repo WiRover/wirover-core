@@ -10,6 +10,7 @@
 #include "uthash.h"
 #include "packet_buffer.h"
 #include "ipaddr.h"
+#include "rateinfer.h"
 
 #define NETWORK_NAME_LENGTH 16
 
@@ -60,8 +61,8 @@ struct interface {
     double              est_downlink_bw;
     double              est_uplink_bw;
 
-    unsigned int        tx_bytes;
-    unsigned int        rx_bytes;
+    unsigned long       tx_bytes;
+    unsigned long       rx_bytes;
 
     unsigned int        packets;
     unsigned int        packets_lost;
@@ -91,9 +92,20 @@ struct interface {
     int update_num;
 #endif /* CONTROLLER */
 
-    long meas_bw;
-    long pred_bw;
+    double meas_bw_up;
+    double meas_bw_down;
     time_t meas_bw_time;
+
+    /* Information for controlling transmit rate. */
+    struct rate_control ingress_rate_control;
+    struct rate_control egress_rate_control;
+
+    /* Information for estimating downlink rate */
+    float base_rtt_diff;
+    struct circular_buffer rtt_buffer;
+
+    /* Track the most recent burst of packets received. */
+    struct packet_burst burst;
 
     struct interface* next;
     struct interface* prev;
@@ -110,6 +122,7 @@ extern struct rwlock        interface_list_lock;
 
 struct interface* alloc_interface(int node_id);
 int change_interface_state(struct interface *ife, enum if_state state);
+void update_interface_public_address(struct interface *ife, const struct sockaddr *from, socklen_t from_len);
 int interface_bind(struct interface *ife, int bind_port);
 void free_interface(struct interface* ife);
 
@@ -129,7 +142,8 @@ struct interface *find_active_interface(struct interface *head);
 int copy_all_interfaces(const struct interface *head, struct interface_copy **out);
 int copy_active_interfaces(const struct interface *head, struct interface_copy **out);
 
-long calc_bw_hint(struct interface *ife);
+double calc_bw_up(const struct interface *ife);
+double calc_bw_down(const struct interface *ife);
 
 double ewma_update(double old_val, double new_val, double new_weight);
 

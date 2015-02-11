@@ -10,6 +10,7 @@ add_executable(wigateway
     arguments.c
 	select_interface.c
     ${COMMON}/bandwidth.c
+    ${COMMON}/circular_buffer.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
 	${COMMON}/datapath.c
@@ -18,15 +19,18 @@ add_executable(wigateway
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
     ${COMMON}/ping.c
+    ${COMMON}/rate_control.c
+    ${COMMON}/rateinfer.c
 	${COMMON}/remote_node.c
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
     ${COMMON}/status.c
     ${COMMON}/timing.c
-	${COMMON}/packet_buffer
+	${COMMON}/packet_buffer.c
+	${COMMON}/packet.c
+    ${COMMON}/select_interface.c
     ${COMMON}/tunnel.c
-    ${COMMON}/callback.c
     ${COMMON}/format.c
     ${COMMON}/version.c
 	${COMMON}/util.c

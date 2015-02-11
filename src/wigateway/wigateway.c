@@ -21,7 +21,6 @@
 #include "netlink.h"
 #include "ping.h"
 #include "rootchan.h"
-#include "callback.h"
 #include "sockets.h"
 #include "status.h"
 #include "timing.h"
@@ -69,6 +68,11 @@ int main(int argc, char* argv[])
         exit(1);
 
     const char* wiroot_address = get_wiroot_address();
+    if(strlen(wiroot_address) == 0)
+    {
+        DEBUG_MSG("Wiroot address not configured, exiting.");
+        exit(0);
+    }
     const unsigned short wiroot_port = get_wiroot_port();
     unsigned short data_port = get_data_port();
 
@@ -136,7 +140,6 @@ int main(int argc, char* argv[])
                 DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease.unique_id);
 
                 write_node_id_file(lease.unique_id);
-                call_on_lease(lease.unique_id);
 
                 ipaddr_to_ipv4(&lease.priv_ip, &private_ip);
                 private_netmask = htonl(slash_to_netmask(lease.priv_subnet_size));
@@ -167,32 +170,6 @@ int main(int argc, char* argv[])
                     }
                 }
 
-                uint32_t priv_ip;
-                uint32_t pub_ip;
-
-                ipaddr_to_ipv4(&lease.cinfo.priv_ip, &priv_ip);
-                ipaddr_to_ipv4(&lease.cinfo.pub_ip, &pub_ip);
-
-                result = tunnel_create(private_ip,
-                    private_netmask, get_mtu());
-                if(result == FAILURE) {
-                    DEBUG_MSG("Failed to bring up tunnel interface");
-                    exit(1);
-                }
-
-                tcp_mtu_clamp();
-                masquerade("tun0");
-
-                if(start_data_thread(getTunnel()) == FAILURE) {
-                    DEBUG_MSG("Failed to start data thread");
-                    exit(1);
-                }
-
-                if(start_ping_thread() == FAILURE) {
-                    DEBUG_MSG("Failed to start ping thread");
-                    exit(1);
-                }
-
                 state = GATEWAY_LEASE_OBTAINED;
                 lease_retry_delay = MIN_LEASE_RETRY_DELAY;
             }
@@ -214,17 +191,47 @@ int main(int argc, char* argv[])
         }
 
         if(state == GATEWAY_LEASE_OBTAINED) {
-            result = add_route(0, 0, 0, 0, TUN_DEVICE);
-            if(find_active_interface(interface_list)) {
-
-                // EEXIST means the route was already present -> not a failure
-                if(result < 0 && result != -EEXIST) {
-                    DEBUG_MSG("add_route failed");
-                    exit(1);
-                }
-
-                state = GATEWAY_PING_SUCCEEDED;
+            DEBUG_MSG("Sending startup message to controller");
+            result = send_startup_notification();
+            if(result == FAILURE) {
+                lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
+                continue;
             }
+
+            uint32_t priv_ip;
+            uint32_t pub_ip;
+
+            ipaddr_to_ipv4(&lease.cinfo.priv_ip, &priv_ip);
+            ipaddr_to_ipv4(&lease.cinfo.pub_ip, &pub_ip);
+
+            result = tunnel_create(private_ip,
+                private_netmask, get_mtu());
+            if(result == FAILURE) {
+                DEBUG_MSG("Failed to bring up tunnel interface");
+                exit(1);
+            }
+
+            tcp_mtu_clamp();
+            masquerade("tun0");
+
+            if(start_data_thread(getTunnel()) == FAILURE) {
+                DEBUG_MSG("Failed to start data thread");
+                exit(1);
+            }
+
+            if(start_ping_thread() == FAILURE) {
+                DEBUG_MSG("Failed to start ping thread");
+                exit(1);
+            }
+
+            result = add_route(0, 0, 0, 0, TUN_DEVICE);
+            // EEXIST means the route was already present -> not a failure
+            if(result < 0 && result != -EEXIST) {
+                DEBUG_MSG("add_route failed");
+                exit(1);
+            }
+
+            state = GATEWAY_PING_SUCCEEDED;
         }
 
         if(state == GATEWAY_PING_SUCCEEDED) {
@@ -271,6 +278,17 @@ int main(int argc, char* argv[])
                     else {
                         DEBUG_MSG("Invalid value for bandwidth-data-timeout (%d): must be positive and at most %d",
                             tmp, max_timeout);
+                    }
+                }
+
+                found = config_lookup_int_compat(config, "bandwidth-test-interval", &tmp);
+                if(found == CONFIG_TRUE) {
+                    if(tmp > 0) {
+                        bw_client.interval = tmp;
+                    }
+                    else {
+                        DEBUG_MSG("Invalid value for bandwidth-test-interval (%d): must be positive",
+                            tmp);
                     }
                 }
             }
@@ -351,7 +369,6 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
         if(new_lease->unique_id != old_lease->unique_id) {
             DEBUG_MSG("Changing unique_id from %u to %u\n");
             write_node_id_file(new_lease->unique_id);
-            call_on_lease(new_lease->unique_id);
         }
 
         /* TODO: Handle potential change of controller */
@@ -365,27 +382,22 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
 
 static void shutdown_handler(int signo)
 {
+    stop_datapath_thread();
+    send_shutdown_notification();
     remove_tcp_mtu_clamp();
     remove_masquerade("tun0");
     stop_netlink_thread();
-    send_shutdown_notification();
+    free_flow_table();
     exit(0);
 }
 
 static void update_bandwidth(struct bw_client_info *client, struct interface *ife,
 struct bw_stats *stats)
 {
-    if(stats->uplink_bw > 0) {
-        long bps;
-
-        if(stats->uplink_bw < (LONG_MAX / 1000000))
-            bps = (long)round(1000000.0 * stats->uplink_bw);
-        else
-            bps = LONG_MAX;
-
-        ife->meas_bw = bps;
+    if(stats->downlink_bw > 0) {
+        ife->meas_bw_down = stats->downlink_bw;
+        ife->meas_bw_up = stats->uplink_bw;
         ife->meas_bw_time = time(NULL);
-
     }
 }
 

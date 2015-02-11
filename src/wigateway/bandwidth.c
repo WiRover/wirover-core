@@ -90,15 +90,6 @@ void registerBandwidthCallback(struct bw_client_info* clientInfo, bw_callback_t 
 }
 
 /*
- * Sets the interval for bandwidth tests.  The interval should be in seconds.
- */
-void setBandwidthInterval(struct bw_client_info* clientInfo, unsigned int interval)
-{
-    assert(clientInfo != 0);
-    clientInfo->interval = interval;
-}
-
-/*
  * Pauses execution of the active bandwidth tests until resumeBandwidthThread()
  * is called.
  */
@@ -184,7 +175,6 @@ void* bandwidthThreadFunc(void* clientInfo)
         if(active_list) {
             free(active_list);
         }
-
         sleep(info->interval);
     }
 
@@ -268,13 +258,6 @@ int runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stat
     }
 
     session.measured_bw = stats->downlink_bw;
-
-    obtain_write_lock(&interface_list_lock);
-    struct interface *ife = find_interface_by_index(interface_list, stats->link_id);
-    if(ife != NULL) { 
-        ife->meas_bw = session.measured_bw;
-    }
-    release_write_lock(&interface_list_lock);
 
     rtn = session_send_stats(&session, sockfd_data);
     if(rtn <= 0) {
@@ -380,7 +363,7 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
     struct timeval first_pkt_time;
     struct timeval last_pkt_time;
 
-    long remaining_us = server_timeout + client->start_timeout;
+    long remaining_us = client->data_timeout  + server_timeout + client->start_timeout;
     while(remaining_us > 0) {
         struct timeval timeout;
         set_timeval_us(&timeout, remaining_us);
@@ -401,7 +384,6 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
                 if(is_first_pkt) {
                     get_recv_timestamp(sockfd, &first_pkt_time);
                     is_first_pkt = 0;
-                    remaining_us = client->data_timeout;
                 } else {
                     get_recv_timestamp(sockfd, &last_pkt_time);
                     bytes_recvd += result;

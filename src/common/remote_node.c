@@ -4,6 +4,7 @@
 #include "config.h"
 #include "debug.h"
 #include "remote_node.h"
+#include "packet.h"
 #include "packet_buffer.h"
 #include "utlist.h"
 #include "interface.h"
@@ -94,4 +95,3 @@ int remove_remote_node(struct remote_node *gw)
 
     return 0;
 }
-
