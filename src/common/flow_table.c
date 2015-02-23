@@ -187,7 +187,7 @@ void expiration_time_check() {
     // Double the time out for flows you don't own so that we don't,
     // accidentally remove active flows
     HASH_ITER(hh, flow_table, current_key, tmp) {
-        if(time(NULL) - current_key->last_visit_time > (current_key->owner ? flow_table_timeout : 2 * flow_table_timeout)) {
+        if(time(NULL) - current_key->last_visit_time > flow_table_timeout) {
             free_flow_entry(current_key);
         }
     }

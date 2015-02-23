@@ -264,6 +264,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
         {
             struct flow_tuple ft;
             ft = *(struct flow_tuple*)&pkt->data[1];
+            print_flow_tuple(&ft);
             flow_tuple_invert(&ft);
             struct flow_entry *fe = get_flow_entry(&ft);
             if(fe == NULL) {
