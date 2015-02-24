@@ -4,8 +4,7 @@
 #include "debug.h"
 #include "policy_table.h"
 
-static policy_entry *   default_ingress_policy;
-static policy_entry *   default_egress_policy;
+static policy_entry *   default_policy;
 static int              policy_count;
 static policy_entry **  policies;
 static int              init = 0;
@@ -16,6 +15,7 @@ static policy_entry * alloc_policy() {
     policy_entry * output = ( policy_entry *)malloc(sizeof( policy_entry));
     memset(output, 0, sizeof( policy_entry));
     output->action = POLICY_ACT_ENCAP;
+    output->link_select = POLICY_LS_WEIGHTED;
     output->direction = DIR_BOTH;
     return output;
 }
@@ -26,10 +26,7 @@ static void update_policies() {
 }
 
 int init_policy_table() {
-    default_ingress_policy = alloc_policy();
-    default_egress_policy = alloc_policy();
-    default_ingress_policy->action = POLICY_ACT_ENCAP;
-    default_egress_policy->action = POLICY_ACT_ENCAP;
+    default_policy = alloc_policy();
     update_policies();
     init = 1;
     return SUCCESS;
@@ -90,11 +87,17 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
     value = json_object_object_get(jobj_policy, "link_select");
     if(json_object_is_type(value, json_type_string)) {
         const char * action = json_object_get_string(value);
-        if (strcmp(action, "multipath") == 0) {
-            pe->link_select = POLICY_LS_MULTIPATH;
+        if (strcmp(action, "weighted") == 0) {
+            pe->link_select = POLICY_LS_WEIGHTED;
         }
         else if (strcmp(action, "duplicate") == 0) {
             pe->link_select = POLICY_LS_DUPLICATE;
+        }
+        else if (strcmp(action, "multipath") == 0) {
+            pe->link_select = POLICY_LS_MULTIPATH;
+        }
+        else if (strcmp(action, "forced") == 0) {
+            pe->link_select = POLICY_LS_FORCED;
         }
         else {
             goto failure_print;
@@ -210,7 +213,7 @@ int get_policy_by_tuple(struct flow_tuple *ft, policy_entry *policy, int dir) {
         return SUCCESS;
     }
 
-    *policy = dir == DIR_INGRESS ? *default_ingress_policy : *default_egress_policy;
+    *policy = *default_policy;
     return FAILURE;
 }
 
@@ -276,8 +279,8 @@ void print_policy_entry(policy_entry * pe) {
     if(pe->direction == DIR_INGRESS) { dir_str = "I"; }
     if(pe->direction == DIR_EGRESS) { dir_str = "O"; }
     if(pe->direction == DIR_BOTH) { dir_str = "*"; }
-    DEBUG_MSG("direction: %s local: %s local_net: %s remote: %s remote_net: %s proto: %d act: %d rate: %f",
-        dir_str, l_str_port, l_net_str, r_str_port, r_net_str, pe->ft.proto, pe->action, pe->rate_limit);
+    DEBUG_MSG("direction: %s local: %s local_net: %s remote: %s remote_net: %s proto: %d act: %d ls: %d rate: %f",
+        dir_str, l_str_port, l_net_str, r_str_port, r_net_str, pe->ft.proto, pe->action, pe->link_select, pe->rate_limit);
 }
 
 void print_policies() {
