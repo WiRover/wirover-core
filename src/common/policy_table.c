@@ -86,15 +86,15 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         goto failure_print;
     }
 
-    //--OPERATION--//
-    value = json_object_object_get(jobj_policy, "operation");
+    //--LINK_SELECT--//
+    value = json_object_object_get(jobj_policy, "link_select");
     if(json_object_is_type(value, json_type_string)) {
         const char * action = json_object_get_string(value);
         if (strcmp(action, "multipath") == 0) {
-            pe->action |= POLICY_OP_MULTIPATH;
+            pe->link_select = POLICY_LS_MULTIPATH;
         }
         else if (strcmp(action, "duplicate") == 0) {
-            pe->action |= POLICY_OP_DUPLICATE;
+            pe->link_select = POLICY_LS_DUPLICATE;
         }
         else {
             goto failure_print;
@@ -199,7 +199,7 @@ failure_print:
 }
 
 int get_policy_by_tuple(struct flow_tuple *ft, policy_entry *policy, int dir) {
-    if(!init) { DEBUG_MSG("Policy table must be initialized"); return NO_MATCH; }
+    if(!init) { DEBUG_MSG("Policy table must be initialized"); return FAILURE; }
     int count = policy_count;
     for(int i = 0; i < count; i++) {
         *policy = *policies[i];
@@ -211,7 +211,7 @@ int get_policy_by_tuple(struct flow_tuple *ft, policy_entry *policy, int dir) {
     }
 
     *policy = dir == DIR_INGRESS ? *default_ingress_policy : *default_egress_policy;
-    return NO_MATCH;
+    return FAILURE;
 }
 
 static policy_entry** load_policies(int * count) {

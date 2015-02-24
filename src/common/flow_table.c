@@ -92,7 +92,6 @@ void fill_flow_entry_data(struct flow_entry_data *fed, policy_entry * pd)
         rc_init(fed->rate_control, 10, 20000, pd->rate_limit);
 
     }
-    strcpy(fed->alg_name, pd->alg_name);
 }
 
 struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner) {
@@ -115,7 +114,7 @@ struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner) {
         get_policy_by_tuple(tuple,  &pd, DIR_INGRESS);
         fill_flow_entry_data(&fe->ingress, &pd);
 
-        if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP)
+        if(fe->egress.action == POLICY_ACT_ENCAP)
         {
             fe->requires_flow_info = 3;
         }

@@ -14,11 +14,11 @@
 int select_src_interface(struct flow_entry *fe, struct interface **dst, int size)
 {
     assert(size > 0);
-    if (fe->egress.action & POLICY_OP_MULTIPATH) {
+    if (fe->egress.link_select == POLICY_LS_MULTIPATH) {
         dst[0] = select_mp_interface(interface_list);
         return 1;
     }
-    if((fe->egress.action & POLICY_OP_MASK) == POLICY_OP_DUPLICATE)
+    if(fe->egress.link_select == POLICY_LS_DUPLICATE)
     {
         return select_all_interfaces(interface_list, dst, size);
     }
@@ -27,7 +27,7 @@ int select_src_interface(struct flow_entry *fe, struct interface **dst, int size
 
     // In the case of NAT, we only assign an interface if we haven't already,
     // no failover occurs.
-    if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
+    if(fe->egress.action == POLICY_ACT_NAT) {
         if(fe->egress.local_link_id == 0){
             dst[0] = select_wrr_interface(interface_list);
             if(dst[0] != NULL)
@@ -35,7 +35,7 @@ int select_src_interface(struct flow_entry *fe, struct interface **dst, int size
         }
         return dst[0] != NULL;
     }
-    else if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
+    else if(fe->egress.action == POLICY_ACT_ENCAP) {
         //Single interface case
         int max_priority = max_active_interface_priority(interface_list);
         if(dst[0] == NULL || dst[0]->state != ACTIVE || dst[0]->priority < max_priority)

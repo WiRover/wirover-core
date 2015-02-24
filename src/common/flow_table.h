@@ -21,8 +21,8 @@ struct flow_entry_data {
     uint16_t remote_link_id;
     uint16_t local_link_id;
     int count;
-    uint32_t action;
-    char alg_name[MAX_ALG_NAME_LEN];
+    uint8_t action;
+    uint8_t link_select;
 
     // Rate limiting and packet queueing
     struct rate_control * rate_control;
