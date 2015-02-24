@@ -14,33 +14,46 @@
 int select_src_interface(struct flow_entry *fe, struct interface **dst, int size)
 {
     assert(size > 0);
-    if (fe->egress.link_select == POLICY_LS_MULTIPATH) {
-        dst[0] = select_mp_interface(interface_list);
-        return 1;
-    }
-    if(fe->egress.link_select == POLICY_LS_DUPLICATE)
-    {
-        return select_all_interfaces(interface_list, dst, size);
-    }
-
-    dst[0] = find_interface_by_index(interface_list, fe->egress.local_link_id);
-
-    // In the case of NAT, we only assign an interface if we haven't already,
-    // no failover occurs.
-    if(fe->egress.action == POLICY_ACT_NAT) {
-        if(fe->egress.local_link_id == 0){
-            dst[0] = select_wrr_interface(interface_list);
-            if(dst[0] != NULL)
-                fe->egress.local_link_id = dst[0]->index;
+    // Multipath polices are only valid for the ENCAP action
+    if(fe->egress.action == POLICY_ACT_ENCAP) {
+        if (fe->egress.link_select == POLICY_LS_MULTIPATH) {
+            dst[0] = select_mp_interface(interface_list);
+            return 1;
         }
-        return dst[0] != NULL;
+        else if(fe->egress.link_select == POLICY_LS_DUPLICATE)
+        {
+            return select_all_interfaces(interface_list, dst, size);
+        }
     }
-    else if(fe->egress.action == POLICY_ACT_ENCAP) {
+
+    // We are now selecting a single interface
+
+    // Assign an interface if we haven't already
+    if(fe->egress.local_link_id == 0)
+    {
+        //TODO: Lookup prefered interface if we have one
+        dst[0] = select_weighted_interface(interface_list);
+        if(dst[0] != NULL)
+            fe->egress.local_link_id = dst[0]->index;
+    }
+    // Lookup the currently assigned interface and return if we don't need
+    // failover
+    else
+    {
+        dst[0] = find_interface_by_index(interface_list, fe->egress.local_link_id);
+        if(fe->egress.action == POLICY_ACT_NAT || fe->egress.link_select == POLICY_LS_FORCED) {
+            return dst[0] != NULL;
+        }
+    }
+
+    // In the case of ENCAP we allow fail over, so check to make sure
+    // the currently assigned link is OK to continue using
+    if(fe->egress.action == POLICY_ACT_ENCAP) {
         //Single interface case
         int max_priority = max_active_interface_priority(interface_list);
         if(dst[0] == NULL || dst[0]->state != ACTIVE || dst[0]->priority < max_priority)
         {
-            dst[0] = select_wrr_interface(interface_list);
+            dst[0] = select_weighted_interface(interface_list);
             if(dst[0] != NULL)
             {
                 if(fe->owner) {
@@ -53,6 +66,7 @@ int select_src_interface(struct flow_entry *fe, struct interface **dst, int size
         }
         else { return 1; }
     }
+
     return 0;
 }
 int select_dst_interface(struct flow_entry *fe, struct interface **dst, int size)

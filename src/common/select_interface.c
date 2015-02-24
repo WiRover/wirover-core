@@ -50,7 +50,7 @@ struct interface *select_mp_interface(struct interface *head)
     return select_ife;
 }
 
-struct interface *select_wrr_interface(struct interface *head)
+struct interface *select_weighted_interface(struct interface *head)
 {
     //Find the subset of interfaces with the highest priority
     int size = count_active_interfaces(head);

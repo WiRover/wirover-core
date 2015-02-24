@@ -45,13 +45,15 @@ int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress)
 
 void fill_flow_info(struct flow_entry *fe, struct packet *info_pkt) {
     struct tunhdr_flow_info ingress_info;
-    ingress_info.action = htonl(fe->ingress.action);
+    ingress_info.action = fe->ingress.action;
+    ingress_info.link_select = fe->ingress.link_select;
     ingress_info.local_link_id = htons(fe->ingress.local_link_id);
     ingress_info.remote_link_id = htons(fe->ingress.remote_link_id);
     ingress_info.rate_limit = 0;
 
     struct tunhdr_flow_info egress_info;
-    egress_info.action = htonl(fe->egress.action);
+    egress_info.action = fe->egress.action;
+    egress_info.link_select = fe->egress.link_select;
     egress_info.local_link_id = htons(fe->egress.local_link_id);
     egress_info.remote_link_id = htons(fe->egress.remote_link_id);
     egress_info.rate_limit = 0;
@@ -190,7 +192,7 @@ void expiration_time_check(struct flow_entry *fe_ignore) {
     HASH_ITER(hh, flow_table, current_key, tmp) {
         //It's possible that the remote node has already timed out our entry,
         //so in this case lead the packet with another single flow_info
-        if(time(NULL) > current_key->last_visit_time + flow_table_timeout - TIME_BETWEEN_EXPIRATION_CHECKS)
+        if(current_key->owner && time(NULL) > current_key->last_visit_time + flow_table_timeout - TIME_BETWEEN_EXPIRATION_CHECKS)
         {
             current_key->requires_flow_info = 1;
         }
