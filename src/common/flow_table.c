@@ -15,13 +15,14 @@
 #include "policy_table.h"
 #include "rate_control.h"
 #include "rwlock.h"
+#include "math.h"
 
 #define TIME_BUFFER_SIZE 1024
 #define TIME_BETWEEN_EXPIRATION_CHECKS 5
 
 struct flow_entry *flow_table = NULL;
 struct rwlock flow_table_lock = RWLOCK_INITIALIZER;
-int flow_table_timeout = 10;
+int flow_table_timeout = 30;
 time_t last_expiration_check = 0;
 
 
@@ -181,13 +182,17 @@ void free_flow_entry(struct flow_entry * fe) {
     release_write_lock(&flow_table_lock);
 }
 
-void expiration_time_check() {
+void expiration_time_check(struct flow_entry *fe_ignore) {
     struct flow_entry *current_key, *tmp;
 
-    // Double the time out for flows you don't own so that we don't,
-    // accidentally remove active flows
     HASH_ITER(hh, flow_table, current_key, tmp) {
-        if(time(NULL) - current_key->last_visit_time > flow_table_timeout) {
+        //It's possible that the remote node has already timed out our entry,
+        //so in this case lead the packet with another single flow_info
+        if(time(NULL) > current_key->last_visit_time + flow_table_timeout - TIME_BETWEEN_EXPIRATION_CHECKS)
+        {
+            current_key->requires_flow_info = 1;
+        }
+        if(current_key != fe_ignore && (time(NULL) - current_key->last_visit_time > flow_table_timeout)) {
             free_flow_entry(current_key);
         }
     }
@@ -196,15 +201,16 @@ void expiration_time_check() {
 //Updates an entry and expires old entries in the flow table
 int update_flow_entry(struct flow_entry *fe) {
 
-    fe->last_visit_time = time(NULL);
 
     if(last_expiration_check == 0) {
         last_expiration_check = time(NULL);
     }
     if(time(NULL) - last_expiration_check > TIME_BETWEEN_EXPIRATION_CHECKS) {
-        expiration_time_check();
+        expiration_time_check(fe);
         last_expiration_check = time(NULL);
     }
+
+    fe->last_visit_time = time(NULL);
 
     return SUCCESS;
 }
