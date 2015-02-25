@@ -32,18 +32,18 @@ int select_src_interface(struct flow_entry *fe, struct interface **dst, int size
     // Assign an interface if we haven't already
     if(fe->egress.local_link_id == 0)
     {
-        //Set both the ingress and egress prefered links if they exist
-        struct interface *prefered_link;
+        //Set both the ingress and egress preferred links if they exist
+        struct interface *preferred_link;
 
-        prefered_link = select_prefered_interface(interface_list, fe, DIR_INGRESS);
-        if(prefered_link != NULL)
-            fe->ingress.local_link_id = prefered_link->index;
+        preferred_link = select_preferred_interface(interface_list, fe, DIR_INGRESS);
+        if(preferred_link != NULL)
+            fe->ingress.local_link_id = preferred_link->index;
 
-        prefered_link = select_prefered_interface(interface_list, fe, DIR_EGRESS);
-        if(prefered_link != NULL)
+        preferred_link = select_preferred_interface(interface_list, fe, DIR_EGRESS);
+        if(preferred_link != NULL)
         {
-            fe->egress.local_link_id = prefered_link->index;
-            dst[0] = prefered_link;
+            fe->egress.local_link_id = preferred_link->index;
+            dst[0] = preferred_link;
         }
 
         if(dst[0] == NULL && fe->egress.link_select == POLICY_LS_WEIGHTED)

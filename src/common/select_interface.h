@@ -3,7 +3,7 @@
 
 #include "flow_table.h"
 
-struct interface *select_prefered_interface(struct interface *head, struct flow_entry *fe, int dir);
+struct interface *select_preferred_interface(struct interface *head, struct flow_entry *fe, int dir);
 struct interface *select_mp_interface(struct interface *head);
 struct interface *select_weighted_interface(struct interface *head);
 int select_all_interfaces(struct interface *head, struct interface ** dst, int size);

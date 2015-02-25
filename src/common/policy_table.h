@@ -40,7 +40,7 @@ enum policy_type {
 typedef struct{
     uint8_t action;
     uint8_t link_select;
-    char prefered_link[IFNAMSIZ];
+    char preferred_link[IFNAMSIZ];
     double rate_limit;
 
     // flow policy

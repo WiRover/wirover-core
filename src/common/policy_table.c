@@ -104,11 +104,11 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         }
     }
 
-    //--PREFERED_LINK--//
-    value = json_object_object_get(jobj_policy, "prefered_link");
+    //--preferred_LINK--//
+    value = json_object_object_get(jobj_policy, "preferred_link");
     if(json_object_is_type(value, json_type_string)) {
-        const char * prefered_link = json_object_get_string(value);
-        strncpy(pe->prefered_link, (char * restrict)prefered_link, sizeof(pe->prefered_link));
+        const char * preferred_link = json_object_get_string(value);
+        strncpy(pe->preferred_link, (char * restrict)preferred_link, sizeof(pe->preferred_link));
     }
 
     //--PROTOCOL--//
@@ -288,8 +288,8 @@ void print_policy_entry(policy_entry * pe) {
     if(pe->direction == DIR_BOTH) { dir_str = "*"; }
     char link_pref_str[100];
     link_pref_str[0] = 0;
-    if(pe->prefered_link[0] != 0){
-        snprintf(link_pref_str, 100, " prefered link: %s", pe->prefered_link);
+    if(pe->preferred_link[0] != 0){
+        snprintf(link_pref_str, 100, " preferred link: %s", pe->preferred_link);
     }
     DEBUG_MSG("direction: %s local: %s local_net: %s remote: %s remote_net: %s proto: %d act: %d ls: %d%s rate: %f",
         dir_str, l_str_port, l_net_str, r_str_port, r_net_str, pe->ft.proto, pe->action, pe->link_select, link_pref_str, pe->rate_limit);

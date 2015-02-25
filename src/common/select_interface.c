@@ -3,12 +3,12 @@
 #include "debug.h"
 #include "policy_table.h"
 
-struct interface *select_prefered_interface(struct interface *head, struct flow_entry *fe, int dir)
+struct interface *select_preferred_interface(struct interface *head, struct flow_entry *fe, int dir)
 {
     policy_entry policy;
     memset(&policy, 0, sizeof(policy_entry));
-    if(get_policy_by_tuple(fe->id, &policy, dir) == SUCCESS && strlen(policy.prefered_link) > 0){
-        return find_interface_by_network(interface_list, policy.prefered_link);
+    if(get_policy_by_tuple(fe->id, &policy, dir) == SUCCESS && strlen(policy.preferred_link) > 0){
+        return find_interface_by_network(interface_list, policy.preferred_link);
     }
     return NULL;
 }
