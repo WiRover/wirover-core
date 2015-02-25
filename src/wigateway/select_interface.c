@@ -14,6 +14,7 @@
 int select_src_interface(struct flow_entry *fe, struct interface **dst, int size)
 {
     assert(size > 0);
+    dst[0] = NULL;
     // Multipath polices are only valid for the ENCAP action
     if(fe->egress.action == POLICY_ACT_ENCAP) {
         if (fe->egress.link_select == POLICY_LS_MULTIPATH) {
@@ -26,24 +27,41 @@ int select_src_interface(struct flow_entry *fe, struct interface **dst, int size
         }
     }
 
-    // We are now selecting a single interface
+    // We are now selecting a single interface for either ENCAP or NAT
 
     // Assign an interface if we haven't already
     if(fe->egress.local_link_id == 0)
     {
-        //TODO: Lookup prefered interface if we have one
-        dst[0] = select_weighted_interface(interface_list);
-        if(dst[0] != NULL)
-            fe->egress.local_link_id = dst[0]->index;
+        //Set both the ingress and egress prefered links if they exist
+        struct interface *prefered_link;
+
+        prefered_link = select_prefered_interface(interface_list, fe, DIR_INGRESS);
+        if(prefered_link != NULL)
+            fe->ingress.local_link_id = prefered_link->index;
+
+        prefered_link = select_prefered_interface(interface_list, fe, DIR_EGRESS);
+        if(prefered_link != NULL)
+        {
+            fe->egress.local_link_id = prefered_link->index;
+            dst[0] = prefered_link;
+        }
+
+        if(dst[0] == NULL && fe->egress.link_select == POLICY_LS_WEIGHTED)
+        {
+            dst[0] = select_weighted_interface(interface_list);
+            if(dst[0] != NULL)
+            {
+                fe->egress.local_link_id = dst[0]->index;
+                fe->ingress.local_link_id = dst[0]->index;
+            }
+        }
+        return dst[0] != NULL;
     }
     // Lookup the currently assigned interface and return if we don't need
     // failover
-    else
-    {
-        dst[0] = find_interface_by_index(interface_list, fe->egress.local_link_id);
-        if(fe->egress.action == POLICY_ACT_NAT || fe->egress.link_select == POLICY_LS_FORCED) {
-            return dst[0] != NULL;
-        }
+    dst[0] = find_interface_by_index(interface_list, fe->egress.local_link_id);
+    if(fe->egress.action == POLICY_ACT_NAT || fe->egress.link_select == POLICY_LS_FORCED) {
+        return dst[0] != NULL;
     }
 
     // In the case of ENCAP we allow fail over, so check to make sure
