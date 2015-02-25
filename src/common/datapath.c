@@ -436,7 +436,7 @@ int handle_nat_packet(struct packet * pkt, struct interface * ife)
     fill_flow_tuple(pkt->data, &ft, 1);
 
     struct flow_entry *fe = get_flow_entry(&ft);
-    if(fe == NULL || (fe->ingress.action & POLICY_ACT_MASK) != POLICY_ACT_NAT) {
+    if(fe == NULL || fe->ingress.action != POLICY_ACT_NAT) {
         free_packet(pkt);
         return SUCCESS;
     }
@@ -555,7 +555,7 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
     update_flow_entry(fe);
 
     // Check for drop
-    if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_DROP) {
+    if(fe->egress.action == POLICY_ACT_DROP) {
         free_packet(pkt);
         return SUCCESS;
     }
@@ -585,7 +585,7 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
     int output = FAILURE;
     if(src_ife_count > 0) {
         //Add a tunnel header to the packet
-        if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP) {
+        if(fe->egress.action == POLICY_ACT_ENCAP) {
             if(dst_ife_count > 0) {
                 //TODO: This only works where the dst_ifes are all from the same remote_node
                 //perhaps change this functionality
@@ -606,7 +606,7 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
                 output = SUCCESS;
             }
         }
-        else if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_NAT) {
+        else if(fe->egress.action == POLICY_ACT_NAT) {
             output = send_nat_packet(clone_packet(pkt), src_ife[0]);
         }
         //Update rate information for the flow entry

@@ -45,13 +45,15 @@ int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress)
 
 void fill_flow_info(struct flow_entry *fe, struct packet *info_pkt) {
     struct tunhdr_flow_info ingress_info;
-    ingress_info.action = htonl(fe->ingress.action);
+    ingress_info.action = fe->ingress.action;
+    ingress_info.link_select = fe->ingress.link_select;
     ingress_info.local_link_id = htons(fe->ingress.local_link_id);
     ingress_info.remote_link_id = htons(fe->ingress.remote_link_id);
     ingress_info.rate_limit = 0;
 
     struct tunhdr_flow_info egress_info;
-    egress_info.action = htonl(fe->egress.action);
+    egress_info.action = fe->egress.action;
+    egress_info.link_select = fe->egress.link_select;
     egress_info.local_link_id = htons(fe->egress.local_link_id);
     egress_info.remote_link_id = htons(fe->egress.remote_link_id);
     egress_info.rate_limit = 0;
@@ -86,13 +88,13 @@ void ntoh_flow_tuple(struct flow_tuple *src, struct flow_tuple *dst) {
 void fill_flow_entry_data(struct flow_entry_data *fed, policy_entry * pd)
 {
     fed->action = pd->action;
+    fed->link_select = pd->link_select;
     if(pd->rate_limit != 0)
     {
         fed->rate_control = (struct rate_control *)malloc(sizeof(struct rate_control));
         rc_init(fed->rate_control, 10, 20000, pd->rate_limit);
 
     }
-    strcpy(fed->alg_name, pd->alg_name);
 }
 
 struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner) {
@@ -115,7 +117,7 @@ struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner) {
         get_policy_by_tuple(tuple,  &pd, DIR_INGRESS);
         fill_flow_entry_data(&fe->ingress, &pd);
 
-        if((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP)
+        if(fe->egress.action == POLICY_ACT_ENCAP)
         {
             fe->requires_flow_info = 3;
         }
@@ -135,12 +137,14 @@ struct flow_entry *add_entry_info(struct packet *pkt, int remote_node_id) {
     flow_tuple_invert(&ft);
     struct flow_entry * fe = add_entry(&ft, 0);
 
-    fe->ingress.action = ntohl(ingress_info->action);
+    fe->ingress.action = ingress_info->action;
+    fe->ingress.link_select = ingress_info->link_select;
     fe->ingress.remote_node_id = remote_node_id;
     fe->ingress.remote_link_id = ntohs(ingress_info->local_link_id);
     fe->ingress.local_link_id = ntohs(ingress_info->remote_link_id);
 
-    fe->egress.action = ntohl(egress_info->action);
+    fe->egress.action = egress_info->action;
+    fe->egress.link_select = egress_info->link_select;
     fe->egress.remote_node_id = remote_node_id;
     fe->egress.remote_link_id = ntohs(egress_info->local_link_id);
     fe->egress.local_link_id = ntohs(egress_info->remote_link_id);
@@ -188,7 +192,7 @@ void expiration_time_check(struct flow_entry *fe_ignore) {
     HASH_ITER(hh, flow_table, current_key, tmp) {
         //It's possible that the remote node has already timed out our entry,
         //so in this case lead the packet with another single flow_info
-        if(time(NULL) > current_key->last_visit_time + flow_table_timeout - TIME_BETWEEN_EXPIRATION_CHECKS)
+        if(current_key->owner && time(NULL) > current_key->last_visit_time + flow_table_timeout - TIME_BETWEEN_EXPIRATION_CHECKS)
         {
             current_key->requires_flow_info = 1;
         }
@@ -237,8 +241,8 @@ int flow_tuple_to_string(const struct flow_tuple *ft, char *str, int size) {
 
 }
 int flow_data_to_string(const struct flow_entry_data *fed, char *str, int size) {
-    return snprintf(str, size, "Action: %d remote: %d:%d Local link: %d hits: %d",
-        fed->action, fed->remote_node_id, fed->remote_link_id, fed->local_link_id, fed->count
+    return snprintf(str, size, "Action: %d Link-Select: %d remote: %d:%d Local link: %d hits: %d",
+        fed->action, fed->link_select, fed->remote_node_id, fed->remote_link_id, fed->local_link_id, fed->count
     );
 }
 int flow_entry_to_string(const struct flow_entry *fe, char *str, int size)
