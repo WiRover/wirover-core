@@ -369,7 +369,7 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
         set_timeval_us(&timeout, remaining_us);
 
         struct timeval recvfrom_start;
-        gettimeofday(&recvfrom_start, 0);
+        get_monotonic_time(&recvfrom_start);
 
         struct sockaddr_storage sender_addr;
         socklen_t sender_addr_len = sizeof(sender_addr);

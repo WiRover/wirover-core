@@ -21,7 +21,7 @@ int cbuffer_init(struct circular_buffer *cb, int window_size, long bin_size)
     if(!cb->counts)
         return FAILURE;
 
-    gettimeofday(&cb->start_time, NULL);
+    get_monotonic_time(&cb->start_time);
     cb->current_bin_offset = 0;
 
     return SUCCESS;
@@ -40,9 +40,7 @@ void destroy_cbuffer(struct circular_buffer *cb)
  */
 int cbuffer_rotate(struct circular_buffer *cb)
 {
-    struct timeval now;
-    gettimeofday(&now, NULL);
-    long diff = timeval_diff(&now, &cb->start_time) / cb->bin_size;
+    long diff = get_elapsed_us(&cb->start_time) / cb->bin_size;
     long bin_diff = diff - cb->current_bin_offset;
     if(bin_diff < 0) {
         DEBUG_MSG("cb error, offset less than 0");

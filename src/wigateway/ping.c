@@ -139,18 +139,17 @@ int send_ping(struct interface* ife)
         return -1;
     }
 
-    gettimeofday(&ife->last_ping_time, NULL);
+    get_monotonic_time(&ife->last_ping_time);
 
     return 0;
 }
 
-static int should_send_ping(const struct interface *ife)
+static int should_send_ping(struct interface *ife)
 {
     if(ife->state == DEAD)
         return 0;
-    struct timeval now;
-    gettimeofday(&now, NULL);
-    if(now.tv_sec >= ife->last_ping_time.tv_sec + ife->ping_interval)
+    long elapsed_us = get_elapsed_us(&ife->last_ping_time);
+    if(elapsed_us > ife->ping_interval * USECS_PER_SEC)
         return 1;
 
     return 0;
@@ -162,19 +161,19 @@ void* ping_thread_func(void* arg)
     int stall_retry_interval = get_link_stall_retry_interval() * USECS_PER_MSEC;
 
     // Initialize this so that the first ping will be sent immediately.
-    struct timeval last_ping_time = {
-        .tv_sec = time(0) - ping_interval, .tv_usec = 0};
+    struct timeval last_ping_time;
+    get_monotonic_time(&last_ping_time);
 
     int num_ifaces = 0;
     int curr_iface_pos = 0;
 
-    unsigned ping_spacing = ping_interval * USEC_PER_SEC;
+    unsigned ping_spacing = ping_interval * USECS_PER_SEC;
 
     struct timeval now;
 
     while(1) {
 
-        gettimeofday(&now, 0);
+        get_monotonic_time(&now);
 
         obtain_read_lock(&interface_list_lock);
 
@@ -182,7 +181,6 @@ void* ping_thread_func(void* arg)
 
         //Send retry packets over inactive interfaces
         struct interface *inactive_interface = interface_list;
-
         while(inactive_interface)
         {
             if(inactive_interface->state != ACTIVE && timeval_diff(&now, &inactive_interface->tx_time) >= stall_retry_interval){
@@ -198,15 +196,14 @@ void* ping_thread_func(void* arg)
         }
 
         if(num_ifaces > 0)
-            ping_spacing = ping_interval * USEC_PER_SEC / num_ifaces;
+            ping_spacing = ping_interval * USECS_PER_SEC / num_ifaces;
         else
-            ping_spacing = ping_interval * USEC_PER_SEC;
+            ping_spacing = ping_interval * USECS_PER_SEC;
 
 
 
         long time_diff = timeval_diff(&now, &last_ping_time);
         if(time_diff >= ping_spacing) {
-
             obtain_read_lock(&interface_list_lock);
             struct interface *ife = find_interface_at_pos(
                 interface_list, curr_iface_pos);
@@ -284,7 +281,7 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
     long diff = (long)recv_ts - (long)send_ts;
 
     // If the ping response is older than the ping interval we ignore it.
-    if(diff < (get_ping_interval() * USEC_PER_SEC)) {
+    if(diff < (get_ping_interval() * USECS_PER_SEC)) {
         ife->est_uplink_bw = ewma_update(ife->est_uplink_bw, (double)int_to_bw(ntohl(pkt->est_bw)), BW_EWMA_WEIGHT);
 
         ife->last_ping_success = recv_time;

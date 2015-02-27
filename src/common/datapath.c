@@ -199,10 +199,7 @@ int handle_packet(struct interface * ife, int sockfd, int is_nat)
     packet_put(pkt, received_bytes);
 
     struct timeval arrival_time;
-    if(ioctl(sockfd, SIOCGSTAMP, &arrival_time) == -1) {
-        ERROR_MSG("ioctl SIOCGSTAMP failed");
-        gettimeofday(&arrival_time, 0);
-    }
+    get_recv_timestamp(sockfd, &arrival_time);
     pkt->created = arrival_time;
 
     if(is_nat)
@@ -629,7 +626,7 @@ int send_encap_packet_ife(uint8_t type, struct packet *pkt, struct interface *sr
     
     if(type == TUNTYPE_DATA && packet_log_enabled && packet_log_file != NULL){
         struct timeval tv;
-        gettimeofday(&tv, 0);
+        get_monotonic_time(&tv);
         logPacket(&tv, pkt->data_size, "EGRESS", src_ife, dst_ife);
     }
 
@@ -687,7 +684,7 @@ int send_encap_packet_dst(uint8_t type, struct packet *pkt, struct interface *sr
     src_ife->packets_since_ack++;
 #ifdef GATEWAY
     struct timeval tv;
-    gettimeofday(&tv, NULL);
+    get_monotonic_time(&tv);
     if(src_ife->packets_since_ack == 3)
     {
         src_ife->st_time = tv;
@@ -696,7 +693,7 @@ int send_encap_packet_dst(uint8_t type, struct packet *pkt, struct interface *sr
         change_interface_state(src_ife, INACTIVE);
     }
 #endif
-    gettimeofday(&src_ife->tx_time, NULL);
+    get_monotonic_time(&src_ife->tx_time);
     return SUCCESS;
 }
 
@@ -803,7 +800,7 @@ void service_flow_rx_queue(struct flow_entry *fe, struct timeval *now) {
 int service_queues()
 {
     struct timeval now;
-    gettimeofday(&now, NULL);
+    get_monotonic_time(&now);
     struct flow_entry *flow_entry, *tmp;
     HASH_ITER(hh, get_flow_table(), flow_entry, tmp) {
         if(flow_entry->ingress.rate_control != NULL)

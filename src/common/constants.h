@@ -1,6 +1,7 @@
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
+#define NSECS_PER_USEC  1000
 #define NSECS_PER_MSEC  1000000
 #define USECS_PER_SEC   1000000
 #define USECS_PER_MSEC  1000
