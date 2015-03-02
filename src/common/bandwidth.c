@@ -34,7 +34,9 @@ int session_send(const struct bw_session *session, int sockfd, int type)
     int result = sendto(sockfd, buffer, sizeof(struct bw_hdr), 0, 
             (struct sockaddr *)&session->key.addr, session->key.addr_len);
     if(result < 0) {
-        ERROR_MSG("sendto failed");
+        char ipstr[39];
+        sockaddr_ntop((struct sockaddr *)&session->key.addr, ipstr, sizeof(struct sockaddr));
+        ERROR_MSG("sendto failed to %s, sockfd: %d", ipstr, sockfd);
         bytes_sent = -1;
         goto out;
     } else {
