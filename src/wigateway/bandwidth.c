@@ -113,7 +113,8 @@ void resumeBandwidthThread(struct bw_client_info* clientInfo)
 
 void* bandwidthThreadFunc(void* clientInfo)
 {
-    struct bw_client_info* info = (struct bw_client_info*)clientInfo;
+    struct bw_client_info* info = (struct bw_client_info*)malloc(sizeof(struct bw_client_info));
+    memcpy(info, clientInfo, sizeof(struct bw_client_info));
 
     while(1) {
         // Put the thread to sleep if we want to pause active bandwidth measurements
