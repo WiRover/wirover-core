@@ -6,7 +6,7 @@
 #include "debug.h"
 #include "timing.h"
 
-int cbuffer_init(struct circular_buffer *cb, int window_size, long bin_size)
+int cbuffer_init(struct circular_buffer *cb, int window_size, uint32_t bin_size)
 {
     assert(window_size > 0);
     assert(bin_size > 0);
@@ -67,9 +67,9 @@ int cbuffer_rotate(struct circular_buffer *cb)
 }
 
 /* Starting from t, sum the past window of data. */
-float cbuffer_sum(struct circular_buffer *cb)
+uint32_t cbuffer_sum(struct circular_buffer *cb)
 {
-    float sum = 0;
+    uint32_t sum = 0;
     cbuffer_rotate(cb);
     for(int j = 0; j < cb->window_size; j++) {
         sum += cb->counts[j];
@@ -77,12 +77,12 @@ float cbuffer_sum(struct circular_buffer *cb)
     return sum;
 }
 
-float cbuffer_min(struct circular_buffer *cb)
+uint32_t cbuffer_min(struct circular_buffer *cb)
 {
-    float min = 0;
+    uint32_t min = 0;
     cbuffer_rotate(cb);
     for(int j = 0; j < cb->window_size; j++) {
-        float value = cb->counts[j];
+        uint32_t value = cb->counts[j];
         if(min == 0 || (value < min && value != 0))
         {
             min = value;
@@ -91,7 +91,7 @@ float cbuffer_min(struct circular_buffer *cb)
     return min;
 }
 
-float *cbuffer_current(struct circular_buffer *cb)
+uint32_t *cbuffer_current(struct circular_buffer *cb)
 {
     return &cb->counts[cbuffer_rotate(cb)];
 }

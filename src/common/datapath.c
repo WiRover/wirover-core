@@ -226,11 +226,11 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     // Copy temporary to host format
     uint8_t tun_type = n_tun_hdr.type & TUNTYPE_TYPE_MASK;
     uint8_t tun_ctl = n_tun_hdr.type & TUNTYPE_CONTROL_MASK;
-    unsigned int h_global_seq = ntohl(n_tun_hdr.global_seq);
-    unsigned int h_link_seq = ntohl(n_tun_hdr.link_seq);
-    unsigned int h_path_ack = ntohl(n_tun_hdr.path_ack);
-    unsigned int h_remote_ts = ntohl(n_tun_hdr.remote_ts);
-    unsigned int h_local_ts = ntohl(n_tun_hdr.local_ts);
+    uint32_t h_global_seq = ntohl(n_tun_hdr.global_seq);
+    uint32_t h_link_seq = ntohl(n_tun_hdr.link_seq);
+    uint32_t h_path_ack = ntohl(n_tun_hdr.path_ack);
+    uint32_t h_remote_ts = ntohl(n_tun_hdr.remote_ts);
+    uint32_t h_local_ts = ntohl(n_tun_hdr.local_ts);
 
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
@@ -342,20 +342,20 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     //Remote_ts is the remote send time in our local clock domain
     uint32_t recv_ts = timeval_to_usec(&pkt->created);
     if(h_remote_ts != 0) {
-        long diff = (long)recv_ts - (long)h_remote_ts;
+        uint32_t diff = (uint32_t)recv_ts - (uint32_t)h_remote_ts;
 
         ife->avg_rtt = ewma_update(ife->avg_rtt, (double)diff, RTT_EWMA_WEIGHT);
     }
 
     // Estimate packet size / queueing delay
     if(pkt->data_size > 800 && h_local_ts != 0) {
-        float *current = cbuffer_current(&ife->rtt_buffer);
-        float diff = 1.0f * ((long)h_local_ts - (long)recv_ts);
-        if(*current == 0 || diff < *current)
+        uint32_t *current = cbuffer_current(&ife->rtt_buffer);
+        uint32_t diff = (uint32_t)((uint32_t)h_local_ts - (uint32_t)recv_ts);
+        if(*current == 0 || diff < (uint32_t)*current)
         {
             *current = diff;
         }
-        float queing_delay = diff - cbuffer_min(&ife->rtt_buffer);
+        uint32_t queing_delay = diff - cbuffer_min(&ife->rtt_buffer);
         if(queing_delay != 0) {
             ife->base_rtt_diff = ewma_update(ife->base_rtt_diff, (double)queing_delay, RTT_EWMA_WEIGHT);
         }
