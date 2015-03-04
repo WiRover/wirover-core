@@ -411,7 +411,14 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
     }
 
     long elapsed_us = timeval_diff(&last_pkt_time, &first_pkt_time);
-    stats->downlink_bw = (double)(bytes_recvd * 8) / (double)elapsed_us; //in Mbps
+    if(elapsed_us > 0)
+    {
+        stats->downlink_bw = (double)(bytes_recvd * 8) / (double)elapsed_us; //in Mbps
+    }
+    else
+    {
+        stats->downlink_bw = 0;
+    }
 
     DEBUG_MSG("bytes: %d, time: %ld, downlink_bw: %f Mbps, uplink_bw: %f Mbps",
             bytes_recvd, elapsed_us, stats->downlink_bw, stats->uplink_bw);

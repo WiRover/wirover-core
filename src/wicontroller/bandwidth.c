@@ -68,8 +68,15 @@ static int finish_recv_burst(struct bw_server_info *server, struct bw_session *s
     long elapsed_us = timeval_diff(&session->last_packet_time, 
             &session->first_packet_time);
 
-    session->measured_bw = (double)(session->bytes_recvd * 8) /
-        (double)elapsed_us; //in Mbps
+    if(elapsed_us > 0)
+    {
+        session->measured_bw = (double)(session->bytes_recvd * 8) /
+            (double)elapsed_us; //in Mbps
+    }
+    else
+    {
+        session->measured_bw = 0;
+    }
 
     DEBUG_MSG("bytes: %d, time: %ld, uplink_bw: %f Mbps",
             session->bytes_recvd, elapsed_us, session->measured_bw);
