@@ -20,6 +20,7 @@
 #include "rateinfer.h"
 #include "rwlock.h"
 #include "packet_buffer.h"
+#include "timing.h"
 #ifdef GATEWAY
 #include "contchan.h"
 #include "util.h"
@@ -48,8 +49,8 @@ struct interface* alloc_interface(int node_id)
     ife->avg_downlink_bw = NAN;
     ife->avg_uplink_bw = NAN;
 
-    gettimeofday(&ife->rx_time, NULL);
-    gettimeofday(&ife->tx_time, NULL);
+    get_monotonic_time(&ife->rx_time);
+    get_monotonic_time(&ife->tx_time);
 
     if(ping_interval == -1)
         ping_interval = get_ping_interval();
@@ -60,7 +61,7 @@ struct interface* alloc_interface(int node_id)
 
     // Prevent early timeouts
     struct timeval now;
-    gettimeofday(&now, NULL);
+    get_monotonic_time(&now);
     ife->last_ping_time = now;
     ife->last_ping_success = now;
     struct rwlock lock = RWLOCK_INITIALIZER;

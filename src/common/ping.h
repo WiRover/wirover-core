@@ -6,6 +6,7 @@
 #include <openssl/sha.h>
 
 #include "constants.h"
+#include "timing.h"
 
 #define PING_INVALID            0x00
 #define PING_REQUEST            0x10
@@ -98,7 +99,7 @@ static inline uint32_t timeval_to_usec(const struct timeval *tv)
         return (uint32_t)(tv->tv_sec * USECS_PER_SEC + tv->tv_usec);
     } else {
         struct timeval now;
-        gettimeofday(&now, 0);
+        get_monotonic_time(&now);
         return (uint32_t)(now.tv_sec * USECS_PER_SEC + now.tv_usec);
     }
 }

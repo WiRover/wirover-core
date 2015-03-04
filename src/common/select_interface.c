@@ -1,6 +1,17 @@
 #include "interface.h"
 #include "select_interface.h"
 #include "debug.h"
+#include "policy_table.h"
+
+struct interface *select_preferred_interface(struct interface *head, struct flow_entry *fe, int dir)
+{
+    policy_entry policy;
+    memset(&policy, 0, sizeof(policy_entry));
+    if(get_policy_by_tuple(fe->id, &policy, dir) == SUCCESS && strlen(policy.preferred_link) > 0){
+        return find_interface_by_network(interface_list, policy.preferred_link);
+    }
+    return NULL;
+}
 
 struct interface *select_mp_interface(struct interface *head)
 {
@@ -50,7 +61,7 @@ struct interface *select_mp_interface(struct interface *head)
     return select_ife;
 }
 
-struct interface *select_wrr_interface(struct interface *head)
+struct interface *select_weighted_interface(struct interface *head)
 {
     //Find the subset of interfaces with the highest priority
     int size = count_active_interfaces(head);

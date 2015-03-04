@@ -68,8 +68,15 @@ static int finish_recv_burst(struct bw_server_info *server, struct bw_session *s
     long elapsed_us = timeval_diff(&session->last_packet_time, 
             &session->first_packet_time);
 
-    session->measured_bw = (double)(session->bytes_recvd * 8) /
-        (double)elapsed_us; //in Mbps
+    if(elapsed_us > 0)
+    {
+        session->measured_bw = (double)(session->bytes_recvd * 8) /
+            (double)elapsed_us; //in Mbps
+    }
+    else
+    {
+        session->measured_bw = 0;
+    }
 
     DEBUG_MSG("bytes: %d, time: %ld, uplink_bw: %f Mbps",
             session->bytes_recvd, elapsed_us, session->measured_bw);
@@ -79,7 +86,7 @@ static int finish_recv_burst(struct bw_server_info *server, struct bw_session *s
         session->bytes_sent += bytes_sent;
     }
 
-    gettimeofday(&session->timeout_time, NULL);
+    get_monotonic_time(&session->timeout_time);
     timeval_add_us(&session->timeout_time, 
             server->start_timeout + session->remote_timeout);
 
@@ -100,7 +107,7 @@ static long timeout_sessions(struct bw_server_info *server)
     struct bw_session *tmp_session = NULL;
 
     struct timeval now;
-    gettimeofday(&now, NULL);
+    get_monotonic_time(&now);
 
     long min_timeout = LONG_MAX;
 
@@ -144,7 +151,7 @@ static int handle_rts_packet(struct bw_server_info *server, struct bw_session *s
         return -1;
     }
 
-    gettimeofday(&session->timeout_time, NULL);
+    get_monotonic_time(&session->timeout_time);
     timeval_add_us(&session->timeout_time, server->start_timeout);
 
     // If session times out at this point, terminate it.

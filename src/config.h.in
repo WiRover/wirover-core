@@ -60,7 +60,7 @@
 #define BW_UDP_SLEEP 1000 //in micro secs
 
 #define RTT_EWMA_WEIGHT  0.2
-#define BW_EWMA_WEIGHT   0.2
+#define BW_EWMA_WEIGHT   0.01
 
 // Use the bonding driver enlave and release ioctls instead of custom ones.
 #define USE_BOND_ENSLAVE 1

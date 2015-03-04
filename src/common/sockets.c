@@ -21,6 +21,7 @@
 #include "ipaddr.h"
 #include "interface.h"
 #include "sockets.h"
+#include "timing.h"
 #include "utlist.h"
 
 /*
@@ -625,7 +626,16 @@ void fill_buffer_random(void *buffer, int size)
 
 int get_recv_timestamp(int sockfd, struct timeval *timestamp) {
     if(ioctl(sockfd, SIOCGSTAMP, timestamp) < 0) {
-        gettimeofday(timestamp, 0);
+        get_monotonic_time(timestamp);
+    }
+    else
+    {
+        struct timeval mono_now;
+        get_monotonic_time(&mono_now);
+        struct timeval real_time_now;
+        gettimeofday(&real_time_now, NULL);
+        long diff = timeval_diff(&mono_now, &real_time_now);
+        timeval_add_us(timestamp, diff);
     }
     return 0;
 }

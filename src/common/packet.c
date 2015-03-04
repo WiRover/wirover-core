@@ -4,6 +4,7 @@
 
 #include "debug.h"
 #include "packet.h"
+#include "timing.h"
 
 struct packet *alloc_packet(int head_size, int tail_size)
 {
@@ -11,7 +12,7 @@ struct packet *alloc_packet(int head_size, int tail_size)
     if (!pkt)
         return NULL;
 
-    gettimeofday(&pkt->created, NULL);
+    get_monotonic_time(&pkt->created);
 
     pkt->buffer_size = head_size + tail_size;
 

@@ -15,32 +15,20 @@
 #define DIR_EGRESS    0x2
 #define DIR_BOTH      (DIR_INGRESS | DIR_EGRESS)
 
-#define NO_MATCH -1
-
-#define MAX_ALG_NAME_LEN   16
-
 #define MAX_POLICY_ENTRY_LENGTH 150
 
-#define POLICY_ROW_NONE    -1
-
 // actions
-#define POLICY_ACT_PASS    0x0001
-#define POLICY_ACT_NAT     0x0002
-#define POLICY_ACT_ENCAP   0x0003
-#define POLICY_ACT_DROP    0x0005
-#define POLICY_ACT_LISP    0x0006
-#define POLICY_ACT_MASK    0x000F
+#define POLICY_ACT_PASS    0x1
+#define POLICY_ACT_NAT     0x2
+#define POLICY_ACT_ENCAP   0x3
+#define POLICY_ACT_DROP    0x5
+#define POLICY_ACT_LISP    0x6
 
-// operation policies
-#define POLICY_OP_COMPRESS      0x0010
-#define POLICY_OP_ENCRYPT       0x0020
-#define POLICY_OP_DEJITTER      0x0040
-#define POLICY_OP_ACCEL         0x0080
-#define POLICY_OP_DUPLICATE     0x0100
-#define POLICY_OP_LIMIT         0x0200
-#define POLICY_OP_CODING        0x0400
-#define POLICY_OP_MULTIPATH     0x0800
-#define POLICY_OP_MASK          0x0FF0
+// link select options
+#define POLICY_LS_WEIGHTED      0x1
+#define POLICY_LS_MULTIPATH     0x2
+#define POLICY_LS_DUPLICATE     0x3
+#define POLICY_LS_FORCED        0x4
 
 
 
@@ -50,20 +38,17 @@ enum policy_type {
 };
 
 typedef struct{
-    uint32_t action;
-    uint32_t direction;
-    uint16_t table;
-    int32_t type; //algo type
-    uint16_t flags;
+    uint8_t action;
+    uint8_t link_select;
+    char preferred_link[IFNAMSIZ];
+    double rate_limit;
+
     // flow policy
+    uint8_t direction;
     struct flow_tuple ft;
     uint32_t local_netmask;
     uint32_t remote_netmask;
 
-    char dev_name[IFNAMSIZ];
-    double rate_limit;
-
-    char alg_name[MAX_ALG_NAME_LEN];
 }policy_entry;
 
 int init_policy_table();

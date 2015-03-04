@@ -25,6 +25,7 @@
 #include <unistd.h>
 
 #include "configuration.h"
+#include "constants.h"
 #include "debug.h"
 #include "interface.h"
 #include "packet.h"
@@ -252,8 +253,8 @@ void add_tunnel_header(uint8_t type, struct packet *pkt,
         tun_hdr.path_ack = htonl(update_ife->remote_seq);
 
         struct timeval tv;
-        gettimeofday(&tv,NULL);
-        tun_hdr.local_ts = htonl(tv.tv_sec * USEC_PER_SEC + tv.tv_usec);
+        get_monotonic_time(&tv);
+        tun_hdr.local_ts = htonl(tv.tv_sec * USECS_PER_SEC + tv.tv_usec);
     }
 
     if(remote_ts != NULL)

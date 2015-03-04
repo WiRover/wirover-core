@@ -47,13 +47,13 @@ int select_dst_interface(struct flow_entry *fe, struct interface **dst, int size
             return 0;
         }
     }
-    else if ((fe->egress.action & POLICY_ACT_MASK) == POLICY_ACT_ENCAP)
+    else if (fe->egress.action == POLICY_ACT_ENCAP)
     {
-        if (fe->egress.action & POLICY_OP_MULTIPATH) {
+        if (fe->egress.link_select == POLICY_LS_MULTIPATH) {
             dst[0] = select_mp_interface(gw->head_interface);
             return 1;
         }
-        if((fe->egress.action & POLICY_OP_MASK) == POLICY_OP_DUPLICATE)
+        if(fe->egress.link_select == POLICY_LS_DUPLICATE)
         {
             return select_all_interfaces(gw->head_interface, dst, size);
         }
