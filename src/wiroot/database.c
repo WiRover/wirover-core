@@ -215,7 +215,7 @@ int db_get_pub_key(int remote_id, char *pub_key)
 
     MYSQL_ROW row = mysql_fetch_row(qr);
     if(row) {
-        memcpy(pub_key, row[0], strlen(row[0]));
+        memcpy(pub_key, row[0], strlen(row[0]) + 1);
     }
 
     mysql_free_result(qr);
