@@ -368,7 +368,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     // so that the remote link won't stall
     if(pb_add_seq_num(gw->rec_seq_buffer, h_global_seq) == DUPLICATE) {
         struct packet * ack = alloc_packet(sizeof(struct tunhdr), 0);
-        send_encap_packet_ife(TUNTYPE_ACK, ack, ife, remote_ife, &h_local_ts, 0);
+        send_encap_packet_ife(TUNTYPE_ACK | TUNTYPE_DUPLICATE, ack, ife, remote_ife, &h_local_ts, 0);
         return SUCCESS;
     }
 
@@ -394,7 +394,6 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     update_ife->remote_seq = h_link_seq;
 
     update_burst(&update_ife->burst, recv_ts, h_local_ts, h_link_seq, pkt->data_size);
-
     //An ack is an empty packet meant only to update our interface's rx_time and packets_since_ack
     if((n_tun_hdr.type == TUNTYPE_ACK)) {
         free_packet(pkt);

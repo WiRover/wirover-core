@@ -22,6 +22,7 @@
 
 #define TUNTYPE_CONTROL_MASK    0xF0
 #define TUNTYPE_FLOW_INFO       0x10
+#define TUNTYPE_DUPLICATE       0x20
 
 #define TUNERROR_BAD_NODE   0x01
 #define TUNERROR_BAD_LINK   0x02
