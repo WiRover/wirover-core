@@ -49,13 +49,15 @@ int safe_usleep(long usec)
     return rtn;
 }
 
-long get_elapsed_us(struct timeval *start)
+int64_t get_elapsed_us(struct timeval *start)
 {
     struct timeval stop;
     get_monotonic_time(&stop);
 
-    long output = (long)(stop.tv_sec - start->tv_sec) * (long)USECS_PER_SEC +
-            (long)(stop.tv_usec - start->tv_usec);
+    int64_t output = (int64_t)(stop.tv_sec - start->tv_sec) * (int64_t)USECS_PER_SEC +
+            (int64_t)(stop.tv_usec - start->tv_usec);
+    if(output < 0)
+        DEBUG_MSG("Elapsed time < 0 %d %ld - %d %ld = %ld", stop.tv_sec, stop.tv_usec, start->tv_sec, start->tv_usec, output);
     return output;
 }
 

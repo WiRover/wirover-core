@@ -148,7 +148,7 @@ static int should_send_ping(struct interface *ife)
 {
     if(ife->state == DEAD)
         return 0;
-    long elapsed_us = get_elapsed_us(&ife->last_ping_time);
+    int64_t elapsed_us = get_elapsed_us(&ife->last_ping_time);
     if(elapsed_us > ife->ping_interval * USECS_PER_SEC)
         return 1;
 
@@ -202,7 +202,7 @@ void* ping_thread_func(void* arg)
 
 
 
-        long time_diff = timeval_diff(&now, &last_ping_time);
+        int64_t time_diff = timeval_diff(&now, &last_ping_time);
         if(time_diff >= ping_spacing) {
             obtain_read_lock(&interface_list_lock);
             struct interface *ife = find_interface_at_pos(
@@ -278,7 +278,7 @@ int handle_incoming_ping(struct sockaddr_storage *from_addr, struct timeval recv
 
     uint32_t send_ts = ntohl(pkt->sender_ts);
     uint32_t recv_ts = timeval_to_usec(&recv_time);
-    long diff = (long)recv_ts - (long)send_ts;
+    uint32_t diff = (uint32_t)recv_ts - (uint32_t)send_ts;
 
     // If the ping response is older than the ping interval we ignore it.
     if(diff < (get_ping_interval() * USECS_PER_SEC)) {

@@ -1,6 +1,8 @@
 #ifndef TIMING_H
 #define TIMING_H
 
+#include <stdint.h>
+
 struct timeval;
 
 long timeval_diff(const struct timeval *lhs, const struct timeval *rhs);
@@ -9,7 +11,7 @@ void set_timeval_us(struct timeval *dest, long usec);
 void set_timeval_usec(long usec, struct timeval *dest);
 int safe_usleep(long usec);
 
-long get_elapsed_us(struct timeval *start);
+int64_t get_elapsed_us(struct timeval *start);
 int get_monotonic_time(struct timeval *dst);
 
 int exp_inc(int curr, int min, int max);

@@ -40,8 +40,8 @@ void destroy_cbuffer(struct circular_buffer *cb)
  */
 int cbuffer_rotate(struct circular_buffer *cb)
 {
-    long diff = get_elapsed_us(&cb->start_time) / cb->bin_size;
-    long bin_diff = diff - cb->current_bin_offset;
+    int64_t diff = get_elapsed_us(&cb->start_time) / cb->bin_size;
+    int64_t bin_diff = diff - cb->current_bin_offset;
     if(bin_diff < 0) {
         DEBUG_MSG("cb error, offset less than 0");
         destroy_cbuffer(cb);
