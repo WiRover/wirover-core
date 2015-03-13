@@ -420,7 +420,7 @@ static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
         stats->downlink_bw = 0;
     }
 
-    DEBUG_MSG("bytes: %d, time: %ld, downlink_bw: %f Mbps, uplink_bw: %f Mbps",
+    DEBUG_MSG("bytes: %d, time: %lld, downlink_bw: %f Mbps, uplink_bw: %f Mbps",
             bytes_recvd, elapsed_us, stats->downlink_bw, stats->uplink_bw);
 
     return bytes_recvd;
