@@ -440,6 +440,10 @@ int handle_nat_packet(struct packet * pkt, struct interface * ife)
     if(ip_hdr->protocol == 6) { 
         compute_tcp_checksum(&pkt->data[sizeof(struct iphdr)], pkt->data_size - sizeof(struct iphdr), ip_hdr->saddr, ip_hdr->daddr);
     }
+    if(ip_hdr->protocol == 17)
+    {
+        ((struct udphdr *)&pkt->data[sizeof(struct iphdr)])->check = 0;
+    }
 
     return handle_ife_packet(pkt, ife, 1);
 }
