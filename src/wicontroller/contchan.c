@@ -340,5 +340,6 @@ static int process_startup(int sockfd, const char *packet, unsigned int pkt_len,
     if(!gw)
         return FAILURE;
 
+    DEBUG_MSG("Received startup notification for remote_node %hhu", gw->unique_id);
     return send_response(sockfd, bw_port);
 }

@@ -343,7 +343,11 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
             DEBUG_MSG("Lease renewal rejected");
             return -1;
         }
-
+        int notif_result = send_startup_notification();
+        if(notif_result == FAILURE) {
+            DEBUG_MSG("Lease renewed but controller didn't respond to startup notification");
+            return FAILURE;
+        }
         if(ipaddr_cmp(&new_lease->priv_ip, &old_lease->priv_ip) != 0 ||
             new_lease->priv_subnet_size != old_lease->priv_subnet_size) {
             DEBUG_MSG("Obtained lease of %s/%hhu",
