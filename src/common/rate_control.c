@@ -14,7 +14,8 @@
 int rc_init(struct rate_control *rc, int window_size, long bin_size, double capacity)
 {
     rc->capacity = capacity;
-
+    rc->packet_queue_head = 0;
+    rc->packet_queue_tail = 0;
     if(cbuffer_init(&rc->cbuffer, window_size, bin_size) != SUCCESS)
         return -1;
 
