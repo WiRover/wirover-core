@@ -139,18 +139,27 @@ void update_interface_public_address(struct interface *ife, const struct sockadd
     }
 }
 
-static int configure_socket(int sock_type, int proto, const char * ife_name, int bind_port, int reuse) {
+static int configure_socket(int sock_type, int proto, const char * ife_name, int bind_port, int reuse, int ip_hdrincl) {
     int sockfd;
     if((sockfd = socket(AF_INET, sock_type, proto)) < 0) 
     {
         ERROR_MSG("creating socket failed");
         return FAILURE;
     }
+    int on = 1;
     if(reuse) {
-        int on = 1;
         if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0 )
         {
             ERROR_MSG("setsockopt SO_REUSEADDR failed");
+            close(sockfd);
+            return FAILURE;
+        }
+    }
+    if(ip_hdrincl)
+    {
+        if(setsockopt(sockfd, IPPROTO_IP, IP_HDRINCL, &on, sizeof(on)) < 0 )
+        {
+            ERROR_MSG("setsockopt IP_HDRINCL failed");
             close(sockfd);
             return FAILURE;
         }
@@ -182,16 +191,16 @@ static int configure_socket(int sock_type, int proto, const char * ife_name, int
 
 int interface_bind(struct interface *ife, int bind_port)
 {
-    ife->sockfd = configure_socket(SOCK_DGRAM, 0, ife->name, bind_port, 1);
+    ife->sockfd = configure_socket(SOCK_DGRAM, 0, ife->name, bind_port, 1, 0);
     if(ife->sockfd == FAILURE) { return FAILURE; }
 
-    ife->raw_icmp_sockfd = configure_socket(SOCK_RAW, IPPROTO_ICMP, ife->name, 0, 0);
+    ife->raw_icmp_sockfd = configure_socket(SOCK_RAW, IPPROTO_ICMP, ife->name, 0, 0, 1);
     if(ife->raw_icmp_sockfd == FAILURE) { return FAILURE; }
     
-    ife->raw_udp_sockfd = configure_socket(SOCK_RAW, IPPROTO_UDP, ife->name, 0, 0);
+    ife->raw_udp_sockfd = configure_socket(SOCK_RAW, IPPROTO_UDP, ife->name, 0, 0, 1);
     if(ife->raw_udp_sockfd == FAILURE) { return FAILURE; }
 
-    ife->raw_tcp_sockfd = configure_socket(SOCK_RAW, IPPROTO_TCP, ife->name, 0, 0);
+    ife->raw_tcp_sockfd = configure_socket(SOCK_RAW, IPPROTO_TCP, ife->name, 0, 0, 1);
     if(ife->raw_tcp_sockfd == FAILURE) { return FAILURE; }
 
 #ifdef GATEWAY

@@ -490,6 +490,11 @@ int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_en
     // case IP): http://www.mjmwired.net/kernel/Documentation/networking/tuntap.txt
 
     struct iphdr *ip_hdr = (struct iphdr *)(pkt->data);
+    if(fe->remap_address != 0)
+    {
+        ip_hdr->daddr = fe->remap_address;
+        compute_ip_checksum(ip_hdr);
+    }
     unsigned short tun_info[2];
     tun_info[0] = 0; //flags
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
@@ -527,6 +532,17 @@ int handleOutboundPacket(struct tunnel * tun)
         //Ignore the tuntap header
         packet_pull(pkt, TUNTAP_OFFSET);
 
+#ifdef GATEWAY
+        uint32_t dst = ((struct iphdr*)pkt->data)->daddr;
+        if((dst & tun->n_netmask) == (tun->n_private_ip & tun->n_netmask))
+        {
+            struct flow_tuple ft;
+            fill_flow_tuple(pkt->data, &ft, 1);
+            struct flow_entry *fe = get_flow_entry(&ft);
+            return handle_flow_packet(pkt, fe, 1);
+        }
+#endif
+
         obtain_read_lock(&interface_list_lock);
         int output = send_packet(pkt, 1, 1);
         release_read_lock(&interface_list_lock);
@@ -542,6 +558,13 @@ int handleOutboundPacket(struct tunnel * tun)
 
 int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueue)
 {
+    int remap_address = 0;
+#ifdef GATEWAY
+        remap_address = ((struct iphdr*)pkt->data)->saddr;
+        ((struct iphdr*)pkt->data)->saddr &= ~tun->n_netmask;
+        ((struct iphdr*)pkt->data)->saddr |= (tun->n_netmask & tun->n_private_ip);
+        compute_ip_checksum(((struct iphdr*)pkt->data));
+#endif
     struct flow_tuple ft;
 
     // Policy and Flow table
@@ -549,7 +572,7 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
 
     struct flow_entry *fe = get_flow_entry(&ft);
     if(fe == NULL) {
-        fe = add_entry(&ft, 1);
+        fe = add_entry(&ft, 1, remap_address);
     }
 
     update_flow_entry(fe);
@@ -702,11 +725,11 @@ int send_encap_packet_dst(uint8_t type, struct packet *pkt, struct interface *sr
 
 int send_nat_packet(struct packet *pkt, struct interface *src_ife) {
     int sockfd = 0;
-    int proto = ((struct iphdr*)pkt->data)->protocol;
-    uint32_t dst_ip = ((struct iphdr*)pkt->data)->daddr;
-
-    //Don't send the IP header, the kernel will take care of this
-    packet_pull(pkt, sizeof(struct iphdr));
+    struct iphdr * ip_hdr = ((struct iphdr*)pkt->data);
+    int proto = ip_hdr->protocol;
+    uint32_t dst_ip = ip_hdr->daddr;
+    if(ip_hdr->saddr == tun->n_private_ip)
+        ip_hdr->saddr = 0;
 
     if(proto == 1)
         sockfd = src_ife->raw_icmp_sockfd;

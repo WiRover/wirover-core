@@ -45,6 +45,7 @@ struct tunhdr {
 struct tunnel {
     char name[IFNAMSIZ];
     __be32 n_private_ip;
+    __be32 n_netmask;
 
     int  localPort;
     int  remotePort;

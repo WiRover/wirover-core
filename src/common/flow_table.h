@@ -37,6 +37,7 @@ struct flow_entry {
     uint8_t requires_flow_info;
     struct flow_entry_data egress;
     struct flow_entry_data ingress;
+    uint32_t remap_address;
 };
 
 struct flow_tuple {
@@ -58,7 +59,7 @@ struct tunhdr_flow_info {
 
 int fill_flow_tuple(char *packet, struct flow_tuple* ft, unsigned short ingress);
 
-struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner);
+struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner, uint32_t remap_address);
 struct flow_entry *add_entry_info(struct packet *pkt, int remote_node_id);
 struct flow_entry *get_flow_entry(struct flow_tuple *);
 struct flow_entry *get_flow_table();
