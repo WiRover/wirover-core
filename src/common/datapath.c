@@ -444,6 +444,7 @@ int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_en
     {
         ip_hdr->daddr = fe->remap_address;
         compute_ip_checksum(ip_hdr);
+        compute_transport_checksum(pkt);
     }
     unsigned short tun_info[2];
     tun_info[0] = 0; //flags
@@ -688,20 +689,9 @@ int send_encap_packet_dst(uint8_t type, struct packet *pkt, struct interface *sr
 
 int send_nat_packet(struct packet *pkt, struct interface *src_ife) {
     int sockfd = src_ife->raw_sockfd;
-    struct iphdr * ip_hdr = ((struct iphdr*)pkt->data);
-    int proto = ip_hdr->protocol;
-    uint32_t dst_ip = ip_hdr->daddr;
+    compute_transport_checksum(pkt);
+    uint32_t dst_ip = ((struct iphdr*)pkt->data)->daddr;
 
-    if(proto == 6) {
-        if((pkt->data[13] & 4) == 4) pkt->data[13] = 6;
-        packet_pull(pkt, sizeof(struct iphdr));
-        compute_tcp_checksum(pkt->data, pkt->data_size, ip_hdr->saddr, dst_ip);
-        packet_push(pkt, sizeof(struct iphdr));
-
-    }
-    else if(proto == 17) {
-        ((struct udphdr *)pkt->data)->check = 0;
-    }
     //Determine the destination
     struct sockaddr_in dst;
     memset(&dst, 0, sizeof(struct sockaddr_in));
