@@ -194,14 +194,8 @@ int interface_bind(struct interface *ife, int bind_port)
     ife->sockfd = configure_socket(SOCK_DGRAM, 0, ife->name, bind_port, 1, 0);
     if(ife->sockfd == FAILURE) { return FAILURE; }
 
-    ife->raw_icmp_sockfd = configure_socket(SOCK_RAW, IPPROTO_ICMP, ife->name, 0, 0, 1);
-    if(ife->raw_icmp_sockfd == FAILURE) { return FAILURE; }
-    
-    ife->raw_udp_sockfd = configure_socket(SOCK_RAW, IPPROTO_UDP, ife->name, 0, 0, 1);
-    if(ife->raw_udp_sockfd == FAILURE) { return FAILURE; }
-
-    ife->raw_tcp_sockfd = configure_socket(SOCK_RAW, IPPROTO_TCP, ife->name, 0, 0, 1);
-    if(ife->raw_tcp_sockfd == FAILURE) { return FAILURE; }
+    ife->raw_sockfd = configure_socket(SOCK_RAW, IPPROTO_RAW, ife->name, 0, 0, 1);
+    if(ife->raw_sockfd == FAILURE) { return FAILURE; }
 
 #ifdef GATEWAY
 	if (drop_tcp_rst(ife->name) == FAILURE) {

@@ -32,9 +32,8 @@
     #define SIOCGSTAMP 0x8906
 #endif
 
-int handle_packet(struct interface * ife, int sockfd, int is_nat);
+int handle_packet(struct interface * ife, int sockfd);
 int handle_ife_packet(struct packet *pkt, struct interface * ife, int is_nat);
-int handle_nat_packet(struct packet *pkt, struct interface *ife);
 int handle_encap_packet(struct packet *pkt, struct interface *ife, struct sockaddr_storage *from);
 // Sends a packet over the tunnel specified, if a flow entry or interface
 // is included, the packet may be queued if either are over their rate limit.
@@ -125,15 +124,6 @@ int handlePackets()
             if(curr_ife->sockfd > 0){
                 FD_SET(curr_ife->sockfd, &read_set);
             }
-            if(curr_ife->raw_icmp_sockfd > 0){
-                FD_SET(curr_ife->raw_icmp_sockfd, &read_set);
-            }
-            if(curr_ife->raw_tcp_sockfd > 0){
-                FD_SET(curr_ife->raw_tcp_sockfd, &read_set);
-            }
-            if(curr_ife->raw_udp_sockfd > 0){
-                FD_SET(curr_ife->raw_udp_sockfd, &read_set);
-            }
             curr_ife = curr_ife->next;
         }
         release_read_lock(&interface_list_lock);
@@ -155,16 +145,7 @@ int handlePackets()
         curr_ife = interface_list;
         while (curr_ife) {
             if( FD_ISSET(curr_ife->sockfd, &read_set) ) {
-                handle_packet(curr_ife, curr_ife->sockfd, 0);
-            }
-            if( FD_ISSET(curr_ife->raw_icmp_sockfd, &read_set) ) {
-                handle_packet(curr_ife, curr_ife->raw_icmp_sockfd, 1);
-            }
-            if( FD_ISSET(curr_ife->raw_tcp_sockfd, &read_set) ) {
-                handle_packet(curr_ife, curr_ife->raw_tcp_sockfd, 1);
-            }
-            if( FD_ISSET(curr_ife->raw_udp_sockfd, &read_set) ) {
-                handle_packet(curr_ife, curr_ife->raw_udp_sockfd, 1);
+                handle_packet(curr_ife, curr_ife->sockfd);
             }
             curr_ife = curr_ife->next;
         }
@@ -180,7 +161,7 @@ int handlePackets()
     return SUCCESS;
 } // End function int handlePackets()
 
-int handle_packet(struct interface * ife, int sockfd, int is_nat)
+int handle_packet(struct interface * ife, int sockfd)
 {
     int     received_bytes;
     struct packet * pkt = alloc_packet(0, outbound_mtu);
@@ -202,17 +183,11 @@ int handle_packet(struct interface * ife, int sockfd, int is_nat)
     get_recv_timestamp(sockfd, &arrival_time);
     pkt->created = arrival_time;
 
-    if(is_nat)
-    {
-        return handle_nat_packet(pkt, ife);
-    }
-    else
-    {
-        ife->rx_time = arrival_time;
-        ife->packets_since_ack = 0;
-        change_interface_state(ife, ACTIVE);
-        return handle_encap_packet(pkt, ife, &from);
-    }
+    ife->rx_time = arrival_time;
+    ife->packets_since_ack = 0;
+    change_interface_state(ife, ACTIVE);
+    return handle_encap_packet(pkt, ife, &from);
+
     return FAILURE;
 }
 
@@ -423,31 +398,6 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     
 } // End function int handleInboundPacket()
 
-int handle_nat_packet(struct packet * pkt, struct interface * ife)
-{
-    struct iphdr * ip_hdr = (struct iphdr *)pkt->data;
-    ip_hdr->daddr = tun->n_private_ip;
-
-    struct flow_tuple ft;
-    fill_flow_tuple(pkt->data, &ft, 1);
-
-    struct flow_entry *fe = get_flow_entry(&ft);
-    if(fe == NULL || fe->ingress.action != POLICY_ACT_NAT) {
-        free_packet(pkt);
-        return SUCCESS;
-    }
-    compute_ip_checksum(ip_hdr);
-    if(ip_hdr->protocol == 6) { 
-        compute_tcp_checksum(&pkt->data[sizeof(struct iphdr)], pkt->data_size - sizeof(struct iphdr), ip_hdr->saddr, ip_hdr->daddr);
-    }
-    if(ip_hdr->protocol == 17)
-    {
-        ((struct udphdr *)&pkt->data[sizeof(struct iphdr)])->check = 0;
-    }
-
-    return handle_ife_packet(pkt, ife, 1);
-}
-
 int handle_ife_packet(struct packet *pkt, struct interface *ife, int allow_enqueue)
 {
     struct flow_tuple ft;
@@ -539,7 +489,13 @@ int handleOutboundPacket(struct tunnel * tun)
             struct flow_tuple ft;
             fill_flow_tuple(pkt->data, &ft, 1);
             struct flow_entry *fe = get_flow_entry(&ft);
-            return handle_flow_packet(pkt, fe, 1);
+            if(fe != NULL)
+                return handle_flow_packet(pkt, fe, 1);
+            else
+            {
+                free_packet(pkt);
+                return SUCCESS;
+            }
         }
 #endif
 
@@ -560,10 +516,18 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
 {
     int remap_address = 0;
 #ifdef GATEWAY
-        remap_address = ((struct iphdr*)pkt->data)->saddr;
-        ((struct iphdr*)pkt->data)->saddr &= ~tun->n_netmask;
-        ((struct iphdr*)pkt->data)->saddr |= (tun->n_netmask & tun->n_private_ip);
-        compute_ip_checksum(((struct iphdr*)pkt->data));
+    struct iphdr * ip_hdr = (struct iphdr*)pkt->data;
+    remap_address = ip_hdr->saddr;
+    if(ip_hdr->saddr == tun->n_private_ip)
+    {
+        ip_hdr->saddr |= ~tun->n_netmask ^ 0x01000000;
+    }
+    else
+    {
+        ip_hdr->saddr &= ~tun->n_netmask;
+        ip_hdr->saddr |= (tun->n_netmask & tun->n_private_ip);
+    }
+    compute_ip_checksum(ip_hdr);
 #endif
     struct flow_tuple ft;
 
@@ -582,7 +546,6 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
         free_packet(pkt);
         return SUCCESS;
     }
-
 
     //Packet queuing if a flow rate limit is violated
     struct rate_control *rate_control = fe->egress.rate_control;
@@ -724,23 +687,19 @@ int send_encap_packet_dst(uint8_t type, struct packet *pkt, struct interface *sr
 }
 
 int send_nat_packet(struct packet *pkt, struct interface *src_ife) {
-    int sockfd = 0;
+    int sockfd = src_ife->raw_sockfd;
     struct iphdr * ip_hdr = ((struct iphdr*)pkt->data);
     int proto = ip_hdr->protocol;
     uint32_t dst_ip = ip_hdr->daddr;
-    if(ip_hdr->saddr == tun->n_private_ip)
-        ip_hdr->saddr = 0;
 
-    if(proto == 1)
-        sockfd = src_ife->raw_icmp_sockfd;
-    else if(proto == 6) {
-        sockfd = src_ife->raw_tcp_sockfd;
+    if(proto == 6) {
         if((pkt->data[13] & 4) == 4) pkt->data[13] = 6;
-        compute_tcp_checksum(pkt->data, pkt->data_size, src_ife->public_ip.s_addr, dst_ip);
+        packet_pull(pkt, sizeof(struct iphdr));
+        compute_tcp_checksum(pkt->data, pkt->data_size, ip_hdr->saddr, dst_ip);
+        packet_push(pkt, sizeof(struct iphdr));
 
     }
     else if(proto == 17) {
-        sockfd = src_ife->raw_udp_sockfd;
         ((struct udphdr *)pkt->data)->check = 0;
     }
     //Determine the destination

@@ -74,9 +74,7 @@ struct interface {
     double              avg_downlink_bw;
     double              avg_uplink_bw;
     int                 sockfd;
-    int                 raw_tcp_sockfd;
-    int                 raw_udp_sockfd;
-    int                 raw_icmp_sockfd;
+    int                 raw_sockfd;
 
 
     // default gateway for routing if needed
