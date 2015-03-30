@@ -53,6 +53,11 @@ static FILE *               packet_log_file;
 static int                  packet_log_enabled = 0;
 static char *               send_buffer;
 
+uint32_t local_remap_address()
+{
+    return tun->n_private_ip | (~tun->n_netmask ^ 0x01000000);
+}
+
 int start_data_thread(struct tunnel *tun_in)
 {
     //The mtu in the config file accounts for the tunhdr, but we have that extra space in here
@@ -438,7 +443,7 @@ int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_en
     // In host order it would be 0x00000800 the first two bytes (0000) are
     // the flags field, the next two byte (0800 are the protocol field, in this
     // case IP): http://www.mjmwired.net/kernel/Documentation/networking/tuntap.txt
-
+#ifdef GATEWAY
     struct iphdr *ip_hdr = (struct iphdr *)(pkt->data);
     if(fe->remap_address != 0)
     {
@@ -446,6 +451,7 @@ int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_en
         compute_ip_checksum(ip_hdr);
         compute_transport_checksum(pkt);
     }
+#endif
     unsigned short tun_info[2];
     tun_info[0] = 0; //flags
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
@@ -487,6 +493,8 @@ int handleOutboundPacket(struct tunnel * tun)
         uint32_t dst = ((struct iphdr*)pkt->data)->daddr;
         if((dst & tun->n_netmask) == (tun->n_private_ip & tun->n_netmask))
         {
+            if(dst == local_remap_address())
+                ((struct iphdr*)pkt->data)->daddr = tun->n_private_ip;
             struct flow_tuple ft;
             fill_flow_tuple(pkt->data, &ft, 1);
             struct flow_entry *fe = get_flow_entry(&ft);
@@ -519,16 +527,10 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
 #ifdef GATEWAY
     struct iphdr * ip_hdr = (struct iphdr*)pkt->data;
     remap_address = ip_hdr->saddr;
-    if(ip_hdr->saddr == tun->n_private_ip)
-    {
-        ip_hdr->saddr |= ~tun->n_netmask ^ 0x01000000;
-    }
-    else
-    {
-        ip_hdr->saddr &= ~tun->n_netmask;
-        ip_hdr->saddr |= (tun->n_netmask & tun->n_private_ip);
-    }
+    ip_hdr->saddr &= ~tun->n_netmask;
+    ip_hdr->saddr |= (tun->n_netmask & tun->n_private_ip);
     compute_ip_checksum(ip_hdr);
+    compute_transport_checksum(pkt);
 #endif
     struct flow_tuple ft;
 
@@ -689,8 +691,15 @@ int send_encap_packet_dst(uint8_t type, struct packet *pkt, struct interface *sr
 
 int send_nat_packet(struct packet *pkt, struct interface *src_ife) {
     int sockfd = src_ife->raw_sockfd;
+    struct iphdr * ip_hdr = ((struct iphdr*)pkt->data);
+    uint32_t dst_ip = ip_hdr->daddr;
+    uint32_t *src_ip = &ip_hdr->saddr;
+    if(*src_ip == tun->n_private_ip)
+    {
+        *src_ip = local_remap_address();
+        compute_ip_checksum(ip_hdr);
+    }
     compute_transport_checksum(pkt);
-    uint32_t dst_ip = ((struct iphdr*)pkt->data)->daddr;
 
     //Determine the destination
     struct sockaddr_in dst;
