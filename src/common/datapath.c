@@ -443,8 +443,8 @@ int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_en
     // In host order it would be 0x00000800 the first two bytes (0000) are
     // the flags field, the next two byte (0800 are the protocol field, in this
     // case IP): http://www.mjmwired.net/kernel/Documentation/networking/tuntap.txt
-#ifdef GATEWAY
     struct iphdr *ip_hdr = (struct iphdr *)(pkt->data);
+#ifdef GATEWAY
     if(fe->remap_address != 0)
     {
         ip_hdr->daddr = fe->remap_address;
