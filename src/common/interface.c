@@ -198,8 +198,8 @@ int interface_bind(struct interface *ife, int bind_port)
     if(ife->raw_sockfd == FAILURE) { return FAILURE; }
 
 #ifdef GATEWAY
-	if (drop_tcp_rst(ife->name) == FAILURE) {
-		DEBUG_MSG("Couldn't drop RST packets for device");
+	if (masquerade(ife->name) == FAILURE) {
+		DEBUG_MSG("Couldn't add MASQUERADE rule for device");
 	}
 #endif
     return SUCCESS;
@@ -215,7 +215,7 @@ void free_interface(struct interface* ife)
 {
     if(ife) {
 #ifdef GATEWAY
-        remove_drop_tcp_rst(ife->name);
+        remove_masquerade(ife->name);
 #endif
         free(ife);
     }

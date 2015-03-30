@@ -45,7 +45,6 @@ void compute_transport_checksum(struct packet *pkt)
     uint32_t dst_ip = ip_hdr->daddr;
 
     if(proto == 6) {
-        if((pkt->data[13] & 4) == 4) pkt->data[13] = 6;
         packet_pull(pkt, sizeof(struct iphdr));
         compute_tcp_checksum(pkt->data, pkt->data_size, ip_hdr->saddr, dst_ip);
         packet_push(pkt, sizeof(struct iphdr));

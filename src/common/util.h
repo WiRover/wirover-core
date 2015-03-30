@@ -8,8 +8,8 @@ int drop_tcp_rst(char *device);
 int remove_drop_tcp_rst(char *device);
 int tcp_mtu_clamp();
 int remove_tcp_mtu_clamp();
-int masquerade();
-int remove_masquerade();
+int masquerade(char *device);
+int remove_masquerade(char *device);
 
 int read_public_key(char *buffer, int size);
 int authorize_public_key(char *pub_key, int size);
