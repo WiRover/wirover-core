@@ -52,6 +52,7 @@ static unsigned int         outbound_mtu = 0;
 static FILE *               packet_log_file;
 static int                  packet_log_enabled = 0;
 static char *               send_buffer;
+static uint32_t             local_remap_subnet;
 
 uint32_t local_remap_address()
 {
@@ -65,6 +66,7 @@ int start_data_thread(struct tunnel *tun_in)
     outbound_mtu =  1500;
     send_buffer = (char *)malloc(sizeof(char)*1500);
     tun = tun_in;
+    inet_pton(AF_INET, "192.168.0.0", &local_remap_subnet);
     if(get_packet_log_enabled()){
         packet_log_file = fopen(get_packet_log_path(), "a");
         if(packet_log_file == NULL) {
@@ -498,13 +500,11 @@ int handleOutboundPacket(struct tunnel * tun)
             struct flow_tuple ft;
             fill_flow_tuple(pkt->data, &ft, 1);
             struct flow_entry *fe = get_flow_entry(&ft);
-            if(fe != NULL)
-                return handle_flow_packet(pkt, fe, 1);
-            else
+            if(fe == NULL)
             {
-                free_packet(pkt);
-                return SUCCESS;
+                fe = add_entry(&ft, 1, (local_remap_subnet & tun->n_netmask) | (dst & ~tun->n_netmask));
             }
+            return handle_flow_packet(pkt, fe, 1);
         }
 #endif
 
