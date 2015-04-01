@@ -22,6 +22,7 @@
 #include "packet_buffer.h"
 #include "timing.h"
 #ifdef GATEWAY
+#include "bandwidth.h"
 #include "contchan.h"
 #include "util.h"
 #endif
@@ -83,6 +84,7 @@ int change_interface_state(struct interface *ife, enum if_state state)
     if(ife->state == state)
     return 0;
     DEBUG_MSG("Changing interface %s state from %d to %d", ife->name, ife->state, state);
+    int prev_state = ife->state;
     ife->state = state;
     if(state == INACTIVE)
     {
@@ -95,6 +97,8 @@ int change_interface_state(struct interface *ife, enum if_state state)
     }
 #ifdef GATEWAY
     send_notification(1);
+    if(prev_state == INIT_INACTIVE)
+        forceBandwidthTest();
 #endif
     return 0;
 }
