@@ -268,7 +268,7 @@ static void handle_gateway_config(struct client* client, const char* packet, int
         response.cinfo.unique_id = lease->controller->unique_id;
 
         copy_ipaddr(&lease->ip, &response.priv_ip);
-        response.priv_subnet_size = get_gateway_subnet_size();
+        response.priv_subnet_size = get_node_subnet_size();
         response.lease_time = htonl(lease->end - lease->start);
 
         const unsigned int response_len = MIN_RESPONSE_LEN + sizeof(struct controller_info);
@@ -389,7 +389,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
             sockaddr_to_ipaddr((const struct sockaddr *)&client->addr, &perceived_ip);
             ipaddr_to_ipv4(&perceived_ip, &ipv4);
             ipaddr_to_ipv4(&lease->ip, &priv_ipv4);
-            uint32_t priv_netmask = htonl(slash_to_netmask(32 - get_gateway_subnet_size()));
+            uint32_t priv_netmask = htonl(slash_to_netmask(32 - get_node_subnet_size()));
             //Don't add a route if the root server and controller are colocated
             if(ipv4 != htonl(0x7F000001)) {
                 if(add_route(priv_ipv4 & priv_netmask, ipv4, priv_netmask, 0, 0) < 0)
@@ -405,7 +405,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
                 p_ip, ntohs(ctrlreg->data_port), ntohs(ctrlreg->control_port));
 
             copy_ipaddr(&lease->ip, &response->priv_ip);
-            response->priv_subnet_size = get_gateway_subnet_size();
+            response->priv_subnet_size = get_node_subnet_size();
             response->lease_time = htonl(lease->end - lease->start);
         }
 

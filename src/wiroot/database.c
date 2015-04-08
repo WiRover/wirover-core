@@ -162,7 +162,7 @@ int db_grant_privilege(const char *node_id, int priv, const char *pub_key)
             priv_str, node_id_esc, pub_key, priv_str, pub_key);
     free(node_id_esc);
 
-    if(result <= 0)
+    if(result < 0)
         return -1;
 
     id = mysql_insert_id(database);
