@@ -54,7 +54,7 @@ struct tunnel *getTunnel()
  *      Failure: -1
  *
  */
-static int tunnelAlloc(struct tunnel *tun, uint32_t netmask, int mtu)
+static int tunnelAlloc(struct tunnel *tun, int mtu)
 {
     struct sockaddr_in *addr = NULL;
     struct ifreq ifr;
@@ -121,7 +121,7 @@ static int tunnelAlloc(struct tunnel *tun, uint32_t netmask, int mtu)
 
     ifr.ifr_netmask.sa_family = AF_INET;
     struct in_addr *netmask_dst = &((struct sockaddr_in *)&ifr.ifr_netmask)->sin_addr;
-    netmask_dst->s_addr = netmask;
+    netmask_dst->s_addr = tun->n_netmask;
     if( (err = ioctl(sock, SIOCSIFNETMASK, &ifr)) < 0) 
     {
         ERROR_MSG("ioctl(SIOCSIFNETMASK) set netmask failed");
@@ -205,6 +205,7 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
     memset(&tun->name, 0, sizeof(tun->name));
 
     tun->n_private_ip   = ip;
+    tun->n_netmask      = netmask;
     tun->remotePort     = get_data_port();
     tun->localPort      = get_data_port();
     //TODO: Fill this in from root server
@@ -216,7 +217,7 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
 
     //tun = (struct tunnel *)malloc(sizeof(struct tunnel));
 
-    if((tun->tunnelfd = tunnelAlloc(tun, netmask, mtu)) < 0) 
+    if((tun->tunnelfd = tunnelAlloc(tun, mtu)) < 0)
     {
         ERROR_MSG("tunnelAlloc failed");
         return FAILURE;

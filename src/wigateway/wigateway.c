@@ -212,7 +212,7 @@ int main(int argc, char* argv[])
             }
 
             tcp_mtu_clamp();
-            masquerade("tun0");
+            //masquerade("tun0");
 
             if(start_data_thread(getTunnel()) == FAILURE) {
                 DEBUG_MSG("Failed to start data thread");

@@ -30,8 +30,8 @@ int read_lease_config(const config_t* config);
 const struct lease* grant_gw_lease(int unique_id, double latitude, double longitude);
 const struct lease* grant_controller_lease(int unique_id);
 void remove_stale_leases();
-uint8_t get_gateway_subnet_size();
-uint8_t get_controller_subnet_size();
+uint8_t get_client_subnet_size();
+uint8_t get_node_subnet_size();
 
 #endif //_LEASE_H_
 

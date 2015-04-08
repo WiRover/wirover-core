@@ -32,9 +32,8 @@
     #define SIOCGSTAMP 0x8906
 #endif
 
-int handle_packet(struct interface * ife, int sockfd, int is_nat);
+int handle_packet(struct interface * ife, int sockfd);
 int handle_ife_packet(struct packet *pkt, struct interface * ife, int is_nat);
-int handle_nat_packet(struct packet *pkt, struct interface *ife);
 int handle_encap_packet(struct packet *pkt, struct interface *ife, struct sockaddr_storage *from);
 // Sends a packet over the tunnel specified, if a flow entry or interface
 // is included, the packet may be queued if either are over their rate limit.
@@ -53,6 +52,12 @@ static unsigned int         outbound_mtu = 0;
 static FILE *               packet_log_file;
 static int                  packet_log_enabled = 0;
 static char *               send_buffer;
+static uint32_t             local_remap_subnet;
+
+uint32_t local_remap_address()
+{
+    return tun->n_private_ip | (~tun->n_netmask ^ 0x01000000);
+}
 
 int start_data_thread(struct tunnel *tun_in)
 {
@@ -61,6 +66,7 @@ int start_data_thread(struct tunnel *tun_in)
     outbound_mtu =  1500;
     send_buffer = (char *)malloc(sizeof(char)*1500);
     tun = tun_in;
+    inet_pton(AF_INET, "192.168.0.0", &local_remap_subnet);
     if(get_packet_log_enabled()){
         packet_log_file = fopen(get_packet_log_path(), "a");
         if(packet_log_file == NULL) {
@@ -125,15 +131,6 @@ int handlePackets()
             if(curr_ife->sockfd > 0){
                 FD_SET(curr_ife->sockfd, &read_set);
             }
-            if(curr_ife->raw_icmp_sockfd > 0){
-                FD_SET(curr_ife->raw_icmp_sockfd, &read_set);
-            }
-            if(curr_ife->raw_tcp_sockfd > 0){
-                FD_SET(curr_ife->raw_tcp_sockfd, &read_set);
-            }
-            if(curr_ife->raw_udp_sockfd > 0){
-                FD_SET(curr_ife->raw_udp_sockfd, &read_set);
-            }
             curr_ife = curr_ife->next;
         }
         release_read_lock(&interface_list_lock);
@@ -155,16 +152,7 @@ int handlePackets()
         curr_ife = interface_list;
         while (curr_ife) {
             if( FD_ISSET(curr_ife->sockfd, &read_set) ) {
-                handle_packet(curr_ife, curr_ife->sockfd, 0);
-            }
-            if( FD_ISSET(curr_ife->raw_icmp_sockfd, &read_set) ) {
-                handle_packet(curr_ife, curr_ife->raw_icmp_sockfd, 1);
-            }
-            if( FD_ISSET(curr_ife->raw_tcp_sockfd, &read_set) ) {
-                handle_packet(curr_ife, curr_ife->raw_tcp_sockfd, 1);
-            }
-            if( FD_ISSET(curr_ife->raw_udp_sockfd, &read_set) ) {
-                handle_packet(curr_ife, curr_ife->raw_udp_sockfd, 1);
+                handle_packet(curr_ife, curr_ife->sockfd);
             }
             curr_ife = curr_ife->next;
         }
@@ -180,7 +168,7 @@ int handlePackets()
     return SUCCESS;
 } // End function int handlePackets()
 
-int handle_packet(struct interface * ife, int sockfd, int is_nat)
+int handle_packet(struct interface * ife, int sockfd)
 {
     int     received_bytes;
     struct packet * pkt = alloc_packet(0, outbound_mtu);
@@ -202,17 +190,11 @@ int handle_packet(struct interface * ife, int sockfd, int is_nat)
     get_recv_timestamp(sockfd, &arrival_time);
     pkt->created = arrival_time;
 
-    if(is_nat)
-    {
-        return handle_nat_packet(pkt, ife);
-    }
-    else
-    {
-        ife->rx_time = arrival_time;
-        ife->packets_since_ack = 0;
-        change_interface_state(ife, ACTIVE);
-        return handle_encap_packet(pkt, ife, &from);
-    }
+    ife->rx_time = arrival_time;
+    ife->packets_since_ack = 0;
+    change_interface_state(ife, ACTIVE);
+    return handle_encap_packet(pkt, ife, &from);
+
     return FAILURE;
 }
 
@@ -423,31 +405,6 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     
 } // End function int handleInboundPacket()
 
-int handle_nat_packet(struct packet * pkt, struct interface * ife)
-{
-    struct iphdr * ip_hdr = (struct iphdr *)pkt->data;
-    ip_hdr->daddr = tun->n_private_ip;
-
-    struct flow_tuple ft;
-    fill_flow_tuple(pkt->data, &ft, 1);
-
-    struct flow_entry *fe = get_flow_entry(&ft);
-    if(fe == NULL || fe->ingress.action != POLICY_ACT_NAT) {
-        free_packet(pkt);
-        return SUCCESS;
-    }
-    compute_ip_checksum(ip_hdr);
-    if(ip_hdr->protocol == 6) { 
-        compute_tcp_checksum(&pkt->data[sizeof(struct iphdr)], pkt->data_size - sizeof(struct iphdr), ip_hdr->saddr, ip_hdr->daddr);
-    }
-    if(ip_hdr->protocol == 17)
-    {
-        ((struct udphdr *)&pkt->data[sizeof(struct iphdr)])->check = 0;
-    }
-
-    return handle_ife_packet(pkt, ife, 1);
-}
-
 int handle_ife_packet(struct packet *pkt, struct interface *ife, int allow_enqueue)
 {
     struct flow_tuple ft;
@@ -488,8 +445,15 @@ int handle_flow_packet(struct packet * pkt, struct flow_entry * fe, int allow_en
     // In host order it would be 0x00000800 the first two bytes (0000) are
     // the flags field, the next two byte (0800 are the protocol field, in this
     // case IP): http://www.mjmwired.net/kernel/Documentation/networking/tuntap.txt
-
     struct iphdr *ip_hdr = (struct iphdr *)(pkt->data);
+#ifdef GATEWAY
+    if(fe->remap_address != 0)
+    {
+        ip_hdr->daddr = fe->remap_address;
+        compute_ip_checksum(ip_hdr);
+        compute_transport_checksum(pkt);
+    }
+#endif
     unsigned short tun_info[2];
     tun_info[0] = 0; //flags
     tun_info[1] = ip_hdr->version == 6 ? htons(ETH_P_IPV6) : htons(ETH_P_IP);
@@ -527,6 +491,23 @@ int handleOutboundPacket(struct tunnel * tun)
         //Ignore the tuntap header
         packet_pull(pkt, TUNTAP_OFFSET);
 
+#ifdef GATEWAY
+        uint32_t dst = ((struct iphdr*)pkt->data)->daddr;
+        if((dst & tun->n_netmask) == (tun->n_private_ip & tun->n_netmask))
+        {
+            if(dst == local_remap_address())
+                ((struct iphdr*)pkt->data)->daddr = tun->n_private_ip;
+            struct flow_tuple ft;
+            fill_flow_tuple(pkt->data, &ft, 1);
+            struct flow_entry *fe = get_flow_entry(&ft);
+            if(fe == NULL)
+            {
+                fe = add_entry(&ft, 1, (local_remap_subnet & tun->n_netmask) | (dst & ~tun->n_netmask));
+            }
+            return handle_flow_packet(pkt, fe, 1);
+        }
+#endif
+
         obtain_read_lock(&interface_list_lock);
         int output = send_packet(pkt, 1, 1);
         release_read_lock(&interface_list_lock);
@@ -542,6 +523,15 @@ int handleOutboundPacket(struct tunnel * tun)
 
 int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueue)
 {
+    int remap_address = 0;
+#ifdef GATEWAY
+    struct iphdr * ip_hdr = (struct iphdr*)pkt->data;
+    remap_address = ip_hdr->saddr;
+    ip_hdr->saddr &= ~tun->n_netmask;
+    ip_hdr->saddr |= (tun->n_netmask & tun->n_private_ip);
+    compute_ip_checksum(ip_hdr);
+    compute_transport_checksum(pkt);
+#endif
     struct flow_tuple ft;
 
     // Policy and Flow table
@@ -549,7 +539,7 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
 
     struct flow_entry *fe = get_flow_entry(&ft);
     if(fe == NULL) {
-        fe = add_entry(&ft, 1);
+        fe = add_entry(&ft, 1, remap_address);
     }
 
     update_flow_entry(fe);
@@ -559,7 +549,6 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
         free_packet(pkt);
         return SUCCESS;
     }
-
 
     //Packet queuing if a flow rate limit is violated
     struct rate_control *rate_control = fe->egress.rate_control;
@@ -701,25 +690,17 @@ int send_encap_packet_dst(uint8_t type, struct packet *pkt, struct interface *sr
 }
 
 int send_nat_packet(struct packet *pkt, struct interface *src_ife) {
-    int sockfd = 0;
-    int proto = ((struct iphdr*)pkt->data)->protocol;
-    uint32_t dst_ip = ((struct iphdr*)pkt->data)->daddr;
-
-    //Don't send the IP header, the kernel will take care of this
-    packet_pull(pkt, sizeof(struct iphdr));
-
-    if(proto == 1)
-        sockfd = src_ife->raw_icmp_sockfd;
-    else if(proto == 6) {
-        sockfd = src_ife->raw_tcp_sockfd;
-        if((pkt->data[13] & 4) == 4) pkt->data[13] = 6;
-        compute_tcp_checksum(pkt->data, pkt->data_size, src_ife->public_ip.s_addr, dst_ip);
-
+    int sockfd = src_ife->raw_sockfd;
+    struct iphdr * ip_hdr = ((struct iphdr*)pkt->data);
+    uint32_t dst_ip = ip_hdr->daddr;
+    uint32_t *src_ip = &ip_hdr->saddr;
+    if(*src_ip == tun->n_private_ip)
+    {
+        *src_ip = local_remap_address();
+        compute_ip_checksum(ip_hdr);
     }
-    else if(proto == 17) {
-        sockfd = src_ife->raw_udp_sockfd;
-        ((struct udphdr *)pkt->data)->check = 0;
-    }
+    compute_transport_checksum(pkt);
+
     //Determine the destination
     struct sockaddr_in dst;
     memset(&dst, 0, sizeof(struct sockaddr_in));
