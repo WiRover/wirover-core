@@ -27,6 +27,7 @@
 #include "bandwidth.h"
 #include "config.h"
 #include "configuration.h"
+#include "constants.h"
 #include "contchan.h"
 #include "debug.h"
 #include "interface.h"
@@ -39,6 +40,7 @@
 
 // Internal functions
 void*   bandwidthThreadFunc(void* clientInfo);
+int     forceBandwidthTest();
 int     runActiveBandwidthTest(struct bw_client_info* clientInfo, struct bw_stats* stats);
 int     runActiveBandwidthTest_udp(struct bw_client_info* clientInfo, struct bw_stats* stats);
 
@@ -46,6 +48,8 @@ static int openBandwidthSocket_udp(struct bw_client_info* clientInfo, const char
 static int receiveCts_udp(int sockfd, int timeout, struct bw_hdr *dest_hdr);
 static int recv_burst_udp(struct bw_client_info *client, struct bw_stats *stats,
         int sockfd, char *buffer, int buffer_len, unsigned server_timeout);
+
+static volatile int forceTest = 0;
 
 
 /*
@@ -87,6 +91,12 @@ void registerBandwidthCallback(struct bw_client_info* clientInfo, bw_callback_t 
 {
     assert(clientInfo != 0);
     clientInfo->callback = callback;
+}
+
+int forceBandwidthTest()
+{
+    forceTest = 1;
+    return SUCCESS;
 }
 
 /*
@@ -176,7 +186,13 @@ void* bandwidthThreadFunc(void* clientInfo)
         if(active_list) {
             free(active_list);
         }
-        sleep(info->interval);
+        struct timeval begin_sleep;
+        get_monotonic_time(&begin_sleep);
+        while(!forceTest && (get_elapsed_us(&begin_sleep) < info->interval * USECS_PER_SEC))
+        {
+            safe_usleep(1000);
+        }
+        forceTest = 0;
     }
 
     return 0;

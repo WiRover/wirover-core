@@ -147,6 +147,7 @@ struct bw_hdr {
 
 int     start_bandwidth_server_thread(struct bw_server_info *serverInfo);
 
+int     forceBandwidthTest();
 int     start_bandwidth_client_thread(struct bw_client_info *clientInfo);
 void    registerBandwidthCallback(struct bw_client_info* clientInfo, bw_callback_t callback);
 void    setBandwidthInterval(struct bw_client_info* clientInfo, unsigned int interval);
