@@ -142,7 +142,7 @@ int main(int argc, char* argv[])
                 write_node_id_file(lease.unique_id);
 
                 ipaddr_to_ipv4(&lease.priv_ip, &private_ip);
-                private_netmask = htonl(slash_to_netmask(lease.priv_subnet_size));
+                private_netmask = htonl(slash_to_netmask(32 - lease.priv_subnet_size));
 
                 lease_renewal_time = time(NULL) + lease.time_limit -
                     RENEW_BEFORE_EXPIRATION;
