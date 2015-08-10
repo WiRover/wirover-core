@@ -110,7 +110,7 @@ int main(int argc, char* argv[])
     }
     
 
-    if(start_data_thread(getTunnel()) == FAILURE) {
+    if(start_data_thread(getTunnel(), htonl(slash_to_netmask(32 - lease.client_subnet_size))) == FAILURE) {
         DEBUG_MSG("Failed to start data thread");
         exit(1);
     }
