@@ -259,17 +259,18 @@ static void handle_gateway_config(struct client* client, const char* packet, int
 
         struct rchan_response response;
         response.type = rchanhdr->type;
-        response.unique_id = htons(unique_id);
+        response.lease.unique_id = htons(unique_id);
 
-        copy_ipaddr(&lease->controller->priv_ip, &response.cinfo.priv_ip);
-        copy_ipaddr(&lease->controller->pub_ip, &response.cinfo.pub_ip);
-        response.cinfo.data_port = lease->controller->data_port;
-        response.cinfo.control_port = lease->controller->control_port;
-        response.cinfo.unique_id = lease->controller->unique_id;
+        copy_ipaddr(&lease->controller->priv_ip, &response.lease.cinfo.priv_ip);
+        copy_ipaddr(&lease->controller->pub_ip, &response.lease.cinfo.pub_ip);
+        response.lease.cinfo.data_port = lease->controller->data_port;
+        response.lease.cinfo.control_port = lease->controller->control_port;
+        response.lease.cinfo.unique_id = lease->controller->unique_id;
 
-        copy_ipaddr(&lease->ip, &response.priv_ip);
-        response.priv_subnet_size = get_node_subnet_size();
-        response.lease_time = htonl(lease->end - lease->start);
+        copy_ipaddr(&lease->ip, &response.lease.priv_ip);
+        response.lease.priv_subnet_size = get_node_subnet_size();
+        response.lease.client_subnet_size = get_client_subnet_size();
+        response.lease.time_limit = htonl(lease->end - lease->start);
 
         const unsigned int response_len = MIN_RESPONSE_LEN + sizeof(struct controller_info);
 
@@ -349,7 +350,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
         char response_buffer[MTU];
         struct rchan_response* response = (struct rchan_response*)response_buffer;
         response->type = rchanhdr->type;
-        response->unique_id = htons(unique_id);
+        response->lease.unique_id = htons(unique_id);
 
         if(lease) {
             ipaddr_t ctrl_ip;
@@ -404,9 +405,10 @@ static void handle_controller_config(struct client* client, const char* packet, 
             DEBUG_MSG("Controller registered as %s data %hu control %hu",
                 p_ip, ntohs(ctrlreg->data_port), ntohs(ctrlreg->control_port));
 
-            copy_ipaddr(&lease->ip, &response->priv_ip);
-            response->priv_subnet_size = get_node_subnet_size();
-            response->lease_time = htonl(lease->end - lease->start);
+            copy_ipaddr(&lease->ip, &response->lease.priv_ip);
+            response->lease.priv_subnet_size = get_node_subnet_size();
+            response->lease.client_subnet_size = get_client_subnet_size();
+            response->lease.time_limit = htonl(lease->end - lease->start);
         }
 
         int bytes = send(client->fd, response, sizeof(struct rchan_response), 0);

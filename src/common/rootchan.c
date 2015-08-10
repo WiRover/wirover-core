@@ -29,6 +29,18 @@ static struct lease_info latest_lease = {
     .priv_ip = IPADDR_IPV4_ZERO,
     .unique_id = 0,
 };
+
+void ntoh_lease(struct lease_info* lease, struct lease_info *dst)
+{
+    copy_ipaddr(&lease->priv_ip, &dst->priv_ip);
+    dst->priv_subnet_size = lease->priv_subnet_size;
+    dst->client_subnet_size = lease->client_subnet_size;
+    dst->time_limit = ntohl(lease->time_limit);
+    dst->unique_id = ntohs(lease->unique_id);
+    /* Add a remote node that will represent the controller */
+    memcpy(&dst->cinfo, &lease->cinfo, sizeof(struct controller_info));
+}
+
 int fill_rchanhdr(char *buffer, uint8_t type, int send_pub_key)
 {
     int offset = 0;
@@ -124,10 +136,8 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
         goto free_and_err_out;
     }
 
-    copy_ipaddr(&response.priv_ip, &lease->priv_ip);
-    lease->priv_subnet_size = response.priv_subnet_size;
-    lease->time_limit = ntohl(response.lease_time);
-    lease->unique_id = ntohs(response.unique_id);
+    ntoh_lease(&response.lease, lease);
+    DEBUG_MSG("Got client subnet size of %d", lease->client_subnet_size);
 
     memcpy(&latest_lease, lease, sizeof(latest_lease));
 
@@ -179,12 +189,8 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
         goto free_and_err_out;
     }
 
-    copy_ipaddr(&response.priv_ip, &lease->priv_ip);
-    lease->priv_subnet_size = response.priv_subnet_size;
-    lease->time_limit = ntohl(response.lease_time);
-    lease->unique_id = ntohs(response.unique_id);
-    /* Add a remote node that will represent the controller */
-    memcpy(&lease->cinfo, &response.cinfo, sizeof(struct controller_info));
+
+    ntoh_lease(&response.lease, lease);
 
     struct interface *cont_ife = alloc_interface(lease->cinfo.unique_id);
     ipaddr_to_ipv4(&lease->cinfo.pub_ip, &cont_ife->public_ip.s_addr);
