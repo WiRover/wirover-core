@@ -504,7 +504,7 @@ int handleOutboundPacket(struct tunnel * tun)
             struct flow_entry *fe = get_flow_entry(&ft);
             if(fe == NULL)
             {
-                fe = add_entry(&ft, 1, (local_remap_subnet & tun->n_netmask) | (dst & ~tun->n_netmask));
+                fe = add_entry(&ft, 1, (local_remap_subnet & client_subnet_mask) | (dst & ~client_subnet_mask));
             }
             return handle_flow_packet(pkt, fe, 1);
         }
@@ -529,8 +529,8 @@ int send_packet(struct packet *pkt, int allow_ife_enqueue, int allow_flow_enqueu
 #ifdef GATEWAY
     struct iphdr * ip_hdr = (struct iphdr*)pkt->data;
     remap_address = ip_hdr->saddr;
-    ip_hdr->saddr &= ~tun->n_netmask;
-    ip_hdr->saddr |= (tun->n_netmask & tun->n_private_ip);
+    ip_hdr->saddr &= ~client_subnet_mask;
+    ip_hdr->saddr |= (client_subnet_mask & tun->n_private_ip);
     compute_ip_checksum(ip_hdr);
     compute_transport_checksum(pkt);
 #endif
