@@ -33,6 +33,7 @@ struct lease_info {
 
 struct rchan_response {
     uint8_t     type;
+    struct wirover_version version;
     struct lease_info lease;
 } __attribute__((__packed__));
 
@@ -53,8 +54,8 @@ struct rchan_response {
 #define RCHAN_OPTION_GSP            0x02
     
 struct rchanhdr {
-    struct wirover_version version;
     uint8_t type;
+    struct wirover_version version;
     uint8_t flags;
     uint8_t id_len;
     uint16_t pub_key_len;

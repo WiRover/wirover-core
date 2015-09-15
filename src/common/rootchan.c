@@ -83,6 +83,7 @@ int fill_rchanhdr(char *buffer, uint8_t type, int send_pub_key)
     return offset;
 }
 #ifdef CONTROLLER
+
 /* 
 * register_controller - Register a controller with the root server.
 */
@@ -132,9 +133,13 @@ int register_controller(struct lease_info *lease, const char *wiroot_ip,
     struct rchan_response response;
 
     result = _rchan_message(wiroot_ip, wiroot_port, buffer, offset, 0, (char *)&response, sizeof(struct rchan_response));
-    if(result < 0) {
+    if(result == FAILURE) {
         DEBUG_MSG("Failed to obtain lease from root server");
         goto free_and_err_out;
+    }
+    if(compare_wirover_version(response.version)) {
+        DEBUG_MSG("Root server runs a different version of WiRover %d.%d.%d", response.version.major, response.version.minor, response.version.revision);
+        exit(EXIT_WRONG_VERSION);
     }
 
     ntoh_lease(&response.lease, lease);
@@ -188,6 +193,10 @@ int register_gateway(struct lease_info *lease, const char *wiroot_ip,
     if(lease_obtained == FAILURE) {
         DEBUG_MSG("Failed to obtain lease");
         goto free_and_err_out;
+    }
+    if(compare_wirover_version(response.version)) {
+        DEBUG_MSG("Root server runs a different version of WiRover %d.%d.%d", response.version.major, response.version.minor, response.version.revision);
+        exit(EXIT_WRONG_VERSION);
     }
 
 

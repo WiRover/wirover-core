@@ -17,13 +17,14 @@
 #include "controllers.h"
 #include "database.h"
 #include "debug.h"
+#include "format.h"
 #include "lease.h"
 #include "rootchan.h"
 #include "sockets.h"
+#include "timing.h"
 #include "utlist.h"
 #include "util.h"
-#include "format.h"
-#include "timing.h"
+#include "version.h"
 
 const int CLEANUP_INTERVAL = 5; // seconds between calling remove_stale_leases()
 const int DB_MIN_RETRY_DELAY = 1;
@@ -259,6 +260,7 @@ static void handle_gateway_config(struct client* client, const char* packet, int
 
         struct rchan_response response;
         response.type = rchanhdr->type;
+        response.version = get_wirover_version();
         response.lease.unique_id = htons(unique_id);
 
         copy_ipaddr(&lease->controller->priv_ip, &response.lease.cinfo.priv_ip);
@@ -350,6 +352,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
         char response_buffer[MTU];
         struct rchan_response* response = (struct rchan_response*)response_buffer;
         response->type = rchanhdr->type;
+        response->version = get_wirover_version();
         response->lease.unique_id = htons(unique_id);
 
         if(lease) {

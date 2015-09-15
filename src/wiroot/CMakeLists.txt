@@ -12,6 +12,7 @@ add_executable(wiroot
     ${COMMON}/format.c
     ${COMMON}/timing.c
     ${COMMON}/util.c
+    ${COMMON}/version.c
 )
 
 target_link_libraries(wiroot config mysqlclient)
