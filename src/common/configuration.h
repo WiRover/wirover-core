@@ -6,6 +6,9 @@
 #define MAX_CONFIG_PATH_LEN 256
 #define DEFAULT_INTERFACE_PRIORITY 0
 
+//Exit codes
+#define EXIT_WRONG_VERSION -2
+
 #if defined(CONTROLLER)
 #define CONFIG_FILENAME "wicontroller.conf"
 #elif defined(GATEWAY)

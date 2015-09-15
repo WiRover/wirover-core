@@ -9,6 +9,7 @@
 
 #include "ipaddr.h"
 #include "interface.h"
+#include "version.h"
 
 #define RCHAN_CONNECT_TIMEOUT_SEC  5
 
@@ -52,6 +53,7 @@ struct rchan_response {
 #define RCHAN_OPTION_GSP            0x02
     
 struct rchanhdr {
+    struct wirover_version version;
     uint8_t type;
     uint8_t flags;
     uint8_t id_len;

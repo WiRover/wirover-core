@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 2.6)
 
 project(WIROVER)
-set(WIROVER_VERSION_MAJOR 1)
-set(WIROVER_VERSION_MINOR 3)
+set(WIROVER_VERSION_MAJOR 0)
+set(WIROVER_VERSION_MINOR 5)
 set(WIROVER_VERSION_REVISION 1)
 
 # Add -DNDEBUG for release versions to ignore assert()s

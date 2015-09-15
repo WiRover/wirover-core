@@ -207,6 +207,7 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     // Get the tunhdr (should be the first n bytes in the packet)
     // store network format in temporary struct
     memcpy(&n_tun_hdr, pkt->data, sizeof(struct tunhdr));
+
     // Copy temporary to host format
     uint8_t tun_type = n_tun_hdr.type & TUNTYPE_TYPE_MASK;
     uint8_t tun_ctl = n_tun_hdr.type & TUNTYPE_CONTROL_MASK;

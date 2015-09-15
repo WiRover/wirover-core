@@ -54,6 +54,7 @@ int fill_rchanhdr(char *buffer, uint8_t type, int send_pub_key)
     struct rchanhdr *rchanhdr = (struct rchanhdr *)buffer;
     offset += sizeof(struct rchanhdr);
 
+    rchanhdr->version = get_wirover_version();
     rchanhdr->type = type;
     rchanhdr->id_len = node_id_len;
 
