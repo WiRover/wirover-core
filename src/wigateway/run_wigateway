@@ -2,7 +2,7 @@
 function test {
     "$@"
     local status=$?
-    if [ $status -eq -2 ]; then
+    if [ $status -eq 2 ]; then
         echo "TODO: Run upgrade and restart wigateway" >&2
         stop wigateway
     fi
