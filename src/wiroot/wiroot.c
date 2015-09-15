@@ -220,6 +220,10 @@ static void handle_gateway_config(struct client* client, const char* packet, int
 
     const char *node_id = packet + offset;
     offset += rchanhdr->id_len;
+    if(offset > length || offset <= 0) {
+        DEBUG_MSG("Malformed gateway registration");
+        return;
+    }
 
     char pub_key[rchanhdr->pub_key_len + 1];
     pub_key[rchanhdr->pub_key_len] = '\0';
