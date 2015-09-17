@@ -259,12 +259,13 @@ static void handle_gateway_config(struct client* client, const char* packet, int
     const struct lease* lease;
     lease = grant_gw_lease(unique_id, gwreg->latitude, gwreg->longitude);
 
+    struct rchan_response response;
+    memset(&response, 0, sizeof(response));
+    response.version = get_wirover_version();
     if(lease) {
         db_update_pub_key(node_id_hex, pub_key);
 
-        struct rchan_response response;
         response.type = rchanhdr->type;
-        response.version = get_wirover_version();
         response.lease.unique_id = htons(unique_id);
 
         copy_ipaddr(&lease->controller->priv_ip, &response.lease.cinfo.priv_ip);
@@ -288,8 +289,6 @@ static void handle_gateway_config(struct client* client, const char* packet, int
         log_access_request(PRIV_REG_GATEWAY, node_id_hex, 
             client, RCHAN_RESULT_SUCCESS);
     } else {
-        struct rchan_response response;
-        memset(&response, 0, sizeof(response));
         response.type = RCHAN_REGISTRATION_DENIED;
 
         const unsigned response_len = MIN_RESPONSE_LEN;
