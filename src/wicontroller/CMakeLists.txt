@@ -42,3 +42,5 @@ install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wicontroller DESTINATION /usr/bin)
 install(FILES wicontroller_upstart.conf DESTINATION /etc/init RENAME wicontroller.conf)
 install(FILES wicontroller.conf DESTINATION /etc)
 
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/wicontroller.conf ${CMAKE_CURRENT_BINARY_DIR}/wicontroller.conf COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/wicontroller_upstart.conf ${CMAKE_CURRENT_BINARY_DIR}/wicontroller_upstart.conf COPYONLY)
