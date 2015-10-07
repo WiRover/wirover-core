@@ -5,36 +5,36 @@ add_executable(wigateway
     bandwidth.c
     contchan.c
     gps_handler.c
-	netlink.c
+    netlink.c
     ping.c
     arguments.c
-	select_interface.c
+    select_interface.c
     ${COMMON}/bandwidth.c
     ${COMMON}/circular_buffer.c
     ${COMMON}/configuration.c
     ${COMMON}/debug.c
-	${COMMON}/datapath.c
-	${COMMON}/flow_table.c
+    ${COMMON}/datapath.c
+    ${COMMON}/flow_table.c
     ${COMMON}/headers.c
     ${COMMON}/interface.c
     ${COMMON}/ipaddr.c
     ${COMMON}/ping.c
     ${COMMON}/rate_control.c
     ${COMMON}/rateinfer.c
-	${COMMON}/remote_node.c
+    ${COMMON}/remote_node.c
     ${COMMON}/rootchan.c
     ${COMMON}/rwlock.c
     ${COMMON}/sockets.c
     ${COMMON}/status.c
     ${COMMON}/timing.c
-	${COMMON}/packet_buffer.c
-	${COMMON}/packet.c
+    ${COMMON}/packet_buffer.c
+    ${COMMON}/packet.c
     ${COMMON}/select_interface.c
     ${COMMON}/tunnel.c
     ${COMMON}/format.c
     ${COMMON}/version.c
-	${COMMON}/util.c
-	${COMMON}/policy_table.c
+    ${COMMON}/util.c
+    ${COMMON}/policy_table.c
 )
 
 target_link_libraries(wigateway pthread config gps ssl crypto m json)
@@ -46,3 +46,4 @@ install(FILES wigateway.conf DESTINATION /etc)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/wigateway.conf ${CMAKE_CURRENT_BINARY_DIR}/wigateway.conf COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/wigateway_upstart.conf ${CMAKE_CURRENT_BINARY_DIR}/wigateway_upstart.conf COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/run_wigateway ${CMAKE_CURRENT_BINARY_DIR}/run_wigateway COPYONLY)
