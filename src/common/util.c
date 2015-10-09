@@ -16,7 +16,6 @@
 #include "tunnel.h"
 #include "util.h"
 
-static const char * iptables_mtu_clamp = "iptables %s FORWARD -p tcp --tcp-flags SYN,RST SYN -j TCPMSS  --clamp-mss-to-pmtu";
 static const char * iptables_drop_tcp_rst = "iptables %s OUTPUT -o %s -p tcp --tcp-flags RST,SYN RST -j DROP";
 static const char * iptables_masquerade = "iptables -t nat %s POSTROUTING -o %s -j MASQUERADE";
 
@@ -132,21 +131,6 @@ int remove_drop_tcp_rst(char *device) {
     snprintf(buffer, sizeof(buffer), iptables_drop_tcp_rst, "-D", device);
     //We'll try to remove a few in case there are duplicates but stop after 10
     while (system(buffer) == SUCCESS && remove_count < 10) { remove_count ++;}
-    return SUCCESS;
-}
-
-int tcp_mtu_clamp() {
-    char buffer[1024];
-    snprintf(buffer, sizeof(buffer), iptables_mtu_clamp, "-I");
-    if(system(buffer) == FAILURE) { return FAILURE; }
-    return SUCCESS;
-}
-int remove_tcp_mtu_clamp() {
-    int remove_count = 0;
-    char buffer[1024];
-    snprintf(buffer, sizeof(buffer), iptables_mtu_clamp, "-D");
-    //We'll try to remove a few in case there are duplicates but stop after 10
-    while(system(buffer) == SUCCESS && remove_count < 10) { remove_count++; }
     return SUCCESS;
 }
 

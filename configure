@@ -1,0 +1,5 @@
+mkdir build || true
+cd build
+rm -r *
+pwd
+cmake -DV_MAJ=0 -DV_MIN=5 -DV_REV=2 ../src/
