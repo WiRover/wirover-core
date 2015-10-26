@@ -8,6 +8,7 @@ struct wirover_version {
 } __attribute__((__packed__));
 
 struct wirover_version get_wirover_version();
+uint8_t get_tunnel_version();
 int compare_wirover_version(struct wirover_version comp);
 
 #endif /* WIROVER_VERSION_H */

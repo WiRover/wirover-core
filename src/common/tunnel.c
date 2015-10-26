@@ -245,7 +245,7 @@ void add_tunnel_header(uint8_t type, struct packet *pkt,
     memset(&tun_hdr, 0, sizeof(struct tunhdr));
 
     tun_hdr.type = type;
-    tun_hdr.version = TUNNEL_VERSION;
+    tun_hdr.version = get_tunnel_version();
     tun_hdr.node_id = htons(get_unique_id());
     tun_hdr.link_id = htons(src_ife->index);
     tun_hdr.global_seq = htonl(global_seq);

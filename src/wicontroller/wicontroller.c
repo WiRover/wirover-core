@@ -49,8 +49,9 @@ int main(int argc, char* argv[])
     signal(SIGINT, shutdown_handler);
     signal(SIGTERM, shutdown_handler);
 
-    printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR, 
-        WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);
+    struct wirover_version version = get_wirover_version();
+    printf("WiRover version %d.%d.%d\n", version.major,
+        version.minor, version.revision);
 
     const config_t *config = get_config();
 

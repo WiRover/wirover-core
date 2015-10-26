@@ -1,9 +1,6 @@
 cmake_minimum_required(VERSION 2.6)
 
 project(WIROVER)
-ADD_DEFINITIONS(-DWIROVER_VERSION_MAJOR=${V_MAJ})
-ADD_DEFINITIONS(-DWIROVER_VERSION_MINOR=${V_MIN})
-ADD_DEFINITIONS(-DWIROVER_VERSION_REVISION=${V_REV})
 
 # Add -DNDEBUG for release versions to ignore assert()s
 set(CMAKE_C_FLAGS "-g -rdynamic -Wall -pedantic -std=c99 -D_POSIX_C_SOURCE=200809L -DDEBUG_PRINT")

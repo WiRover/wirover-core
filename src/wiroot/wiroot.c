@@ -56,8 +56,9 @@ int main(int argc, char* argv[])
 
     signal(SIGSEGV, segfault_handler);
 
-    printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR, 
-        WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);
+    struct wirover_version version = get_wirover_version();
+    printf("WiRover version %d.%d.%d\n", version.major,
+        version.minor, version.revision);
 
     result = configure_wiroot(CONFIG_FILENAME);
     if(result == -1) {

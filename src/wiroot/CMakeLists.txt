@@ -14,7 +14,7 @@ add_executable(wiroot
     ${COMMON}/util.c
     ${COMMON}/version.c
 )
-target_link_libraries(wiroot config mysqlclient)
+target_link_libraries(wiroot config mysqlclient json)
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wiroot DESTINATION /usr/bin)
 install(FILES wiroot_upstart.conf DESTINATION /etc/init RENAME wiroot.conf)
