@@ -7,6 +7,8 @@
 #include "tunnel.h"
 #include "interface.h"
 
+#define TUNNEL_VERSION WIROVER_VERSION_MAJOR + WIROVER_VERSION_MINOR + WIROVER_VERSION_REVISION
+
 #define TUNTAP_OFFSET 4
 
 #define TUNHDR_NO_TIMESTAMP 0xFFFFFFFF
@@ -29,26 +31,27 @@
 #define TUNERROR_BAD_FLOW   0x03
 
 struct tunhdr {
-    __u8        type;
-    __u8        version;
+    uint8_t     type;
+    uint8_t     version;
 
-    __be32      global_seq;
-    __be32      link_seq;
+    uint32_t    global_seq;
+    uint32_t    link_seq;
     uint16_t    link_id;
     uint16_t    node_id;
-    __be32      path_ack;
+    uint32_t    path_ack;
 
-    __be32      local_ts;
-    __be32      remote_ts;
+    uint32_t    local_ts;
+    uint32_t    remote_ts;
 } __attribute__((__packed__));
 
 struct tunnel {
-    char name[IFNAMSIZ];
-    __be32 n_private_ip;
+    char     name[IFNAMSIZ];
+    uint32_t n_private_ip;
+    uint32_t n_netmask;
 
-    int  localPort;
-    int  remotePort;
-    int  controlPort;
+    int      localPort;
+    int      remotePort;
+    int      controlPort;
 
     struct sockaddr_in destAddr;
 

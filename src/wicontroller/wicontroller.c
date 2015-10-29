@@ -49,8 +49,9 @@ int main(int argc, char* argv[])
     signal(SIGINT, shutdown_handler);
     signal(SIGTERM, shutdown_handler);
 
-    printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR, 
-        WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);
+    struct wirover_version version = get_wirover_version();
+    printf("WiRover version %d.%d.%d\n", version.major,
+        version.minor, version.revision);
 
     const config_t *config = get_config();
 
@@ -110,7 +111,7 @@ int main(int argc, char* argv[])
     }
     
 
-    if(start_data_thread(getTunnel()) == FAILURE) {
+    if(start_data_thread(getTunnel(), htonl(slash_to_netmask(32 - lease.client_subnet_size))) == FAILURE) {
         DEBUG_MSG("Failed to start data thread");
         exit(1);
     }

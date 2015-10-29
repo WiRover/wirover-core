@@ -17,13 +17,14 @@
 #include "controllers.h"
 #include "database.h"
 #include "debug.h"
+#include "format.h"
 #include "lease.h"
 #include "rootchan.h"
 #include "sockets.h"
+#include "timing.h"
 #include "utlist.h"
 #include "util.h"
-#include "format.h"
-#include "timing.h"
+#include "version.h"
 
 const int CLEANUP_INTERVAL = 5; // seconds between calling remove_stale_leases()
 const int DB_MIN_RETRY_DELAY = 1;
@@ -55,8 +56,9 @@ int main(int argc, char* argv[])
 
     signal(SIGSEGV, segfault_handler);
 
-    printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR, 
-        WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);
+    struct wirover_version version = get_wirover_version();
+    printf("WiRover version %d.%d.%d\n", version.major,
+        version.minor, version.revision);
 
     result = configure_wiroot(CONFIG_FILENAME);
     if(result == -1) {
@@ -219,6 +221,10 @@ static void handle_gateway_config(struct client* client, const char* packet, int
 
     const char *node_id = packet + offset;
     offset += rchanhdr->id_len;
+    if(offset > length || offset <= 0) {
+        DEBUG_MSG("Malformed gateway registration");
+        return;
+    }
 
     char pub_key[rchanhdr->pub_key_len + 1];
     pub_key[rchanhdr->pub_key_len] = '\0';
@@ -254,22 +260,25 @@ static void handle_gateway_config(struct client* client, const char* packet, int
     const struct lease* lease;
     lease = grant_gw_lease(unique_id, gwreg->latitude, gwreg->longitude);
 
+    struct rchan_response response;
+    memset(&response, 0, sizeof(response));
+    response.version = get_wirover_version();
     if(lease) {
         db_update_pub_key(node_id_hex, pub_key);
 
-        struct rchan_response response;
         response.type = rchanhdr->type;
-        response.unique_id = htons(unique_id);
+        response.lease.unique_id = htons(unique_id);
 
-        copy_ipaddr(&lease->controller->priv_ip, &response.cinfo.priv_ip);
-        copy_ipaddr(&lease->controller->pub_ip, &response.cinfo.pub_ip);
-        response.cinfo.data_port = lease->controller->data_port;
-        response.cinfo.control_port = lease->controller->control_port;
-        response.cinfo.unique_id = lease->controller->unique_id;
+        copy_ipaddr(&lease->controller->priv_ip, &response.lease.cinfo.priv_ip);
+        copy_ipaddr(&lease->controller->pub_ip, &response.lease.cinfo.pub_ip);
+        response.lease.cinfo.data_port = lease->controller->data_port;
+        response.lease.cinfo.control_port = lease->controller->control_port;
+        response.lease.cinfo.unique_id = lease->controller->unique_id;
 
-        copy_ipaddr(&lease->ip, &response.priv_ip);
-        response.priv_subnet_size = get_gateway_subnet_size();
-        response.lease_time = htonl(lease->end - lease->start);
+        copy_ipaddr(&lease->ip, &response.lease.priv_ip);
+        response.lease.priv_subnet_size = get_node_subnet_size();
+        response.lease.client_subnet_size = get_client_subnet_size();
+        response.lease.time_limit = htonl(lease->end - lease->start);
 
         const unsigned int response_len = MIN_RESPONSE_LEN + sizeof(struct controller_info);
 
@@ -281,8 +290,6 @@ static void handle_gateway_config(struct client* client, const char* packet, int
         log_access_request(PRIV_REG_GATEWAY, node_id_hex, 
             client, RCHAN_RESULT_SUCCESS);
     } else {
-        struct rchan_response response;
-        memset(&response, 0, sizeof(response));
         response.type = RCHAN_REGISTRATION_DENIED;
 
         const unsigned response_len = MIN_RESPONSE_LEN;
@@ -349,7 +356,8 @@ static void handle_controller_config(struct client* client, const char* packet, 
         char response_buffer[MTU];
         struct rchan_response* response = (struct rchan_response*)response_buffer;
         response->type = rchanhdr->type;
-        response->unique_id = htons(unique_id);
+        response->version = get_wirover_version();
+        response->lease.unique_id = htons(unique_id);
 
         if(lease) {
             ipaddr_t ctrl_ip;
@@ -389,7 +397,7 @@ static void handle_controller_config(struct client* client, const char* packet, 
             sockaddr_to_ipaddr((const struct sockaddr *)&client->addr, &perceived_ip);
             ipaddr_to_ipv4(&perceived_ip, &ipv4);
             ipaddr_to_ipv4(&lease->ip, &priv_ipv4);
-            uint32_t priv_netmask = htonl(slash_to_netmask(32 - get_gateway_subnet_size()));
+            uint32_t priv_netmask = htonl(slash_to_netmask(32 - get_node_subnet_size()));
             //Don't add a route if the root server and controller are colocated
             if(ipv4 != htonl(0x7F000001)) {
                 if(add_route(priv_ipv4 & priv_netmask, ipv4, priv_netmask, 0, 0) < 0)
@@ -404,9 +412,10 @@ static void handle_controller_config(struct client* client, const char* packet, 
             DEBUG_MSG("Controller registered as %s data %hu control %hu",
                 p_ip, ntohs(ctrlreg->data_port), ntohs(ctrlreg->control_port));
 
-            copy_ipaddr(&lease->ip, &response->priv_ip);
-            response->priv_subnet_size = get_gateway_subnet_size();
-            response->lease_time = htonl(lease->end - lease->start);
+            copy_ipaddr(&lease->ip, &response->lease.priv_ip);
+            response->lease.priv_subnet_size = get_node_subnet_size();
+            response->lease.client_subnet_size = get_client_subnet_size();
+            response->lease.time_limit = htonl(lease->end - lease->start);
         }
 
         int bytes = send(client->fd, response, sizeof(struct rchan_response), 0);

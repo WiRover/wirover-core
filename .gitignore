@@ -6,3 +6,4 @@ Makefile
 src/wicontroller/wicontroller
 src/wigateway/wigateway
 src/wiroot/wiroot
+build/

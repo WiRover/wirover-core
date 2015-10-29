@@ -9,6 +9,7 @@
 
 #include "ipaddr.h"
 #include "interface.h"
+#include "version.h"
 
 #define RCHAN_CONNECT_TIMEOUT_SEC  5
 
@@ -20,16 +21,23 @@ struct controller_info {
     uint16_t          unique_id;
 } __attribute__((__packed__));
 
-struct rchan_response {
-    uint8_t     type;
+struct lease_info {
     ipaddr_t    priv_ip;
     uint8_t     priv_subnet_size;
-    uint32_t    lease_time;
+    uint8_t     client_subnet_size;
+    uint32_t    time_limit;
     uint16_t    unique_id;
 
     struct controller_info cinfo;
 } __attribute__((__packed__));
-#define MIN_RESPONSE_LEN (offsetof(struct rchan_response, cinfo))
+
+struct rchan_response {
+    uint8_t     type;
+    struct wirover_version version;
+    struct lease_info lease;
+} __attribute__((__packed__));
+
+#define MIN_RESPONSE_LEN (offsetof(struct rchan_response, lease) + offsetof(struct lease_info, cinfo))
 
 /* Types for rchanhdr */
 #define RCHAN_REGISTER_CONTROLLER   0x01
@@ -47,6 +55,7 @@ struct rchan_response {
     
 struct rchanhdr {
     uint8_t type;
+    struct wirover_version version;
     uint8_t flags;
     uint8_t id_len;
     uint16_t pub_key_len;
@@ -77,14 +86,6 @@ struct rchan_gwreg {
     double longitude;
 } __attribute__((__packed__));
 
-struct lease_info {
-    ipaddr_t    priv_ip;
-    uint8_t     priv_subnet_size;
-    uint32_t    time_limit;
-    uint16_t    unique_id;
-
-    struct controller_info cinfo;
-};
 
 int register_controller(struct lease_info *lease, const char *wiroot_ip,
         unsigned short wiroot_port, unsigned short data_port, unsigned short control_port);

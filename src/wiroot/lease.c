@@ -12,18 +12,17 @@
 
 // These default values will be overwritten by read_lease_config().
 static uint32_t     LEASE_BASE_SUBNET               = 0xAC100000;
-static uint8_t      LEASE_CONTROLLER_SUBNET_SIZE    = 6;
-static uint8_t      LEASE_GATEWAY_SUBNET_SIZE       = 14;
+static uint8_t      LEASE_NODE_SUBNET_SIZE          = 10;
+static uint8_t      LEASE_CLIENT_SUBNET_SIZE        = 10;
 static int          LEASE_TIME_LIMIT                = 86400;
 
 static struct lease* leases_head = 0;
 static struct lease* leases_ip_hash = 0;
 static struct lease* leases_id_hash = 0;
-static struct lease** controller_leases = 0;
 
 static void renew_lease(struct lease* lease);
-static uint32_t find_controller_free_ip(int unique_id);
-static uint32_t find_gw_free_ip(int unique_id, struct controller* controller);
+static uint32_t find_controller_free_ip();
+static uint32_t find_gw_free_ip();
 
 /*
  * READ LEASE CONFIG
@@ -43,30 +42,37 @@ int read_lease_config(const config_t* config)
     result = config_lookup_string(config, "lease.base-subnet", &lease_base_subnet);
     if(result == CONFIG_FALSE) {
         DEBUG_MSG("lease.range-start missing in config file");
+        return FAILURE;
     } else {
         inet_pton(AF_INET, lease_base_subnet, &LEASE_BASE_SUBNET);
         LEASE_BASE_SUBNET = ntohl(LEASE_BASE_SUBNET);
     }
     
-    int controller_subnet_size = 0;
-    result = config_lookup_int_compat(config, "lease.controller-subnet-size", &controller_subnet_size);
+    int node_subnet_size = 0;
+    result = config_lookup_int_compat(config, "lease.node-subnet-size", &node_subnet_size);
     if(result == CONFIG_FALSE) {
-        DEBUG_MSG("lease.subnet-size missing in config file");
-    } else if(controller_subnet_size <= 0 || controller_subnet_size > UCHAR_MAX) {
-        DEBUG_MSG("Invalid value for lease.subnet-size (%d)", controller_subnet_size);
+        DEBUG_MSG("lease.node-size missing in config file");
+        return FAILURE;
+    } else if(node_subnet_size <= 0 || node_subnet_size > UCHAR_MAX) {
+        DEBUG_MSG("Invalid value for lease.node-size (%d)", node_subnet_size);
+        return FAILURE;
     } else {
-        LEASE_CONTROLLER_SUBNET_SIZE = controller_subnet_size;
+        LEASE_NODE_SUBNET_SIZE = node_subnet_size;
     }
-    controller_leases = (struct lease**)malloc(sizeof(struct lease*) * (1 << LEASE_CONTROLLER_SUBNET_SIZE));
     
-    int gateway_subnet_size = 0;
-    result = config_lookup_int_compat(config, "lease.gateway-subnet-size", &gateway_subnet_size);
+    int client_subnet_size = 0;
+    result = config_lookup_int_compat(config, "lease.client-subnet-size", &client_subnet_size);
     if(result == CONFIG_FALSE) {
-        DEBUG_MSG("lease.subnet-size missing in config file");
-    } else if(gateway_subnet_size <= 0 || gateway_subnet_size > UCHAR_MAX || gateway_subnet_size + controller_subnet_size > 24) {
-        DEBUG_MSG("Invalid value for lease.gateway-subnet (%d)", gateway_subnet_size);
+        DEBUG_MSG("lease.client-size missing in config file");
+        return FAILURE;
+    } else if(client_subnet_size <= 0 || client_subnet_size > UCHAR_MAX) {
+        DEBUG_MSG("Invalid value for lease.client-subnet (%d)", client_subnet_size);
+        return FAILURE;
+    } else if(client_subnet_size + node_subnet_size > 20) {
+        DEBUG_MSG("Invalid subnet sizes, sum must be at most 20");
+        return FAILURE;
     } else {
-        LEASE_GATEWAY_SUBNET_SIZE = gateway_subnet_size;
+        LEASE_CLIENT_SUBNET_SIZE = client_subnet_size;
     }
 
     result = config_lookup_int_compat(config, "lease.time-limit", &LEASE_TIME_LIMIT);
@@ -180,14 +186,13 @@ void remove_stale_leases()
         }
     }
 }
-
-uint8_t get_gateway_subnet_size()
+uint8_t get_client_subnet_size()
 {
-    return LEASE_GATEWAY_SUBNET_SIZE;
+    return LEASE_CLIENT_SUBNET_SIZE;
 }
-uint8_t get_controller_subnet_size()
+uint8_t get_node_subnet_size()
 {
-    return LEASE_CONTROLLER_SUBNET_SIZE + LEASE_GATEWAY_SUBNET_SIZE;
+    return LEASE_NODE_SUBNET_SIZE + get_client_subnet_size();
 }
 
 /*
@@ -221,11 +226,10 @@ static void renew_lease(struct lease* lease)
  * Returns an IP in network byte order or 0 if one is unavailable.
  */
 
-static uint32_t find_controller_free_ip(int unique_id)
+static uint32_t find_controller_free_ip()
 {
-    const uint32_t max_i = (1 << LEASE_CONTROLLER_SUBNET_SIZE) - 1;
-    const uint32_t subnet_mask = (1 << (LEASE_CONTROLLER_SUBNET_SIZE + LEASE_GATEWAY_SUBNET_SIZE)) - 1;
-    uint32_t subnet_start = LEASE_BASE_SUBNET & (~subnet_mask);
+    const uint32_t client_subnet_size = (1 << get_client_subnet_size()) - 1;
+    uint32_t subnet_start = LEASE_BASE_SUBNET;
 
     ipaddr_t check_ip;
     memset(&check_ip, 0, sizeof(check_ip));
@@ -234,8 +238,8 @@ static uint32_t find_controller_free_ip(int unique_id)
     uint32_t n_ip;
     struct lease *lease;
     
-    for(int i = 0; i < max_i; i++) {
-        h_ip = subnet_start | (i << LEASE_GATEWAY_SUBNET_SIZE) | 1;
+    for(int i = 1; i < client_subnet_size; i++) {
+        h_ip = subnet_start | i;
         n_ip = htonl(h_ip);
         ipv4_to_ipaddr(n_ip, &check_ip);
 
@@ -248,17 +252,11 @@ static uint32_t find_controller_free_ip(int unique_id)
     return 0;
 }
 
-static uint32_t find_gw_free_ip(int unique_id, struct controller* controller)
+static uint32_t find_gw_free_ip()
 {
-    static uint32_t dynamic_start = 0;
-    const uint32_t broadcast_mask = (1 << LEASE_GATEWAY_SUBNET_SIZE) - 1;
-    const uint32_t subnet_mask = ~broadcast_mask;
-
-    uint32_t controller_ip;
-    ipaddr_to_ipv4(&controller->priv_ip, &controller_ip);
-    controller_ip = ntohl(controller_ip);
-
-    uint32_t subnet_start = controller_ip & subnet_mask;
+    static uint32_t dynamic_start;
+    const uint32_t node_subnet_lsb = (1 << get_client_subnet_size());
+    const uint32_t node_subnet_mask = ~((1 << get_node_subnet_size()) - 1);
 
     ipaddr_t check_ip;
     memset(&check_ip, 0, sizeof(check_ip));
@@ -266,8 +264,12 @@ static uint32_t find_gw_free_ip(int unique_id, struct controller* controller)
     uint32_t n_ip;
     struct lease *lease;
     
-    /* We begin assigning gateway IP addresses 1 after the controller IP */
-    for(dynamic_start = subnet_start + 2; (dynamic_start & broadcast_mask) < broadcast_mask; dynamic_start ++) {
+    /* We begin assigning gateway IP addresses in the second node subnet */
+    for(
+            dynamic_start = LEASE_BASE_SUBNET + node_subnet_lsb + 1;
+            (dynamic_start & node_subnet_mask) == LEASE_BASE_SUBNET;
+            dynamic_start += node_subnet_lsb
+        ) {
         n_ip = htonl(dynamic_start);
         ipv4_to_ipaddr(n_ip, &check_ip);
 

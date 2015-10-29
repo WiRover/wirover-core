@@ -267,9 +267,10 @@ static int send_response(int sockfd, uint16_t bw_port)
     response.type = CCHAN_NOTIFICATION;
     response.len = sizeof(response);
 
-    response.ver_maj = WIROVER_VERSION_MAJOR;
-    response.ver_min = WIROVER_VERSION_MINOR;
-    response.ver_rev = htons(WIROVER_VERSION_REVISION);
+    struct wirover_version version = get_wirover_version();
+    response.ver_maj = version.major;
+    response.ver_min = version.minor;
+    response.ver_rev = version.revision;
 
     get_private_ip(&response.priv_ip);
     response.unique_id = htons(get_unique_id());

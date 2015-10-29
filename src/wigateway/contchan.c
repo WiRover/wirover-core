@@ -88,9 +88,10 @@ static void _add_cchan_notification(struct packet *pkt, uint8_t type) {
     notif->type = type;
     notif->len = sizeof(struct cchan_notification);
 
-    notif->ver_maj = WIROVER_VERSION_MAJOR;
-    notif->ver_min = WIROVER_VERSION_MINOR;
-    notif->ver_rev = htons(WIROVER_VERSION_REVISION);
+    struct wirover_version version = get_wirover_version();
+    notif->ver_maj = version.major;
+    notif->ver_min = version.minor;
+    notif->ver_rev = version.revision;
 
     get_private_ip(&notif->priv_ip);
     notif->unique_id = htons(get_unique_id());

@@ -1,0 +1,4 @@
+mkdir build || true
+cd build
+rm -r *
+cmake ../src/

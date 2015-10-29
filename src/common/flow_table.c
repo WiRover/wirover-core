@@ -97,7 +97,7 @@ void fill_flow_entry_data(struct flow_entry_data *fed, policy_entry * pd)
     }
 }
 
-struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner) {
+struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner, uint32_t remap_address) {
     struct flow_entry *fe;
 
     struct flow_tuple *newKey = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
@@ -109,6 +109,7 @@ struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner) {
         memset(fe, 0, sizeof(struct flow_entry));
         fe->id = newKey;
         fe->owner = owner;
+        fe->remap_address = remap_address;
 
         policy_entry pd;
         memset(&pd, 0, sizeof(policy_entry));
@@ -135,7 +136,7 @@ struct flow_entry *add_entry_info(struct packet *pkt, int remote_node_id) {
     packet_pull(pkt, sizeof(struct tunhdr_flow_info));
     struct tunhdr_flow_info * egress_info = (struct tunhdr_flow_info *)pkt->data;
     flow_tuple_invert(&ft);
-    struct flow_entry * fe = add_entry(&ft, 0);
+    struct flow_entry * fe = add_entry(&ft, 0, 0);
 
     fe->ingress.action = ingress_info->action;
     fe->ingress.link_select = ingress_info->link_select;

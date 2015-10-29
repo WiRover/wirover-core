@@ -59,8 +59,9 @@ int main(int argc, char* argv[])
     signal(SIGINT, shutdown_handler);
     signal(SIGTERM, shutdown_handler);
 
-    printf("WiRover version %d.%d.%d\n", WIROVER_VERSION_MAJOR,
-        WIROVER_VERSION_MINOR, WIROVER_VERSION_REVISION);
+    struct wirover_version version = get_wirover_version();
+    printf("WiRover version %d.%d.%d\n", version.major,
+        version.minor, version.revision);
 
     srand(time(0));
 
@@ -142,7 +143,7 @@ int main(int argc, char* argv[])
                 write_node_id_file(lease.unique_id);
 
                 ipaddr_to_ipv4(&lease.priv_ip, &private_ip);
-                private_netmask = htonl(slash_to_netmask(lease.priv_subnet_size));
+                private_netmask = htonl(slash_to_netmask(32 - lease.priv_subnet_size));
 
                 lease_renewal_time = time(NULL) + lease.time_limit -
                     RENEW_BEFORE_EXPIRATION;
@@ -211,10 +212,7 @@ int main(int argc, char* argv[])
                 exit(1);
             }
 
-            tcp_mtu_clamp();
-            masquerade("tun0");
-
-            if(start_data_thread(getTunnel()) == FAILURE) {
+            if(start_data_thread(getTunnel(), htonl(slash_to_netmask(32 - lease.client_subnet_size))) == FAILURE) {
                 DEBUG_MSG("Failed to start data thread");
                 exit(1);
             }
@@ -388,7 +386,6 @@ static void shutdown_handler(int signo)
 {
     stop_datapath_thread();
     send_shutdown_notification();
-    remove_tcp_mtu_clamp();
     remove_masquerade("tun0");
     stop_netlink_thread();
     free_flow_table();
