@@ -220,6 +220,15 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
     uint16_t node_id = ntohs(n_tun_hdr.node_id);
     uint16_t link_id = ntohs(n_tun_hdr.link_id);
 
+    if(n_tun_hdr.version != get_tunnel_version()) {
+        DEBUG_MSG("Remote node uses an incorrect version");
+#ifdef GATEWAY
+        exit(EXIT_WRONG_VERSION);
+#endif
+        free_packet(pkt);
+        return SUCCESS;
+    }
+
     //Strip the tunnel header from our packet
     packet_pull(pkt, sizeof(struct tunhdr));
 
