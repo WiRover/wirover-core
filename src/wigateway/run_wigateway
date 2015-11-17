@@ -7,4 +7,4 @@ function test {
     fi
     return $status
 }
-test /usr/bin/wigateway >> /var/log/wigateway
+test /usr/bin/wigateway
