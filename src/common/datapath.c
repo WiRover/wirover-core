@@ -226,7 +226,11 @@ int handle_encap_packet(struct packet * pkt, struct interface *ife, struct socka
         exit(EXIT_WRONG_VERSION);
 #endif
         free_packet(pkt);
-        return SUCCESS;
+        struct packet *error = alloc_packet(sizeof(struct tunhdr), 1);
+        packet_put(error, 1);
+        error->data[0]=  TUNERROR_BAD_VERSION;
+        int output = send_encap_packet_dst_noinfo(TUNTYPE_ERROR, error, ife, from);
+        return output;
     }
 
     //Strip the tunnel header from our packet

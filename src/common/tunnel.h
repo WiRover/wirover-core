@@ -26,9 +26,10 @@
 #define TUNTYPE_FLOW_INFO       0x10
 #define TUNTYPE_DUPLICATE       0x20
 
-#define TUNERROR_BAD_NODE   0x01
-#define TUNERROR_BAD_LINK   0x02
-#define TUNERROR_BAD_FLOW   0x03
+#define TUNERROR_BAD_NODE       0x01
+#define TUNERROR_BAD_LINK       0x02
+#define TUNERROR_BAD_FLOW       0x03
+#define TUNERROR_BAD_VERSION    0x04
 
 struct tunhdr {
     uint8_t     type;
