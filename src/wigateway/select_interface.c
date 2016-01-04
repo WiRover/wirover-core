@@ -6,6 +6,7 @@
 #include "remote_node.h"
 #include "rootchan.h"
 #include "select_interface.h"
+#include "state.h"
 #include "sockets.h"
 #include "timing.h"
 #include "tunnel.h"
@@ -13,6 +14,7 @@
 
 int select_src_interface(struct flow_entry *fe, struct interface **dst, int size)
 {
+    DEBUG_MSG("State: %d", state);
     assert(size > 0);
     dst[0] = NULL;
     // Multipath polices are only valid for the ENCAP action

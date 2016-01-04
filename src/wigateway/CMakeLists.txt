@@ -8,6 +8,7 @@ add_executable(wigateway
     netlink.c
     ping.c
     arguments.c
+    state.h
     select_interface.c
     ${COMMON}/bandwidth.c
     ${COMMON}/circular_buffer.c

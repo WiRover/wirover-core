@@ -1,0 +1,13 @@
+#ifndef _STATE_H_
+#define _STATE_H_
+
+enum {
+    GATEWAY_START,
+    GATEWAY_LEASE_OBTAINED,
+    GATEWAY_PING_SUCCEEDED,
+    GATEWAY_NOTIFICATION_SUCCEEDED,
+};
+
+int state;
+
+#endif //_STATE_H_

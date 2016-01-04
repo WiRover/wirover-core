@@ -22,6 +22,7 @@
 #include "ping.h"
 #include "rootchan.h"
 #include "sockets.h"
+#include "state.h"
 #include "status.h"
 #include "timing.h"
 #include "tunnel.h"
@@ -35,13 +36,6 @@
 #define TUN_DEVICE             "tun0"
 #define RETRY_DELAY             5
 #define NODE_ID_FILE            "/var/lib/wirover/node_id"
-
-enum {
-    GATEWAY_START,
-    GATEWAY_LEASE_OBTAINED,
-    GATEWAY_PING_SUCCEEDED,
-    GATEWAY_NOTIFICATION_SUCCEEDED,
-};
 
 static int write_node_id_file(int node_id);
 static int renew_lease(const struct lease_info *old_lease, struct lease_info *new_lease);
@@ -111,7 +105,6 @@ int main(int argc, char* argv[])
     uint32_t private_netmask = 0;
     inet_pton(AF_INET, DEFAULT_NETMASK, &private_netmask);
 
-    int state = GATEWAY_START;
     struct lease_info lease;
 
     // Generate our private key
