@@ -14,7 +14,11 @@
 
 int select_src_interface(struct flow_entry *fe, struct interface **dst, int size)
 {
-    DEBUG_MSG("State: %d", state);
+    if(!(state & GATEWAY_CONTROLLER_AVAILABLE))
+    {
+        fe->egress.action = POLICY_ACT_NAT;
+        fe->ingress.action = POLICY_ACT_NAT;
+    }
     assert(size > 0);
     dst[0] = NULL;
     // Multipath polices are only valid for the ENCAP action

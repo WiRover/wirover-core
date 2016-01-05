@@ -24,6 +24,7 @@
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
+#include "state.h"
 #include "timing.h"
 #include "tunnel.h"
 
@@ -61,38 +62,6 @@ int start_ping_thread()
 
     pthread_attr_destroy(&attr);
     return 0;
-}
-
-/*
-* PING ALL INTERFACES
-*
-* Locking: Assumes the calling thread does not have a lock on the interface list.
-*/
-int ping_all_interfaces()
-{
-    int pings_sent = 0;
-
-    struct sockaddr_storage dest_addr;
-    unsigned dest_len;
-    dest_len = build_data_sockaddr(get_controller_ife(), &dest_addr);
-    if(dest_len < 0) {
-        return FAILURE;
-    }
-
-    //We need a read lock on the interface list to prevent anyone from adding
-    //or removing interfaces while we iterate over the list.
-    obtain_read_lock(&interface_list_lock);
-
-    struct interface* curr_ife = interface_list;
-    while(curr_ife) {
-        send_ping(curr_ife);
-
-        assert(curr_ife != curr_ife->next);
-        curr_ife = curr_ife->next;
-    }
-
-    release_read_lock(&interface_list_lock);
-    return pings_sent;
 }
 
 /*
@@ -146,7 +115,7 @@ int send_ping(struct interface* ife)
 
 static int should_send_ping(struct interface *ife)
 {
-    if(ife->state == DEAD)
+    if(!(state & GATEWAY_LEASE_OBTAINED) || ife->state == DEAD)
         return 0;
     int64_t elapsed_us = get_elapsed_us(&ife->last_ping_time);
     if(elapsed_us > ife->ping_interval * USECS_PER_SEC)
@@ -183,6 +152,9 @@ void* ping_thread_func(void* arg)
         struct interface *inactive_interface = interface_list;
         while(inactive_interface)
         {
+            //TODO: This should instead send an ICMP ping to google's DNS or something
+            if(!(state & GATEWAY_CONTROLLER_AVAILABLE))
+                inactive_interface->state = ACTIVE;
             if(inactive_interface->state != ACTIVE && timeval_diff(&now, &inactive_interface->tx_time) >= stall_retry_interval){
                 send_encap_packet_ife(TUNTYPE_ACKREQ, alloc_packet(sizeof(struct tunhdr),0), inactive_interface, get_controller_ife(), NULL, 0);
             }

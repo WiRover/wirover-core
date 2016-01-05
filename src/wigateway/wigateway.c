@@ -40,6 +40,7 @@
 static int write_node_id_file(int node_id);
 static int renew_lease(const struct lease_info *old_lease, struct lease_info *new_lease);
 static void shutdown_handler(int signo);
+static struct bw_client_info init_bw_client_info(uint32_t controller_ip);
 static void update_bandwidth(struct bw_client_info *client, struct interface *ife,
 struct bw_stats *stats);
 
@@ -119,99 +120,15 @@ int main(int argc, char* argv[])
 
     int lease_retry_delay = MIN_LEASE_RETRY_DELAY;
     while(1) {
-        if(state == GATEWAY_START) {
-            result = register_gateway(&lease, wiroot_address, wiroot_port);
-            if(result == SUCCESS) {
-                if(lease.unique_id == 0) {
-                    DEBUG_MSG("Lease request rejected, will retry in %u seconds",
-                        lease_retry_delay);
-                    lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
-                    continue;
-                }
-
-                char my_ip[INET6_ADDRSTRLEN];
-                ipaddr_to_string(&lease.priv_ip, my_ip, sizeof(my_ip));
-                DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease.unique_id);
-
-                write_node_id_file(lease.unique_id);
-
-                ipaddr_to_ipv4(&lease.priv_ip, &private_ip);
-                private_netmask = htonl(slash_to_netmask(32 - lease.priv_subnet_size));
-
-                lease_renewal_time = time(NULL) + lease.time_limit -
-                    RENEW_BEFORE_EXPIRATION;
-
-                char cont_ip[INET6_ADDRSTRLEN];
-                ipaddr_to_string(&lease.cinfo.pub_ip, cont_ip, sizeof(cont_ip));
-                DEBUG_MSG("Controller is at: %s, requesting its public key", cont_ip);
-
-                char pub_key[BUFSIZ];
-                result = request_pubkey(wiroot_address, wiroot_port,
-                    lease.cinfo.unique_id, pub_key, BUFSIZ);
-                if(result == FAILURE)
-                {
-                    DEBUG_MSG("Failed to obtain controller public key");
-                }
-                else
-                {
-                    if(authorize_public_key(pub_key, result) == FAILURE)
-                    {
-                        DEBUG_MSG("Failed to add controller public key");
-                    }
-                    else
-                    {
-                        DEBUG_MSG("Successfully authorized controller's public key");
-                    }
-                }
-
-                state = GATEWAY_LEASE_OBTAINED;
-                lease_retry_delay = MIN_LEASE_RETRY_DELAY;
-            }
-        }
-        else if(time(NULL) >= lease_renewal_time) {
-            struct lease_info new_lease;
-            if(renew_lease(&lease, &new_lease) == 0) {
-                memcpy(&lease, &new_lease, sizeof(lease));
-                lease_renewal_time = time(NULL) + lease.time_limit -
-                    RENEW_BEFORE_EXPIRATION;
-                lease_retry_delay = MIN_LEASE_RETRY_DELAY;
-            }
-            else {
-                DEBUG_MSG("Lease renewal failed, will retry in %u seconds",
-                    lease_retry_delay);
-                lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
-                continue;
-            }
-        }
-
-        if(state == GATEWAY_LEASE_OBTAINED) {
-            DEBUG_MSG("Sending startup message to controller");
-            result = send_startup_notification();
-            if(result == FAILURE) {
-                lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
-                continue;
-            }
-
-            uint32_t priv_ip;
-            uint32_t pub_ip;
-
-            ipaddr_to_ipv4(&lease.cinfo.priv_ip, &priv_ip);
-            ipaddr_to_ipv4(&lease.cinfo.pub_ip, &pub_ip);
-
+        if(!(state & GATEWAY_START)) {
             result = tunnel_create(private_ip,
                 private_netmask, get_mtu());
             if(result == FAILURE) {
                 DEBUG_MSG("Failed to bring up tunnel interface");
                 exit(1);
             }
-
-            if(start_data_thread(getTunnel(), htonl(slash_to_netmask(32 - lease.client_subnet_size))) == FAILURE) {
+            if(start_data_thread(getTunnel()) == FAILURE) {
                 DEBUG_MSG("Failed to start data thread");
-                exit(1);
-            }
-
-            if(start_ping_thread() == FAILURE) {
-                DEBUG_MSG("Failed to start ping thread");
                 exit(1);
             }
 
@@ -222,72 +139,109 @@ int main(int argc, char* argv[])
                 exit(1);
             }
 
-            state = GATEWAY_PING_SUCCEEDED;
+            if(start_ping_thread() == FAILURE) {
+                DEBUG_MSG("Failed to start ping thread");
+                exit(1);
+            }
+            state |= GATEWAY_START;
         }
-
-        if(state == GATEWAY_PING_SUCCEEDED) {
-            // TODO: Set default policy to encap
-
-            state = GATEWAY_NOTIFICATION_SUCCEEDED;
-
-            uint32_t pub_ip;
-            ipaddr_to_ipv4(&lease.cinfo.pub_ip, &pub_ip);
-
-            struct bw_client_info bw_client;
-            memset(&bw_client, 0, sizeof(bw_client));
-            bw_client.start_timeout = DEFAULT_BANDWIDTH_START_TIMEOUT * USECS_PER_SEC;
-            bw_client.data_timeout = DEFAULT_BANDWIDTH_DATA_TIMEOUT * USECS_PER_SEC;
-            bw_client.remote_addr = pub_ip;
-            bw_client.remote_port = get_remote_bw_port();
-            bw_client.interval = get_bandwidth_test_interval();
-            bw_client.callback = update_bandwidth;
-
-            const config_t *config = get_config();
-            if(config) {
-                int tmp = 0;
-                int found = 0;
-
-                // Set a maximum because we are going to convert to microseconds.
-                int max_timeout = (UINT_MAX / USECS_PER_SEC);
-
-                found = config_lookup_int_compat(config, "bandwidth-start-timeout", &tmp);
-                if(found == CONFIG_TRUE) {
-                    if(tmp > 0 && tmp <= max_timeout) {
-                        bw_client.start_timeout = tmp * USECS_PER_SEC;
+        if(state & GATEWAY_START) {
+            if(!(state & GATEWAY_LEASE_OBTAINED)) {
+                result = register_gateway(&lease, wiroot_address, wiroot_port);
+                if(result == SUCCESS) {
+                    if(lease.unique_id == 0) {
+                        DEBUG_MSG("Lease request rejected, will retry in %u seconds",
+                            lease_retry_delay);
+                        lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
+                        continue;
                     }
-                    else {
-                        DEBUG_MSG("Invalid value for bandwidth-start-timeout (%d): must be positive and at most %d",
-                            tmp, max_timeout);
-                    }
-                }
 
-                found = config_lookup_int_compat(config, "bandwidth-data-timeout", &tmp);
-                if(found == CONFIG_TRUE) {
-                    if(tmp > 0 && tmp <= max_timeout) {
-                        bw_client.data_timeout = tmp * USECS_PER_SEC;
-                    }
-                    else {
-                        DEBUG_MSG("Invalid value for bandwidth-data-timeout (%d): must be positive and at most %d",
-                            tmp, max_timeout);
-                    }
-                }
+                    char my_ip[INET6_ADDRSTRLEN];
+                    ipaddr_to_string(&lease.priv_ip, my_ip, sizeof(my_ip));
+                    DEBUG_MSG("Obtained lease of %s and unique id %u", my_ip, lease.unique_id);
 
-                found = config_lookup_int_compat(config, "bandwidth-test-interval", &tmp);
-                if(found == CONFIG_TRUE) {
-                    if(tmp > 0) {
-                        bw_client.interval = tmp;
+                    write_node_id_file(lease.unique_id);
+
+                    ipaddr_to_ipv4(&lease.priv_ip, &private_ip);
+                    private_netmask = htonl(slash_to_netmask(32 - lease.priv_subnet_size));
+
+                    lease_renewal_time = time(NULL) + lease.time_limit -
+                        RENEW_BEFORE_EXPIRATION;
+
+                    char cont_ip[INET6_ADDRSTRLEN];
+                    ipaddr_to_string(&lease.cinfo.pub_ip, cont_ip, sizeof(cont_ip));
+                    DEBUG_MSG("Controller is at: %s, requesting its public key", cont_ip);
+
+                    char pub_key[BUFSIZ];
+                    result = request_pubkey(wiroot_address, wiroot_port,
+                        lease.cinfo.unique_id, pub_key, BUFSIZ);
+                    if(result == FAILURE)
+                    {
+                        DEBUG_MSG("Failed to obtain controller public key");
                     }
-                    else {
-                        DEBUG_MSG("Invalid value for bandwidth-test-interval (%d): must be positive",
-                            tmp);
+                    else
+                    {
+                        if(authorize_public_key(pub_key, result) == FAILURE)
+                        {
+                            DEBUG_MSG("Failed to add controller public key");
+                        }
+                        else
+                        {
+                            DEBUG_MSG("Successfully authorized controller's public key");
+                        }
                     }
+
+                    state |= GATEWAY_LEASE_OBTAINED;
+                    lease_retry_delay = MIN_LEASE_RETRY_DELAY;
                 }
             }
+            else if(time(NULL) >= lease_renewal_time) {
+                struct lease_info new_lease;
+                if(renew_lease(&lease, &new_lease) == 0) {
+                    memcpy(&lease, &new_lease, sizeof(lease));
+                    lease_renewal_time = time(NULL) + lease.time_limit -
+                        RENEW_BEFORE_EXPIRATION;
+                    lease_retry_delay = MIN_LEASE_RETRY_DELAY;
+                }
+                else {
+                    DEBUG_MSG("Lease renewal failed, will retry in %u seconds",
+                        lease_retry_delay);
+                    lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
+                    continue;
+                }
+            }
+        }
+
+        if((state & GATEWAY_LEASE_OBTAINED) && !(state & GATEWAY_CONTROLLER_AVAILABLE)) {
+            DEBUG_MSG("Sending startup message to controller");
+            result = send_startup_notification();
+            if(result == FAILURE) {
+                lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
+                continue;
+            }
+
+            uint32_t priv_ip;
+            uint32_t controller_ip;
+
+            ipaddr_to_ipv4(&lease.cinfo.priv_ip, &priv_ip);
+            ipaddr_to_ipv4(&lease.cinfo.pub_ip, &controller_ip);
+
+            set_client_subnet_mask(htonl(slash_to_netmask(32 - lease.client_subnet_size)));
+
+            result = add_route(0, 0, 0, 0, TUN_DEVICE);
+            // EEXIST means the route was already present -> not a failure
+            if(result < 0 && result != -EEXIST) {
+                DEBUG_MSG("add_route failed");
+                exit(1);
+            }
+
+            struct bw_client_info bw_client = init_bw_client_info(controller_ip);
 
             if(start_bandwidth_client_thread(&bw_client) < 0) {
                 DEBUG_MSG("Failed to start bandwidth client thread");
                 exit(1);
             }
+            state |= GATEWAY_CONTROLLER_AVAILABLE;
         }
 
         sleep(RETRY_DELAY);
@@ -311,6 +265,60 @@ static int write_node_id_file(int node_id)
 
     fclose(file);
     return 0;
+}
+
+struct bw_client_info init_bw_client_info(uint32_t controller_ip) {
+    struct bw_client_info bw_client;
+    memset(&bw_client, 0, sizeof(bw_client));
+    bw_client.start_timeout = DEFAULT_BANDWIDTH_START_TIMEOUT * USECS_PER_SEC;
+    bw_client.data_timeout = DEFAULT_BANDWIDTH_DATA_TIMEOUT * USECS_PER_SEC;
+    bw_client.remote_addr = controller_ip;
+    bw_client.remote_port = get_remote_bw_port();
+    bw_client.interval = get_bandwidth_test_interval();
+    bw_client.callback = update_bandwidth;
+
+    const config_t *config = get_config();
+    if(config) {
+        int tmp = 0;
+        int found = 0;
+
+        // Set a maximum because we are going to convert to microseconds.
+        int max_timeout = (UINT_MAX / USECS_PER_SEC);
+
+        found = config_lookup_int_compat(config, "bandwidth-start-timeout", &tmp);
+        if(found == CONFIG_TRUE) {
+            if(tmp > 0 && tmp <= max_timeout) {
+                bw_client.start_timeout = tmp * USECS_PER_SEC;
+            }
+            else {
+                DEBUG_MSG("Invalid value for bandwidth-start-timeout (%d): must be positive and at most %d",
+                    tmp, max_timeout);
+            }
+        }
+
+        found = config_lookup_int_compat(config, "bandwidth-data-timeout", &tmp);
+        if(found == CONFIG_TRUE) {
+            if(tmp > 0 && tmp <= max_timeout) {
+                bw_client.data_timeout = tmp * USECS_PER_SEC;
+            }
+            else {
+                DEBUG_MSG("Invalid value for bandwidth-data-timeout (%d): must be positive and at most %d",
+                    tmp, max_timeout);
+            }
+        }
+
+        found = config_lookup_int_compat(config, "bandwidth-test-interval", &tmp);
+        if(found == CONFIG_TRUE) {
+            if(tmp > 0) {
+                bw_client.interval = tmp;
+            }
+            else {
+                DEBUG_MSG("Invalid value for bandwidth-test-interval (%d): must be positive",
+                    tmp);
+            }
+        }
+    }
+    return bw_client;
 }
 
 /*
