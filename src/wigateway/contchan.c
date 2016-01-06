@@ -11,6 +11,7 @@
 #include "rootchan.h"
 #include "rwlock.h"
 #include "sockets.h"
+#include "state.h"
 
 /* The secret word is randomly generated and sent with each notification
  * and ping packet.  The controller uses it to verify the origin of ping
@@ -37,6 +38,10 @@ int send_notification(int max_tries) {
 
     int ret = _send_notification(max_tries, pkt, 1);
     free_packet(pkt);
+    //TODO: This should also check that at least one interface has INTERNET connectivity
+    if(ret == FAILURE && count_active_interfaces(interface_list) == 0) {
+        state &= ~GATEWAY_CONTROLLER_AVAILABLE;
+    }
     return ret;
 }
 

@@ -123,19 +123,15 @@ int main(int argc, char* argv[])
         if(!(state & GATEWAY_START)) {
             result = tunnel_create(private_ip,
                 private_netmask, get_mtu());
+
+            add_route(0, 0, 0, 0, TUN_DEVICE);
+
             if(result == FAILURE) {
                 DEBUG_MSG("Failed to bring up tunnel interface");
                 exit(1);
             }
             if(start_data_thread(getTunnel()) == FAILURE) {
                 DEBUG_MSG("Failed to start data thread");
-                exit(1);
-            }
-
-            result = add_route(0, 0, 0, 0, TUN_DEVICE);
-            // EEXIST means the route was already present -> not a failure
-            if(result < 0 && result != -EEXIST) {
-                DEBUG_MSG("add_route failed");
                 exit(1);
             }
 
@@ -192,7 +188,6 @@ int main(int argc, char* argv[])
                     }
 
                     state |= GATEWAY_LEASE_OBTAINED;
-                    lease_retry_delay = MIN_LEASE_RETRY_DELAY;
                 }
             }
             else if(time(NULL) >= lease_renewal_time) {
@@ -216,6 +211,8 @@ int main(int argc, char* argv[])
             DEBUG_MSG("Sending startup message to controller");
             result = send_startup_notification();
             if(result == FAILURE) {
+                DEBUG_MSG("Failed to send a startup message to controller");
+                state &= ~GATEWAY_LEASE_OBTAINED;
                 lease_retry_delay = exp_delay(lease_retry_delay, MIN_LEASE_RETRY_DELAY, MAX_LEASE_RETRY_DELAY);
                 continue;
             }
@@ -228,12 +225,8 @@ int main(int argc, char* argv[])
 
             set_client_subnet_mask(htonl(slash_to_netmask(32 - lease.client_subnet_size)));
 
-            result = add_route(0, 0, 0, 0, TUN_DEVICE);
-            // EEXIST means the route was already present -> not a failure
-            if(result < 0 && result != -EEXIST) {
-                DEBUG_MSG("add_route failed");
-                exit(1);
-            }
+            tunnel_update(getTunnel(), private_ip, private_netmask, get_mtu());
+            add_route(0, 0, 0, 0, TUN_DEVICE);
 
             struct bw_client_info bw_client = init_bw_client_info(controller_ip);
 
@@ -243,7 +236,7 @@ int main(int argc, char* argv[])
             }
             state |= GATEWAY_CONTROLLER_AVAILABLE;
         }
-
+        lease_retry_delay = MIN_LEASE_RETRY_DELAY;
         sleep(RETRY_DELAY);
     }
 
@@ -334,53 +327,39 @@ static int renew_lease(const struct lease_info *old_lease, struct lease_info *ne
     const unsigned short wiroot_port = get_wiroot_port();
 
     int result = register_gateway(new_lease, wiroot_address, wiroot_port);
-    if(result == 0) {
-        char my_ip[INET6_ADDRSTRLEN];
-        ipaddr_to_string(&new_lease->priv_ip, my_ip, sizeof(my_ip));
 
-        if(new_lease->unique_id == 0) {
-            DEBUG_MSG("Lease renewal rejected");
-            return -1;
-        }
-        int notif_result = send_startup_notification();
-        if(notif_result == FAILURE) {
-            DEBUG_MSG("Lease renewed but controller didn't respond to startup notification");
-            return FAILURE;
-        }
-        if(ipaddr_cmp(&new_lease->priv_ip, &old_lease->priv_ip) != 0 ||
-            new_lease->priv_subnet_size != old_lease->priv_subnet_size) {
-            DEBUG_MSG("Obtained lease of %s/%hhu",
-                my_ip, new_lease->priv_subnet_size);
+    if(result != SUCCESS)
+        return FAILURE;
 
-            uint32_t private_ip;
-            ipaddr_to_ipv4(&new_lease->priv_ip, &private_ip);
+    char my_ip[INET6_ADDRSTRLEN];
+    ipaddr_to_string(&new_lease->priv_ip, my_ip, sizeof(my_ip));
 
-            uint32_t private_netmask = htonl(slash_to_netmask(new_lease->priv_subnet_size));
-
-            result = tunnel_create(private_ip, private_netmask, get_mtu());
-            if(result == -1) {
-                DEBUG_MSG("Failed to bring up virtual interface");
-                exit(1);
-            }
-
-        }
-        else {
-            DEBUG_MSG("Renewed lease of %s/%hhu",
-                my_ip, new_lease->priv_subnet_size);
-        }
-
-        if(new_lease->unique_id != old_lease->unique_id) {
-            DEBUG_MSG("Changing unique_id from %u to %u\n");
-            write_node_id_file(new_lease->unique_id);
-        }
-
-        /* TODO: Handle potential change of controller */
-
-        return 0;
+    if(new_lease->unique_id == 0) {
+        DEBUG_MSG("Lease renewal rejected");
+        return FAILURE;
     }
-    else {
-        return -1;
+    if(new_lease->cinfo.unique_id != old_lease->cinfo.unique_id) {
+        DEBUG_MSG("Lease renewed but controller changed");
+        state = GATEWAY_START | GATEWAY_LEASE_OBTAINED;
+        return SUCCESS;
     }
+    if(ipaddr_cmp(&new_lease->priv_ip, &old_lease->priv_ip) != 0 ||
+        new_lease->priv_subnet_size != old_lease->priv_subnet_size) {
+        DEBUG_MSG("Obtained new lease of %s/%hhu",
+            my_ip, new_lease->priv_subnet_size);
+        state = GATEWAY_START | GATEWAY_LEASE_OBTAINED;
+        return SUCCESS;
+    }
+
+    if(new_lease->unique_id != old_lease->unique_id) {
+        DEBUG_MSG("Changing unique_id from %u to %u\n");
+        write_node_id_file(new_lease->unique_id);
+    }
+
+    DEBUG_MSG("Renewed lease of %s/%hhu",
+        my_ip, new_lease->priv_subnet_size);
+
+    return SUCCESS;
 }
 
 static void shutdown_handler(int signo)

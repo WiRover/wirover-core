@@ -44,6 +44,70 @@ struct tunnel *getTunnel()
     return tun;
 }
 
+int tunnel_update(struct tunnel *tun, uint32_t ip, uint32_t netmask, unsigned mtu)
+{
+    struct sockaddr_in *addr = NULL;
+    struct ifreq ifr;
+    int ret = FAILURE;
+    int sock = -1;
+    sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if(sock < 0) {
+        ERROR_MSG("socket failed");
+        goto finish;
+    }
+
+    memset(&ifr, 0, sizeof(struct ifreq));
+
+    ifr.ifr_addr.sa_family = AF_INET;
+    strncpy(ifr.ifr_name, tun->name, sizeof(ifr.ifr_name));
+    ifr.ifr_mtu = mtu;
+    
+    if(ioctl(sock, SIOCSIFMTU, &ifr) < 0)
+    {
+        ERROR_MSG("ioctl(SIOCSIFADDR) set MTU failed");
+        goto finish;
+    }
+
+    addr = (struct sockaddr_in *)&(ifr.ifr_addr);
+    memset(addr, 0, sizeof(struct sockaddr_in));
+    addr->sin_family = AF_INET;
+    addr->sin_addr.s_addr = ip;
+
+    strncpy(ifr.ifr_name, tun->name, IFNAMSIZ);
+    if(ioctl(sock, SIOCSIFADDR, &ifr) < 0)
+    {
+        ERROR_MSG("ioctl(SIOCSIFADDR) set IP failed");
+        goto finish;
+    }
+
+    ifr.ifr_netmask.sa_family = AF_INET;
+    struct in_addr *netmask_dst = &((struct sockaddr_in *)&ifr.ifr_netmask)->sin_addr;
+    netmask_dst->s_addr = netmask;
+    if(ioctl(sock, SIOCSIFNETMASK, &ifr) < 0)
+    {
+        ERROR_MSG("ioctl(SIOCSIFNETMASK) set netmask failed");
+        goto finish;
+    }
+
+    ifr.ifr_flags |= IFF_UP;
+    strncpy(ifr.ifr_name, tun->name, IFNAMSIZ);
+    if(ioctl(sock, SIOCSIFFLAGS, &ifr) < 0)
+    {
+        ERROR_MSG("ioctl(SIOCSIFFLAGS) set flags failed");
+        goto finish;
+    }
+    tun->n_private_ip   = ip;
+    tun->n_netmask      = netmask;
+    ret = SUCCESS;
+
+finish:
+    if(sock > 0)
+    {
+        close(sock);
+    }
+    return ret;
+}
+
 /*
  * T U N N E L  A L L O C
  *
@@ -56,10 +120,7 @@ struct tunnel *getTunnel()
  */
 static int tunnelAlloc(struct tunnel *tun, int mtu)
 {
-    struct sockaddr_in *addr = NULL;
     struct ifreq ifr;
-
-    int sock = -1;
 
     int fd = open("/dev/net/tun", O_RDWR);
     if(fd < 0) {
@@ -75,8 +136,6 @@ static int tunnelAlloc(struct tunnel *tun, int mtu)
     */ 
     ifr.ifr_flags = IFF_TUN; 
 
-
-
     strncpy(ifr.ifr_name, "tun%d", IFNAMSIZ);
 
     int err = ioctl(fd, TUNSETIFF, (void *) &ifr);
@@ -87,74 +146,12 @@ static int tunnelAlloc(struct tunnel *tun, int mtu)
 
     strncpy(tun->name, ifr.ifr_name, sizeof(ifr.ifr_name));
 
-    sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
-    if(sock < 0) {
-        ERROR_MSG("socket failed");
-        goto failure;
-    }
-
-    memset(&ifr, 0, sizeof(struct ifreq));
-
-    ifr.ifr_addr.sa_family = AF_INET;
-    strncpy(ifr.ifr_name, tun->name, sizeof(ifr.ifr_name));
-    ifr.ifr_mtu = mtu;
-    
-    if( (err = ioctl(sock, SIOCSIFMTU, &ifr)) < 0) 
-    {
-        ERROR_MSG("ioctl(SIOCSIFADDR) set MTU failed");
-        goto failure;
-    }
-
-    addr = (struct sockaddr_in *)&(ifr.ifr_addr);
-    memset(addr, 0, sizeof(struct sockaddr_in));
-    addr->sin_family = AF_INET;
-    addr->sin_addr.s_addr = tun->n_private_ip;
-    //addr->sin_addr.s_addr = inet_addr("192.168.1.2");
-    //setTunLocalIP(tun->localIP);
-
-    strncpy(ifr.ifr_name, tun->name, IFNAMSIZ);
-    if( (err = ioctl(sock, SIOCSIFADDR, &ifr)) < 0) 
-    {
-        ERROR_MSG("ioctl(SIOCSIFADDR) set IP failed");
-        goto failure;
-    }
-
-    ifr.ifr_netmask.sa_family = AF_INET;
-    struct in_addr *netmask_dst = &((struct sockaddr_in *)&ifr.ifr_netmask)->sin_addr;
-    netmask_dst->s_addr = tun->n_netmask;
-    if( (err = ioctl(sock, SIOCSIFNETMASK, &ifr)) < 0) 
-    {
-        ERROR_MSG("ioctl(SIOCSIFNETMASK) set netmask failed");
-        goto failure;
-    }
-
-    ifr.ifr_flags |= IFF_UP;
-    strncpy(ifr.ifr_name, tun->name, IFNAMSIZ);
-    if( (err = ioctl(sock, SIOCSIFFLAGS, &ifr)) < 0) 
-    {
-        ERROR_MSG("ioctl(SIOCSIFFLAGS) set flags failed");
-        goto failure;
-    }
-    
-    // Set up SO_DONTROUTE for tunnel socket
-    /*if(setsockopt(sock, SOL_SOCKET, SO_DONTROUTE, tun->name, IFNAMSIZ) < 0)
-    {
-        ERROR_MSG("setsockopt(SO_DONTROUTE) on tunnel device failed");
-        close(sock);
-        return FAILURE;
-    }*/
-
-    close(sock);
     return fd;
 
 failure:
     if(fd >= 0)
     {
         close(fd);
-    }
-    if(sock > 0)
-    {
-        close(sock);
     }
 
     return FAILURE;
@@ -204,8 +201,6 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
     
     memset(&tun->name, 0, sizeof(tun->name));
 
-    tun->n_private_ip   = ip;
-    tun->n_netmask      = netmask;
     tun->remotePort     = get_data_port();
     tun->localPort      = get_data_port();
     //TODO: Fill this in from root server
@@ -222,6 +217,8 @@ int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu)
         ERROR_MSG("tunnelAlloc failed");
         return FAILURE;
     }
+
+    tunnel_update(tun, ip, netmask, mtu);
 
     if ( ioctl(tun->tunnelfd, TUNSETNOCSUM, 1) < 0 )
     {

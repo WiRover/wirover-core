@@ -63,6 +63,7 @@ void   tunnelCleanup();
 void   dumpTunHdr(struct tunhdr *tun_hdr);
 void   dumpNetworkTunHdr(struct tunhdr *tun_hdr);
 int tunnel_create(uint32_t ip, uint32_t netmask, unsigned mtu);
+int tunnel_update(struct tunnel *tun, uint32_t ip, uint32_t netmask, unsigned mtu);
 struct tunnel *getTunnel();
 void add_tunnel_header(uint8_t type, struct packet *pkt, struct interface *src_ife,
     struct interface *update_ife, uint32_t global_seq, uint32_t *remote_ts);
