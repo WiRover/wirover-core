@@ -4,6 +4,7 @@ add_executable(wigateway
     wigateway.c
     bandwidth.c
     contchan.c
+    icmp_ping.c
     gps_handler.c
     netlink.c
     ping.c

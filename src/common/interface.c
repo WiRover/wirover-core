@@ -203,6 +203,9 @@ int interface_bind(struct interface *ife, int bind_port)
     ife->raw_sockfd = configure_socket(SOCK_RAW, IPPROTO_RAW, ife->name, 0, 0, 1);
     if(ife->raw_sockfd == FAILURE) { return FAILURE; }
 
+    ife->icmp_sockfd = configure_socket(SOCK_RAW, IPPROTO_ICMP, ife->name, 0, 0, 0);
+    if(ife->icmp_sockfd == FAILURE) { return FAILURE; }
+
 #ifdef GATEWAY
 	if (masquerade(ife->name) == FAILURE) {
 		DEBUG_MSG("Couldn't add MASQUERADE rule for device");

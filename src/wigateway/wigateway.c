@@ -18,6 +18,7 @@
 #include "datapath.h"
 #include "debug.h"
 #include "gps_handler.h"
+#include "icmp_ping.h"
 #include "netlink.h"
 #include "ping.h"
 #include "rootchan.h"
@@ -99,6 +100,8 @@ int main(int argc, char* argv[])
 
     init_policy_table();
 
+    icmp_ping_dest = (struct sockaddr_storage *)malloc(sizeof(struct sockaddr_storage*));
+    build_sockaddr("8.8.8.8", 0 , icmp_ping_dest);
 
     uint32_t private_ip = 0;
     inet_pton(AF_INET, DEFAULT_TUN_ADDRESS, &private_ip);
