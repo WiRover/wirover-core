@@ -5,6 +5,7 @@
 #include "headers.h"
 #include "interface.h"
 #include "icmp_ping.h"
+#include "state.h"
 
 
 int send_icmp_ping(struct interface *ife)
@@ -30,4 +31,13 @@ int send_icmp_ping(struct interface *ife)
 
     free_packet(pkt);
     return ret;
+}
+
+int handle_incoming_icmp_ping(struct interface *ife, struct packet *pkt)
+{
+    if(!(state & GATEWAY_CONTROLLER_AVAILABLE)) {
+        ife->state = ACTIVE;
+    }
+    free_packet(pkt);
+    return SUCCESS;
 }

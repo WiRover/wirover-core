@@ -153,14 +153,11 @@ void* ping_thread_func(void* arg)
         struct interface *inactive_interface = interface_list;
         while(inactive_interface)
         {
-            //TODO: This should instead send an ICMP ping to google's DNS or something
-            if(!inactive_interface->connectivity)
-            {
-                send_icmp_ping(inactive_interface);
-                inactive_interface->state = ACTIVE;
-            }
             if(inactive_interface->state != ACTIVE && timeval_diff(&now, &inactive_interface->tx_time) >= stall_retry_interval){
-                send_encap_packet_ife(TUNTYPE_ACKREQ, alloc_packet(sizeof(struct tunhdr),0), inactive_interface, get_controller_ife(), NULL, 0);
+                if(state & GATEWAY_CONTROLLER_AVAILABLE)
+                    send_encap_packet_ife(TUNTYPE_ACKREQ, alloc_packet(sizeof(struct tunhdr),0), inactive_interface, get_controller_ife(), NULL, 0);
+                else
+                    send_icmp_ping(inactive_interface);
             }
             inactive_interface = inactive_interface->next;
         }

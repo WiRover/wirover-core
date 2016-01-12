@@ -27,6 +27,9 @@
 #include "ping.h"
 #include "rateinfer.h"
 #include "remote_node.h"
+#ifdef GATEWAY
+#include "icmp_ping.h"
+#endif
 
 #ifndef SIOCGSTAMP
     #define SIOCGSTAMP 0x8906
@@ -133,9 +136,10 @@ int handlePackets()
         obtain_read_lock(&interface_list_lock);
         struct interface* curr_ife = interface_list;
         while (curr_ife) {
-            if(curr_ife->sockfd > 0){
+            if(curr_ife->sockfd > 0)
                 FD_SET(curr_ife->sockfd, &read_set);
-            }
+            if(curr_ife->icmp_sockfd > 0)
+                FD_SET(curr_ife->icmp_sockfd, &read_set);
             curr_ife = curr_ife->next;
         }
         release_read_lock(&interface_list_lock);
@@ -158,6 +162,9 @@ int handlePackets()
         while (curr_ife) {
             if( FD_ISSET(curr_ife->sockfd, &read_set) ) {
                 handle_packet(curr_ife, curr_ife->sockfd);
+            }
+            if( FD_ISSET(curr_ife->icmp_sockfd, &read_set) ) {
+                handle_packet(curr_ife, curr_ife->icmp_sockfd);
             }
             curr_ife = curr_ife->next;
         }
@@ -197,10 +204,12 @@ int handle_packet(struct interface * ife, int sockfd)
 
     ife->rx_time = arrival_time;
     ife->packets_since_ack = 0;
+#ifdef GATEWAY
+    if(sockfd == ife->icmp_sockfd)
+        return handle_incoming_icmp_ping(ife, pkt);
+#endif
     change_interface_state(ife, ACTIVE);
     return handle_encap_packet(pkt, ife, &from);
-
-    return FAILURE;
 }
 
 int handle_encap_packet(struct packet * pkt, struct interface *ife, struct sockaddr_storage * from)

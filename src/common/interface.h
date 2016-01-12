@@ -31,7 +31,6 @@ struct interface {
     char                name[IFNAMSIZ];
     char                network[NETWORK_NAME_LENGTH];
     enum if_state       state;
-    int                 connectivity;
     int                 priority;
 
     //This is for local interfaces

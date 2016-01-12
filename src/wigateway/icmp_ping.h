@@ -4,7 +4,7 @@
 #include "packet.h"
 
 int send_icmp_ping(struct interface *ife);
-int handle_incoming_icmp_ping(struct sockaddr_storage *from_addr, struct timeval recv_time, struct interface *ife, struct packet *pkt);
+int handle_incoming_icmp_ping(struct interface *ife, struct packet *pkt);
 struct sockaddr_storage * icmp_ping_dest;
 
 #endif
