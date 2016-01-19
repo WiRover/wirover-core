@@ -60,7 +60,7 @@ static uint32_t             client_subnet_mask = 0x003FFFFF;
 
 uint32_t local_remap_address()
 {
-    return tun->n_private_ip | (~tun->n_netmask ^ 0x01000000);
+    return (tun->n_private_ip & tun->n_netmask) | (~tun->n_netmask ^ 0x01000000);
 }
 
 int start_data_thread(struct tunnel *tun_in)
@@ -202,12 +202,12 @@ int handle_packet(struct interface * ife, int sockfd)
     get_recv_timestamp(sockfd, &arrival_time);
     pkt->created = arrival_time;
 
-    ife->rx_time = arrival_time;
-    ife->packets_since_ack = 0;
 #ifdef GATEWAY
     if(sockfd == ife->icmp_sockfd)
         return handle_incoming_icmp_ping(ife, pkt);
 #endif
+    ife->rx_time = arrival_time;
+    ife->packets_since_ack = 0;
     change_interface_state(ife, ACTIVE);
     return handle_encap_packet(pkt, ife, &from);
 }
