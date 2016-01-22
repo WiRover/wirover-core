@@ -60,7 +60,7 @@ static uint32_t             client_subnet_mask = 0x003FFFFF;
 
 uint32_t local_remap_address()
 {
-    return (tun->n_private_ip & tun->n_netmask) | (~tun->n_netmask ^ 0x01000000);
+    return (tun->n_private_ip & client_subnet_mask) | (~client_subnet_mask ^ 0x01000000);
 }
 
 int start_data_thread(struct tunnel *tun_in)
