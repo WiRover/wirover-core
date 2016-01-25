@@ -7,7 +7,7 @@ struct interface *select_preferred_interface(struct interface *head, struct flow
 {
     policy_entry policy;
     memset(&policy, 0, sizeof(policy_entry));
-    if(get_policy_by_tuple(fe->id, &policy, dir) == SUCCESS && strlen(policy.preferred_link) > 0){
+    if(get_policy_by_tuple(&fe->id, &policy, dir) == SUCCESS && strlen(policy.preferred_link) > 0){
         return find_interface_by_network(interface_list, policy.preferred_link);
     }
     return NULL;
