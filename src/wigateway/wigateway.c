@@ -41,7 +41,7 @@
 static int write_node_id_file(int node_id);
 static int renew_lease(const struct lease_info *old_lease, struct lease_info *new_lease);
 static void shutdown_handler(int signo);
-static struct bw_client_info init_bw_client_info(uint32_t controller_ip);
+static struct bw_client_info *init_bw_client_info();
 static void update_bandwidth(struct bw_client_info *client, struct interface *ife,
 struct bw_stats *stats);
 
@@ -122,7 +122,11 @@ int main(int argc, char* argv[])
     }
 
     int lease_retry_delay = MIN_LEASE_RETRY_DELAY;
+    struct bw_client_info *bw_client = init_bw_client_info();
     while(1) {
+        if(!(state & GATEWAY_CONTROLLER_AVAILABLE))
+            pauseBandwidthThread(bw_client);
+
         if(!(state & GATEWAY_START)) {
             result = tunnel_create(private_ip,
                 private_netmask, get_mtu());
@@ -140,6 +144,10 @@ int main(int argc, char* argv[])
 
             if(start_ping_thread() == FAILURE) {
                 DEBUG_MSG("Failed to start ping thread");
+                exit(1);
+            }
+            if(start_bandwidth_client_thread(bw_client) < 0) {
+                DEBUG_MSG("Failed to start bandwidth client thread");
                 exit(1);
             }
             state |= GATEWAY_START;
@@ -209,7 +217,6 @@ int main(int argc, char* argv[])
                 }
             }
         }
-
         if((state & GATEWAY_LEASE_OBTAINED) && !(state & GATEWAY_CONTROLLER_AVAILABLE)) {
             DEBUG_MSG("Sending startup message to controller");
             result = send_startup_notification();
@@ -231,12 +238,10 @@ int main(int argc, char* argv[])
             tunnel_update(getTunnel(), private_ip, private_netmask, get_mtu());
             add_route(0, 0, 0, 0, TUN_DEVICE);
 
-            struct bw_client_info bw_client = init_bw_client_info(controller_ip);
+            bw_client->remote_addr = controller_ip;
+            bw_client->remote_port = get_remote_bw_port();
+            resumeBandwidthThread(bw_client);
 
-            if(start_bandwidth_client_thread(&bw_client) < 0) {
-                DEBUG_MSG("Failed to start bandwidth client thread");
-                exit(1);
-            }
             state |= GATEWAY_CONTROLLER_AVAILABLE;
         }
         lease_retry_delay = MIN_LEASE_RETRY_DELAY;
@@ -263,15 +268,17 @@ static int write_node_id_file(int node_id)
     return 0;
 }
 
-struct bw_client_info init_bw_client_info(uint32_t controller_ip) {
-    struct bw_client_info bw_client;
-    memset(&bw_client, 0, sizeof(bw_client));
-    bw_client.start_timeout = DEFAULT_BANDWIDTH_START_TIMEOUT * USECS_PER_SEC;
-    bw_client.data_timeout = DEFAULT_BANDWIDTH_DATA_TIMEOUT * USECS_PER_SEC;
-    bw_client.remote_addr = controller_ip;
-    bw_client.remote_port = get_remote_bw_port();
-    bw_client.interval = get_bandwidth_test_interval();
-    bw_client.callback = update_bandwidth;
+struct bw_client_info *init_bw_client_info() {
+    struct bw_client_info *bw_client = (struct bw_client_info *)malloc(sizeof(struct bw_client_info));
+    memset(bw_client, 0, sizeof(struct bw_client_info));
+    bw_client->start_timeout = DEFAULT_BANDWIDTH_START_TIMEOUT * USECS_PER_SEC;
+    bw_client->data_timeout = DEFAULT_BANDWIDTH_DATA_TIMEOUT * USECS_PER_SEC;
+    bw_client->interval = get_bandwidth_test_interval();
+    bw_client->callback = update_bandwidth;
+    bw_client->pauseFlag = 1;
+
+    pthread_mutex_init(&bw_client->pauseMutex, 0);
+    pthread_cond_init(&bw_client->pauseCond, 0);
 
     const config_t *config = get_config();
     if(config) {
@@ -284,7 +291,7 @@ struct bw_client_info init_bw_client_info(uint32_t controller_ip) {
         found = config_lookup_int_compat(config, "bandwidth-start-timeout", &tmp);
         if(found == CONFIG_TRUE) {
             if(tmp > 0 && tmp <= max_timeout) {
-                bw_client.start_timeout = tmp * USECS_PER_SEC;
+                bw_client->start_timeout = tmp * USECS_PER_SEC;
             }
             else {
                 DEBUG_MSG("Invalid value for bandwidth-start-timeout (%d): must be positive and at most %d",
@@ -295,7 +302,7 @@ struct bw_client_info init_bw_client_info(uint32_t controller_ip) {
         found = config_lookup_int_compat(config, "bandwidth-data-timeout", &tmp);
         if(found == CONFIG_TRUE) {
             if(tmp > 0 && tmp <= max_timeout) {
-                bw_client.data_timeout = tmp * USECS_PER_SEC;
+                bw_client->data_timeout = tmp * USECS_PER_SEC;
             }
             else {
                 DEBUG_MSG("Invalid value for bandwidth-data-timeout (%d): must be positive and at most %d",
@@ -306,7 +313,7 @@ struct bw_client_info init_bw_client_info(uint32_t controller_ip) {
         found = config_lookup_int_compat(config, "bandwidth-test-interval", &tmp);
         if(found == CONFIG_TRUE) {
             if(tmp > 0) {
-                bw_client.interval = tmp;
+                bw_client->interval = tmp;
             }
             else {
                 DEBUG_MSG("Invalid value for bandwidth-test-interval (%d): must be positive",
