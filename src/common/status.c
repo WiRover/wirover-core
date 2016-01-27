@@ -5,6 +5,9 @@
 #include "flow_table.h"
 #include "interface.h"
 #include "timing.h"
+#ifdef GATEWAY
+#include "state.h"
+#endif
 
 static void* status_thread_func(void* arg);
 
@@ -52,6 +55,11 @@ void* status_thread_func(void* arg)
         release_read_lock(&interface_list_lock);
 
         dump_flow_table_to_file("/var/lib/wirover/flow_table");
+#ifdef GATEWAY
+        FILE *ft_file = fopen("/var/lib/wirover/state", "w");
+        fprintf(ft_file, "%d\n", state);
+        fclose(ft_file);
+#endif
 
         safe_usleep(status_interval);
     }
