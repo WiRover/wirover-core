@@ -489,11 +489,12 @@ int build_sockaddr(const char* ip, unsigned short port, struct sockaddr_storage*
         return FAILURE;
     }
 
-    memset(dest, 0, sizeof(*dest));
-    memcpy(dest, results->ai_addr, results->ai_addrlen);
+    int addrlen = results->ai_addrlen;
+    memset(dest, 0, sizeof(struct sockaddr_storage));
+    memcpy(dest, results->ai_addr, addrlen);
     freeaddrinfo(results);
 
-    return results->ai_addrlen;
+    return addrlen;
 }
 
 int build_data_sockaddr(struct interface *dst_ife, struct sockaddr_storage* dest)

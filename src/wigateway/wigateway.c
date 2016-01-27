@@ -98,10 +98,10 @@ int main(int argc, char* argv[])
         DEBUG_MSG("Failed to initialize gps handler");
     }
 
-    init_policy_table();
+    icmp_ping_dest = (struct sockaddr_storage *)malloc(sizeof(struct sockaddr_storage));
+    build_sockaddr("8.8.8.8", 0, icmp_ping_dest);
 
-    icmp_ping_dest = (struct sockaddr_storage *)malloc(sizeof(struct sockaddr_storage*));
-    build_sockaddr("8.8.8.8", 0 , icmp_ping_dest);
+    init_policy_table();
 
     uint32_t private_ip = 0;
     inet_pton(AF_INET, DEFAULT_TUN_ADDRESS, &private_ip);
