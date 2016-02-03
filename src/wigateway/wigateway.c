@@ -22,6 +22,7 @@
 #include "netlink.h"
 #include "ping.h"
 #include "rootchan.h"
+#include "select_interface.h"
 #include "sockets.h"
 #include "state.h"
 #include "status.h"
@@ -63,6 +64,8 @@ int main(int argc, char* argv[])
 
     if(parse_arguments(argc, argv) < 0)
         exit(1);
+
+    allow_nat_only = get_allow_nat_only();
 
     const char* wiroot_address = get_wiroot_address();
     if(strlen(wiroot_address) == 0)

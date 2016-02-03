@@ -3,6 +3,10 @@
 
 #include "flow_table.h"
 
+#ifdef GATEWAY
+int allow_nat_only;
+#endif
+
 struct interface *select_preferred_interface(struct interface *head, struct flow_entry *fe, int dir);
 struct interface *select_mp_interface(struct interface *head);
 struct interface *select_weighted_interface(struct interface *head);
