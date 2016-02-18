@@ -7,6 +7,8 @@
 #include "timing.h"
 #ifdef GATEWAY
 #include "state.h"
+#include "select_interface.h"
+#include <unistd.h>
 #endif
 
 static void* status_thread_func(void* arg);
@@ -45,6 +47,28 @@ int start_status_thread()
     return SUCCESS;
 }
 
+void write_led_file(int led_index, const char *file_name, const char *text) {
+    char path[100];
+    snprintf(path, 100, "/sys/class/leds/apu:%d/%s", led_index, file_name);
+    if(access(path, F_OK) != -1) {
+        FILE *ft_file = fopen(path, "w");
+        fprintf(ft_file, "%s", text);
+        fclose(ft_file);
+    }
+}
+
+void set_led(int led_index, int status) {
+    if(status == 0)
+        write_led_file(led_index, "trigger", "none");
+    else if(status == 1)
+        write_led_file(led_index, "trigger", "default-on");
+    else if(status == 2) {
+        //write_led_file(led_index, "trigger", "heartbeat");
+        write_led_file(led_index, "trigger", "timer");
+        write_led_file(led_index, "delay_on", "500");
+        write_led_file(led_index, "delay_off", "500");
+    }
+}
 
 void* status_thread_func(void* arg)
 {
@@ -59,6 +83,9 @@ void* status_thread_func(void* arg)
         FILE *ft_file = fopen("/var/lib/wirover/state", "w");
         fprintf(ft_file, "%d\n", state);
         fclose(ft_file);
+        set_led(1, 1);
+        set_led(2, state & GATEWAY_CONTROLLER_AVAILABLE ? 1 : (allow_nat_only ? 2 : 0));
+        set_led(3, count_active_interfaces(interface_list) > 0);
 #endif
 
         safe_usleep(status_interval);
