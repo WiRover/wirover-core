@@ -47,6 +47,7 @@ int start_status_thread()
     return SUCCESS;
 }
 
+#ifdef GATEWAY
 void write_led_file(int led_index, const char *file_name, const char *text) {
     char path[100];
     snprintf(path, 100, "/sys/class/leds/apu:%d/%s", led_index, file_name);
@@ -69,6 +70,7 @@ void set_led(int led_index, int status) {
         write_led_file(led_index, "delay_off", "500");
     }
 }
+#endif
 
 void* status_thread_func(void* arg)
 {
