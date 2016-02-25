@@ -26,7 +26,6 @@
  */
 
 /* Configuration file keys */
-#define CONFIG_ALLOW_NAT_ONLY               "allow-nat-only"
 #define CONFIG_WIROOT_ADDRESS               "wiroot-address"
 #define CONFIG_WIROOT_PORT                  "wiroot-port"
 #define CONFIG_DATA_PORT                    "data-port"
@@ -52,7 +51,6 @@
 #define CONFIG_MYSQL_DATABASE       "mysql-database"
 
 /* Default values for missing entries */
-#define DEFAULT_ALLOW_NAT_ONLY      0
 #define DEFAULT_WIROOT_ADDRESS      NULL
 #define DEFAULT_WIROOT_PORT         8088
 #define DEFAULT_DATA_PORT           8080
@@ -88,7 +86,6 @@ void                close_config();
 int config_lookup_int_compat(const config_t *config, const char *path, int *value);
 int config_setting_lookup_int_compat(const config_setting_t *setting, const char *path, int *value);
 
-int             get_allow_nat_only();
 const char*     get_wiroot_address();
 unsigned short  get_wiroot_port();
 unsigned short  get_data_port();

@@ -96,18 +96,6 @@ int config_setting_lookup_int_compat(const config_setting_t *setting, const char
 #endif
 }
 
-int get_allow_nat_only()
-{
-    const config_t* config = get_config();
-
-    int nat_only_allowed = DEFAULT_ALLOW_NAT_ONLY;
-    if(!config || config_lookup_int_compat(config, CONFIG_ALLOW_NAT_ONLY, &nat_only_allowed) == CONFIG_FALSE) {
-        DEBUG_MSG("failed to read nat_only_allowed from config file");
-    }
-
-    return nat_only_allowed;
-}
-
 const char* get_wiroot_address()
 {
     const config_t* config = get_config();
