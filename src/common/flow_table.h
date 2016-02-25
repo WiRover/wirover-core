@@ -44,6 +44,7 @@ struct flow_entry {
     uint8_t owner;
     //Count of packets to include flow info in
     uint8_t requires_flow_info;
+    uint8_t allow_nat_failover;
     struct flow_entry_data egress;
     struct flow_entry_data ingress;
     uint32_t remap_address;

@@ -64,10 +64,10 @@ void set_led(int led_index, int status) {
     else if(status == 1)
         write_led_file(led_index, "trigger", "default-on");
     else if(status == 2) {
-        //write_led_file(led_index, "trigger", "heartbeat");
-        write_led_file(led_index, "trigger", "timer");
-        write_led_file(led_index, "delay_on", "500");
-        write_led_file(led_index, "delay_off", "500");
+        write_led_file(led_index, "trigger", "heartbeat");
+        //write_led_file(led_index, "trigger", "timer");
+        //write_led_file(led_index, "delay_on", "500");
+        //write_led_file(led_index, "delay_off", "500");
     }
 }
 #endif
@@ -86,8 +86,8 @@ void* status_thread_func(void* arg)
         fprintf(ft_file, "%d\n", state);
         fclose(ft_file);
         set_led(1, 1);
-        set_led(2, state & GATEWAY_CONTROLLER_AVAILABLE ? 1 : (allow_nat_only ? 2 : 0));
-        set_led(3, count_active_interfaces(interface_list) > 0);
+        set_led(2, state & GATEWAY_CONTROLLER_AVAILABLE ? 1 : 0);
+        set_led(3, count_active_interfaces(interface_list) > 0 ? 2 : 0);
 #endif
 
         safe_usleep(status_interval);

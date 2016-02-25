@@ -83,6 +83,13 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         goto failure_print;
     }
 
+    //--ALLOW NAT FAILOVER--//
+    value = json_object_object_get(jobj_policy, "allow_nat_failover");
+    if(json_object_is_type(value, json_type_boolean)) {
+        int allow_nat_failover = json_object_get_boolean(value);
+        pe->allow_nat_failover = allow_nat_failover;
+    }
+
     //--LINK_SELECT--//
     value = json_object_object_get(jobj_policy, "link_select");
     if(json_object_is_type(value, json_type_string)) {
@@ -291,8 +298,8 @@ void print_policy_entry(policy_entry * pe) {
     if(pe->preferred_link[0] != 0){
         snprintf(link_pref_str, 100, " preferred link: %s", pe->preferred_link);
     }
-    DEBUG_MSG("direction: %s local: %s local_net: %s remote: %s remote_net: %s proto: %d act: %d ls: %d%s rate: %f",
-        dir_str, l_str_port, l_net_str, r_str_port, r_net_str, pe->ft.proto, pe->action, pe->link_select, link_pref_str, pe->rate_limit);
+    DEBUG_MSG("direction: %s local: %s local_net: %s remote: %s remote_net: %s proto: %d act: %d nat?: %d ls: %d%s rate: %f",
+        dir_str, l_str_port, l_net_str, r_str_port, r_net_str, pe->ft.proto, pe->action, pe->allow_nat_failover, pe->link_select, link_pref_str, pe->rate_limit);
 }
 
 void print_policies() {

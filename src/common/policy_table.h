@@ -18,11 +18,11 @@
 #define MAX_POLICY_ENTRY_LENGTH 150
 
 // actions
-#define POLICY_ACT_PASS    0x1
-#define POLICY_ACT_NAT     0x2
-#define POLICY_ACT_ENCAP   0x3
-#define POLICY_ACT_DROP    0x5
-#define POLICY_ACT_LISP    0x6
+#define POLICY_ACT_PASS         0x1
+#define POLICY_ACT_NAT          0x2
+#define POLICY_ACT_ENCAP        0x3
+#define POLICY_ACT_DROP         0x5
+#define POLICY_ACT_LISP         0x6
 
 // link select options
 #define POLICY_LS_WEIGHTED      0x1
@@ -39,6 +39,7 @@ enum policy_type {
 
 typedef struct{
     uint8_t action;
+    uint8_t allow_nat_failover;
     uint8_t link_select;
     char preferred_link[IFNAMSIZ];
     double rate_limit;

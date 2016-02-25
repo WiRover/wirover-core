@@ -115,6 +115,7 @@ struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner, uint32_t r
         get_policy_by_tuple(tuple,  &pd, DIR_INGRESS);
         fill_flow_entry_data(&fe->ingress, &pd);
 
+        fe->allow_nat_failover = pd.allow_nat_failover;
         if(fe->egress.action == POLICY_ACT_ENCAP)
         {
             fe->requires_flow_info = 3;

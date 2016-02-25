@@ -14,7 +14,7 @@
 
 int select_src_interface(struct flow_entry *fe, struct interface **dst, int size)
 {
-    if(!(state & GATEWAY_CONTROLLER_AVAILABLE))
+    if(fe->allow_nat_failover && !(state & GATEWAY_CONTROLLER_AVAILABLE))
     {
         if(fe->egress.action == POLICY_ACT_ENCAP)
             fe->egress.action = POLICY_ACT_NAT;
