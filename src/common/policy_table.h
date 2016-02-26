@@ -47,6 +47,10 @@ typedef struct{
     // flow policy
     uint8_t direction;
     struct flow_tuple ft;
+    //Local/remote will contain values if the policy has fancy local or remote matches.
+    //If the policy is just IP addresses, they will be stored in ft.
+    char local[INET6_ADDRSTRLEN];
+    char remote[INET6_ADDRSTRLEN];
     uint32_t local_netmask;
     uint32_t remote_netmask;
 
