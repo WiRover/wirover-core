@@ -7,7 +7,8 @@
 #define DEFAULT_INTERFACE_PRIORITY 0
 
 //Exit codes
-#define EXIT_WRONG_VERSION 2
+#define EXIT_WRONG_VERSION  3
+#define EXIT_NO_ROOT_SERVER 4
 
 #if defined(CONTROLLER)
 #define CONFIG_FILENAME "wicontroller.conf"

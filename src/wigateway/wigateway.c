@@ -68,7 +68,7 @@ int main(int argc, char* argv[])
     if(strlen(wiroot_address) == 0)
     {
         DEBUG_MSG("Wiroot address not configured, exiting.");
-        exit(1);
+        exit(EXIT_NO_ROOT_SERVER);
     }
     const unsigned short wiroot_port = get_wiroot_port();
     unsigned short data_port = get_data_port();
