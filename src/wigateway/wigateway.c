@@ -68,7 +68,7 @@ int main(int argc, char* argv[])
     if(strlen(wiroot_address) == 0)
     {
         DEBUG_MSG("Wiroot address not configured, exiting.");
-        exit(0);
+        exit(1);
     }
     const unsigned short wiroot_port = get_wiroot_port();
     unsigned short data_port = get_data_port();
@@ -379,7 +379,7 @@ static void shutdown_handler(int signo)
     remove_masquerade("tun0");
     stop_netlink_thread();
     free_flow_table();
-    exit(0);
+    exit(128 + signo);
 }
 
 static void update_bandwidth(struct bw_client_info *client, struct interface *ife,

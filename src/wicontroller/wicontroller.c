@@ -261,7 +261,7 @@ static void server_loop(int cchan_sock)
 static void shutdown_handler(int signo)
 {
     remove_masquerade("eth0");
-    exit(0);
+    exit(128 + signo);
 }
 
 /*
