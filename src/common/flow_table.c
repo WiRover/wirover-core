@@ -64,7 +64,7 @@ void fill_flow_info(struct flow_entry *fe, struct packet *info_pkt) {
     packet_push(info_pkt, sizeof(struct tunhdr_flow_info));
     *(struct tunhdr_flow_info *)info_pkt->data = egress_info;
     packet_push(info_pkt, sizeof(struct flow_tuple));
-    hton_flow_tuple(fe->id , (struct flow_tuple*)info_pkt->data);
+    hton_flow_tuple(&fe->id , (struct flow_tuple*)info_pkt->data);
 }
 
 void hton_flow_tuple(struct flow_tuple *src, struct flow_tuple *dst) {
@@ -100,14 +100,11 @@ void fill_flow_entry_data(struct flow_entry_data *fed, policy_entry * pd)
 struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner, uint32_t remap_address) {
     struct flow_entry *fe;
 
-    struct flow_tuple *newKey = (struct flow_tuple *) malloc(sizeof(struct flow_tuple));
-    memset(newKey, 0, sizeof(struct flow_tuple));
-    memcpy(newKey, tuple, sizeof(struct flow_tuple));
-    HASH_FIND(hh, flow_table, newKey, sizeof(struct flow_tuple), fe);
+    HASH_FIND(hh, flow_table, tuple, sizeof(struct flow_tuple), fe);
     if(fe == NULL) {
         fe = (struct flow_entry *) malloc(sizeof(struct flow_entry));
         memset(fe, 0, sizeof(struct flow_entry));
-        fe->id = newKey;
+        fe->id = *tuple;
         fe->owner = owner;
         fe->remap_address = remap_address;
 
@@ -118,13 +115,14 @@ struct flow_entry *add_entry(struct flow_tuple* tuple, uint8_t owner, uint32_t r
         get_policy_by_tuple(tuple,  &pd, DIR_INGRESS);
         fill_flow_entry_data(&fe->ingress, &pd);
 
+        fe->allow_nat_failover = pd.allow_nat_failover;
         if(fe->egress.action == POLICY_ACT_ENCAP)
         {
             fe->requires_flow_info = 3;
         }
 
         fe->last_visit_time = time(NULL);
-        HASH_ADD_KEYPTR(hh, flow_table, newKey, sizeof(struct flow_tuple), fe);
+        HASH_ADD_KEYPTR(hh, flow_table, &fe->id, sizeof(struct flow_tuple), fe);
     }
     return fe;
 }
@@ -178,7 +176,6 @@ void free_flow_table() {
 void free_flow_entry(struct flow_entry * fe) {
     obtain_write_lock(&flow_table_lock);
     HASH_DEL(flow_table, fe);
-    free(fe->id);
     if(fe->ingress.rate_control)
         rc_destroy(fe->ingress.rate_control);
     if(fe->egress.rate_control)
@@ -252,7 +249,7 @@ int flow_entry_to_string(const struct flow_entry *fe, char *str, int size)
     char egress_buffer[1024];
     char ingress_buffer[1024];
 
-    flow_tuple_to_string(fe->id, ft_buffer, sizeof(ft_buffer));
+    flow_tuple_to_string(&fe->id, ft_buffer, sizeof(ft_buffer));
     flow_data_to_string(&fe->ingress, ingress_buffer, sizeof(ingress_buffer));
     flow_data_to_string(&fe->egress, egress_buffer, sizeof(egress_buffer));
     return snprintf(str, size, "%s RFI: %d Owner: %d\n\tIngress: %s\n\tEgress: %s", ft_buffer, fe->requires_flow_info, fe->owner, ingress_buffer, egress_buffer);

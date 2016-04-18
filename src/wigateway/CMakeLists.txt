@@ -4,10 +4,12 @@ add_executable(wigateway
     wigateway.c
     bandwidth.c
     contchan.c
+    icmp_ping.c
     gps_handler.c
     netlink.c
     ping.c
     arguments.c
+    state.h
     select_interface.c
     ${COMMON}/bandwidth.c
     ${COMMON}/circular_buffer.c
@@ -40,10 +42,6 @@ add_executable(wigateway
 target_link_libraries(wigateway pthread config gps ssl crypto m json)
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wigateway DESTINATION /usr/bin)
-install(PROGRAMS run_wigateway DESTINATION /usr/bin)
-install(FILES wigateway_upstart.conf DESTINATION /etc/init RENAME wigateway.conf)
 install(FILES wigateway.conf DESTINATION /etc)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/wigateway.conf ${CMAKE_CURRENT_BINARY_DIR}/wigateway.conf COPYONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/wigateway_upstart.conf ${CMAKE_CURRENT_BINARY_DIR}/wigateway_upstart.conf COPYONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/run_wigateway ${CMAKE_CURRENT_BINARY_DIR}/run_wigateway COPYONLY)

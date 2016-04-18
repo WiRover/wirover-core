@@ -57,6 +57,7 @@ struct interface {
 
     uint32_t            next_ping_seq_no;
     uint32_t            last_ping_seq_no;
+    uint16_t            next_icmp_seq_no;
 
     double              est_downlink_bw;
     double              est_uplink_bw;
@@ -73,9 +74,10 @@ struct interface {
     double              avg_rtt;
     double              avg_downlink_bw;
     double              avg_uplink_bw;
+
     int                 sockfd;
     int                 raw_sockfd;
-
+    int                 icmp_sockfd;
 
     // default gateway for routing if needed
     struct in_addr      gateway_ip;

@@ -14,7 +14,7 @@ struct psuedo_ip_hdr {
     __be16 length;
 };
 /* Compute checksum for count bytes starting at addr, using one's complement of one's complement sum*/
-static unsigned short compute_checksum(unsigned short *addr, unsigned int count) {
+unsigned short compute_checksum(unsigned short *addr, unsigned int count) {
   register unsigned long sum = 0;
   while (count > 1) {
     sum += * addr++;

@@ -6,6 +6,7 @@
 #include "remote_node.h"
 #include "rootchan.h"
 #include "select_interface.h"
+#include "state.h"
 #include "sockets.h"
 #include "timing.h"
 #include "tunnel.h"
@@ -13,6 +14,13 @@
 
 int select_src_interface(struct flow_entry *fe, struct interface **dst, int size)
 {
+    if(fe->allow_nat_failover && !(state & GATEWAY_CONTROLLER_AVAILABLE))
+    {
+        if(fe->egress.action == POLICY_ACT_ENCAP)
+            fe->egress.action = POLICY_ACT_NAT;
+        if(fe->ingress.action == POLICY_ACT_ENCAP)
+            fe->ingress.action = POLICY_ACT_NAT;
+    }
     assert(size > 0);
     dst[0] = NULL;
     // Multipath polices are only valid for the ENCAP action
@@ -25,6 +33,10 @@ int select_src_interface(struct flow_entry *fe, struct interface **dst, int size
         {
             return select_all_interfaces(interface_list, dst, size);
         }
+    }
+    else if(fe->egress.action == POLICY_ACT_NAT) {
+        if(fe->egress.link_select != POLICY_LS_WEIGHTED || fe->egress.link_select != POLICY_LS_FORCED)
+            fe->egress.link_select = POLICY_LS_WEIGHTED;
     }
 
     // We are now selecting a single interface for either ENCAP or NAT

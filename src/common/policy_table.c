@@ -2,6 +2,7 @@
 #include <arpa/inet.h>
 
 #include "debug.h"
+#include "tunnel.h"
 #include "policy_table.h"
 
 static policy_entry *   default_policy;
@@ -15,6 +16,7 @@ static policy_entry * alloc_policy() {
     policy_entry * output = ( policy_entry *)malloc(sizeof( policy_entry));
     memset(output, 0, sizeof( policy_entry));
     output->action = POLICY_ACT_ENCAP;
+    output->allow_nat_failover = 1;
     output->link_select = POLICY_LS_WEIGHTED;
     output->direction = DIR_BOTH;
     return output;
@@ -81,6 +83,13 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
         pe->action = json_object_get_int(value);
     } else {
         goto failure_print;
+    }
+
+    //--ALLOW NAT FAILOVER--//
+    value = json_object_object_get(jobj_policy, "allow_nat_failover");
+    if(json_object_is_type(value, json_type_boolean)) {
+        int allow_nat_failover = json_object_get_boolean(value);
+        pe->allow_nat_failover = allow_nat_failover;
     }
 
     //--LINK_SELECT--//
@@ -152,8 +161,13 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
     value = json_object_object_get(jobj_policy, "local");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
         const char * src_str = json_object_get_string(value);
-        inet_pton(AF_INET, src_str, &pe->ft.local);
-        inet_pton(AF_INET, "255.255.255.255", &pe->local_netmask);
+        //Save invalid IP strings to the policy to support advanced policies
+        //otherwise match against the exact IP unless a netmask is specified
+        if(inet_pton(AF_INET, src_str, &pe->ft.local))
+            inet_pton(AF_INET, "255.255.255.255", &pe->local_netmask);
+        else
+            strncpy(pe->local, src_str, sizeof(pe->local));
+
     }
 
     //--LOCAL NETMASK--//
@@ -174,8 +188,12 @@ static int parse_policy( json_object * jobj_policy,  policy_entry *pe) {
     value = json_object_object_get(jobj_policy, "remote");
     if(value != NULL && json_object_is_type(value, json_type_string)) {
         const char * remote_str = json_object_get_string(value);
-        inet_pton(AF_INET, remote_str, &pe->ft.remote);
-        inet_pton(AF_INET, "255.255.255.255", &pe->remote_netmask);
+        //Save invalid IP strings to the policy to support advanced policies
+        //otherwise match against the exact IP unless a netmask is specified
+        if(inet_pton(AF_INET, remote_str, &pe->ft.remote))
+            inet_pton(AF_INET, "255.255.255.255", &pe->remote_netmask);
+        else
+            strncpy(pe->remote, remote_str, sizeof(pe->remote));
     }
 
     //--REMOTE NETMASK--//
@@ -208,16 +226,30 @@ failure_print:
     return FAILURE;
 }
 
+int match_policy(struct flow_tuple *ft, policy_entry *policy, int dir) {
+        if((policy->direction & dir) == 0) { return 0; }
+
+        if(strlen(policy->local) > 0) {
+            if(strcmp(policy->local, "self") == 0 && ft->local != getTunnel()->n_private_ip) { return 0; }
+        }
+        else if(policy->ft.local != (ft->local & policy->local_netmask)) { return 0; }
+
+        if(strlen(policy->remote) > 0) {
+            if(strcmp(policy->remote, "self") == 0 && ft->remote != getTunnel()->n_private_ip) { return 0; }
+        }
+        else if(policy->ft.remote != (ft->remote & policy->remote_netmask)) { return 0; }
+
+        if((policy->ft.proto != 0) && policy->ft.proto != ft->proto) { return 0; }
+        return 1;
+}
+
 int get_policy_by_tuple(struct flow_tuple *ft, policy_entry *policy, int dir) {
     if(!init) { DEBUG_MSG("Policy table must be initialized"); return FAILURE; }
     int count = policy_count;
     for(int i = 0; i < count; i++) {
         *policy = *policies[i];
-        if((policy->direction & dir) == 0) { continue; }
-        if(policy->ft.local != (ft->local & policy->local_netmask)) { continue; }
-        if(policy->ft.remote != (ft->remote & policy->remote_netmask)) { continue; }
-        if((policy->ft.proto != 0) && policy->ft.proto != ft->proto) { continue; }
-        return SUCCESS;
+        if(match_policy(ft, policy, dir))
+            return SUCCESS;
     }
 
     *policy = *default_policy;
@@ -263,18 +295,27 @@ default_return:
 
 void print_policy_entry(policy_entry * pe) {
     char l_str[INET6_ADDRSTRLEN];
+    if(strlen(pe->local) > 0)
+        strncpy(l_str, pe->local, sizeof(l_str));
+    else
+        inet_ntop(AF_INET, &pe->ft.local, l_str, sizeof(l_str));
+
     char l_str_port[INET6_ADDRSTRLEN + 10];
-    inet_ntop(AF_INET, &pe->ft.local, l_str, sizeof(l_str));
     if(pe->ft.local_port != 0)
         snprintf(l_str_port, sizeof(l_str_port), "%s:%d", l_str, pe->ft.local_port);
     else
         snprintf(l_str_port, sizeof(l_str_port), "%s", l_str);
+
     char l_net_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &pe->local_netmask, l_net_str, sizeof(l_net_str));
 
     char r_str[INET6_ADDRSTRLEN];
+    if(strlen(pe->remote) > 0)
+        strncpy(r_str, pe->remote, sizeof(r_str));
+    else
+        inet_ntop(AF_INET, &pe->ft.remote, r_str, sizeof(r_str));
+
     char r_str_port[sizeof(r_str) + 10];
-    inet_ntop(AF_INET, &pe->ft.remote, r_str, sizeof(r_str));
     if(pe->ft.remote_port != 0)
         snprintf(r_str_port, sizeof(r_str_port), "%s:%d", r_str, pe->ft.remote_port);
     else
@@ -282,6 +323,7 @@ void print_policy_entry(policy_entry * pe) {
 
     char r_net_str[INET6_ADDRSTRLEN];
     inet_ntop(AF_INET, &pe->remote_netmask, r_net_str, sizeof(r_net_str));
+
     char *dir_str;
     if(pe->direction == DIR_INGRESS) { dir_str = "I"; }
     if(pe->direction == DIR_EGRESS) { dir_str = "O"; }
@@ -291,8 +333,8 @@ void print_policy_entry(policy_entry * pe) {
     if(pe->preferred_link[0] != 0){
         snprintf(link_pref_str, 100, " preferred link: %s", pe->preferred_link);
     }
-    DEBUG_MSG("direction: %s local: %s local_net: %s remote: %s remote_net: %s proto: %d act: %d ls: %d%s rate: %f",
-        dir_str, l_str_port, l_net_str, r_str_port, r_net_str, pe->ft.proto, pe->action, pe->link_select, link_pref_str, pe->rate_limit);
+    DEBUG_MSG("direction: %s local: %s local_net: %s remote: %s remote_net: %s proto: %d act: %d nat?: %d ls: %d%s rate: %f",
+        dir_str, l_str_port, l_net_str, r_str_port, r_net_str, pe->ft.proto, pe->action, pe->allow_nat_failover, pe->link_select, link_pref_str, pe->rate_limit);
 }
 
 void print_policies() {

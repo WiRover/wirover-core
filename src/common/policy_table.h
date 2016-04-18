@@ -18,11 +18,11 @@
 #define MAX_POLICY_ENTRY_LENGTH 150
 
 // actions
-#define POLICY_ACT_PASS    0x1
-#define POLICY_ACT_NAT     0x2
-#define POLICY_ACT_ENCAP   0x3
-#define POLICY_ACT_DROP    0x5
-#define POLICY_ACT_LISP    0x6
+#define POLICY_ACT_PASS         0x1
+#define POLICY_ACT_NAT          0x2
+#define POLICY_ACT_ENCAP        0x3
+#define POLICY_ACT_DROP         0x5
+#define POLICY_ACT_LISP         0x6
 
 // link select options
 #define POLICY_LS_WEIGHTED      0x1
@@ -39,6 +39,7 @@ enum policy_type {
 
 typedef struct{
     uint8_t action;
+    uint8_t allow_nat_failover;
     uint8_t link_select;
     char preferred_link[IFNAMSIZ];
     double rate_limit;
@@ -46,6 +47,10 @@ typedef struct{
     // flow policy
     uint8_t direction;
     struct flow_tuple ft;
+    //Local/remote will contain values if the policy has fancy local or remote matches.
+    //If the policy is just IP addresses, they will be stored in ft.
+    char local[INET6_ADDRSTRLEN];
+    char remote[INET6_ADDRSTRLEN];
     uint32_t local_netmask;
     uint32_t remote_netmask;
 

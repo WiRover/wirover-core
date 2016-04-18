@@ -28,18 +28,6 @@ struct flow_entry_data {
     struct rate_control * rate_control;
 };
 
-struct flow_entry {
-    struct flow_tuple *id;
-    time_t last_visit_time;
-    UT_hash_handle hh;
-    uint8_t owner;
-    //Count of packets to include flow info in
-    uint8_t requires_flow_info;
-    struct flow_entry_data egress;
-    struct flow_entry_data ingress;
-    uint32_t remap_address;
-};
-
 struct flow_tuple {
     uint8_t net_proto;
     uint32_t remote;
@@ -48,6 +36,19 @@ struct flow_tuple {
     uint16_t remote_port;
     uint16_t local_port;
 } __attribute__((__packed__));
+
+struct flow_entry {
+    struct flow_tuple id;
+    time_t last_visit_time;
+    UT_hash_handle hh;
+    uint8_t owner;
+    //Count of packets to include flow info in
+    uint8_t requires_flow_info;
+    uint8_t allow_nat_failover;
+    struct flow_entry_data egress;
+    struct flow_entry_data ingress;
+    uint32_t remap_address;
+};
 
 struct tunhdr_flow_info {
     uint8_t     action;

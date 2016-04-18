@@ -27,6 +27,9 @@
 #include "ping.h"
 #include "rateinfer.h"
 #include "remote_node.h"
+#ifdef GATEWAY
+#include "icmp_ping.h"
+#endif
 
 #ifndef SIOCGSTAMP
     #define SIOCGSTAMP 0x8906
@@ -53,14 +56,14 @@ static FILE *               packet_log_file;
 static int                  packet_log_enabled = 0;
 static char *               send_buffer;
 static uint32_t             local_remap_subnet;
-static uint32_t             client_subnet_mask;
+static uint32_t             client_subnet_mask = 0x003FFFFF;
 
 uint32_t local_remap_address()
 {
-    return tun->n_private_ip | (~tun->n_netmask ^ 0x01000000);
+    return (tun->n_private_ip & client_subnet_mask) | (~client_subnet_mask ^ 0x01000000);
 }
 
-int start_data_thread(struct tunnel *tun_in, uint32_t client_subnet_mask_in)
+int start_data_thread(struct tunnel *tun_in)
 {
     //The mtu in the config file accounts for the tunhdr, but we have that extra space in here
     tunnel_mtu = get_mtu();
@@ -68,7 +71,6 @@ int start_data_thread(struct tunnel *tun_in, uint32_t client_subnet_mask_in)
     send_buffer = (char *)malloc(sizeof(char)*1500);
     tun = tun_in;
     inet_pton(AF_INET, "192.168.0.0", &local_remap_subnet);
-    client_subnet_mask = client_subnet_mask_in;
     if(get_packet_log_enabled()){
         packet_log_file = fopen(get_packet_log_path(), "a");
         if(packet_log_file == NULL) {
@@ -99,7 +101,11 @@ int start_data_thread(struct tunnel *tun_in, uint32_t client_subnet_mask_in)
 
     pthread_attr_destroy(&attr);
     return 0;
-}/*
+}
+void set_client_subnet_mask(uint32_t client_subnet_mask_in) {
+    client_subnet_mask = client_subnet_mask_in;
+}
+/*
 * WAIT FOR DATAPATH THREAD
 */
 int stop_datapath_thread()
@@ -130,9 +136,10 @@ int handlePackets()
         obtain_read_lock(&interface_list_lock);
         struct interface* curr_ife = interface_list;
         while (curr_ife) {
-            if(curr_ife->sockfd > 0){
+            if(curr_ife->sockfd > 0)
                 FD_SET(curr_ife->sockfd, &read_set);
-            }
+            if(curr_ife->icmp_sockfd > 0)
+                FD_SET(curr_ife->icmp_sockfd, &read_set);
             curr_ife = curr_ife->next;
         }
         release_read_lock(&interface_list_lock);
@@ -155,6 +162,9 @@ int handlePackets()
         while (curr_ife) {
             if( FD_ISSET(curr_ife->sockfd, &read_set) ) {
                 handle_packet(curr_ife, curr_ife->sockfd);
+            }
+            if( FD_ISSET(curr_ife->icmp_sockfd, &read_set) ) {
+                handle_packet(curr_ife, curr_ife->icmp_sockfd);
             }
             curr_ife = curr_ife->next;
         }
@@ -192,12 +202,14 @@ int handle_packet(struct interface * ife, int sockfd)
     get_recv_timestamp(sockfd, &arrival_time);
     pkt->created = arrival_time;
 
+#ifdef GATEWAY
+    if(sockfd == ife->icmp_sockfd)
+        return handle_incoming_icmp_ping(ife, pkt);
+#endif
     ife->rx_time = arrival_time;
     ife->packets_since_ack = 0;
     change_interface_state(ife, ACTIVE);
     return handle_encap_packet(pkt, ife, &from);
-
-    return FAILURE;
 }
 
 int handle_encap_packet(struct packet * pkt, struct interface *ife, struct sockaddr_storage * from)

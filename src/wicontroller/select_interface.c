@@ -28,7 +28,7 @@ int select_dst_interface(struct flow_entry *fe, struct interface **dst, int size
         if(!fe->owner) return 0;
 
         ipaddr_t dst_ip;
-        ipv4_to_ipaddr(fe->id->remote, &dst_ip);
+        ipv4_to_ipaddr(fe->id.remote, &dst_ip);
         struct remote_node *node, *tmp;
         obtain_read_lock(&remote_node_lock);
         HASH_ITER(hh_id, remote_node_id_hash, node, tmp) 

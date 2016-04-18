@@ -421,7 +421,6 @@ struct interface *get_controller_ife()
 {
     struct remote_node *controller = lookup_remote_node_by_id(get_lease_info()->cinfo.unique_id);
     if(controller == NULL){
-        DEBUG_MSG("Returning null");
         return NULL;
     }
     

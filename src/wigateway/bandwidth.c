@@ -68,9 +68,6 @@ int start_bandwidth_client_thread(struct bw_client_info* clientInfo)
     pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-    pthread_mutex_init(&clientInfo->pauseMutex, 0);
-    pthread_cond_init(&clientInfo->pauseCond, 0);
-
     int rtn = pthread_create(&clientInfo->thread, &attr, bandwidthThreadFunc, clientInfo);
     if(rtn != 0) {
         ERROR_MSG("failed to create bandwidth thread");
@@ -123,8 +120,7 @@ void resumeBandwidthThread(struct bw_client_info* clientInfo)
 
 void* bandwidthThreadFunc(void* clientInfo)
 {
-    struct bw_client_info* info = (struct bw_client_info*)malloc(sizeof(struct bw_client_info));
-    memcpy(info, clientInfo, sizeof(struct bw_client_info));
+    struct bw_client_info* info = (struct bw_client_info*)clientInfo;
 
     while(1) {
         // Put the thread to sleep if we want to pause active bandwidth measurements

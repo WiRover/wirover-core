@@ -110,8 +110,8 @@ int main(int argc, char* argv[])
         exit(1);
     }
     
-
-    if(start_data_thread(getTunnel(), htonl(slash_to_netmask(32 - lease.client_subnet_size))) == FAILURE) {
+    set_client_subnet_mask(htonl(slash_to_netmask(32 - lease.client_subnet_size)));
+    if(start_data_thread(getTunnel()) == FAILURE) {
         DEBUG_MSG("Failed to start data thread");
         exit(1);
     }
@@ -261,7 +261,7 @@ static void server_loop(int cchan_sock)
 static void shutdown_handler(int signo)
 {
     remove_masquerade("eth0");
-    exit(0);
+    exit(128 + signo);
 }
 
 /*
