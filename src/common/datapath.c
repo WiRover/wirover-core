@@ -138,8 +138,10 @@ int handlePackets()
         while (curr_ife) {
             if(curr_ife->sockfd > 0)
                 FD_SET(curr_ife->sockfd, &read_set);
+#ifdef GATEWAY
             if(curr_ife->icmp_sockfd > 0)
                 FD_SET(curr_ife->icmp_sockfd, &read_set);
+#endif
             curr_ife = curr_ife->next;
         }
         release_read_lock(&interface_list_lock);
@@ -163,9 +165,11 @@ int handlePackets()
             if( FD_ISSET(curr_ife->sockfd, &read_set) ) {
                 handle_packet(curr_ife, curr_ife->sockfd);
             }
+#ifdef GATEWAY
             if( FD_ISSET(curr_ife->icmp_sockfd, &read_set) ) {
                 handle_packet(curr_ife, curr_ife->icmp_sockfd);
             }
+#endif
             curr_ife = curr_ife->next;
         }
         release_read_lock(&interface_list_lock);
