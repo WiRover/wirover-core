@@ -21,6 +21,11 @@ void timeval_add_us(struct timeval *dest, long usec)
 
     dest->tv_sec += dest->tv_usec / USECS_PER_SEC;
     dest->tv_usec = dest->tv_usec % USECS_PER_SEC;
+
+    if(dest->tv_usec < 0) {
+        dest->tv_sec--;
+        dest->tv_usec += USECS_PER_SEC;
+    }
 }
 
 void set_timeval_usec(long usec, struct timeval *dest)
