@@ -32,7 +32,7 @@ typedef unsigned int uint;
 
 #ifdef COMPILE_GPS /* HACK */
 
-#if (GPSD_API_MAJOR_VERSION < 4 || GPSD_API_MAJOR_VERSION > 5)
+#if (GPSD_API_MAJOR_VERSION < 4 || GPSD_API_MAJOR_VERSION > 6)
     #error "GPSD version not recognized"
 #endif
 
