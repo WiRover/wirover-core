@@ -1,0 +1,7 @@
+#!/bin/sh
+
+if [ ! -f $SNAP_DATA/wigateway.conf ]; then
+    cp $SNAP/etc/wigateway.conf $SNAP_DATA/wigateway.conf
+fi
+
+echo "{\"version\": \"$SNAP_VERSION\"}" >$SNAP_DATA/wigateway_version

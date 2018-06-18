@@ -1,0 +1,32 @@
+name: wigateway
+version: 0.8.0
+summary: WiRover gateway implementation.
+description: WiRover gateway.
+
+grade: stable
+confinement: strict
+
+apps:
+  wigateway:
+    command: wigateway
+    daemon: simple
+    restart-condition: always
+    plugs:
+      - network
+      - network-bind
+      - network-control
+      - network-observe
+
+parts:
+  wigateway:
+    plugin: cmake
+    source: src
+    configflags:
+      - -DNODE_ID_PATH=/var/snap/wigateway/common/node_id
+      - -DPUBLIC_KEY_PATH=/var/snap/wigateway/common/node.pub
+      - -DWIROVER_VAR_DIR=/var/snap/wigateway/current
+      - -DINTERFACE_LIST_FILE=/var/snap/wigateway/current/ife_list
+      - -DFLOW_TABLE_FILE=/var/snap/wigateway/current/flow_table
+      - -DSYSTEM_STATE_FILE=/var/snap/wigateway/current/state
+    stage-packages:
+      - gdb

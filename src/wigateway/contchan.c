@@ -216,7 +216,7 @@ int send_shutdown_notification()
 
 int send_startup_notification()
 {
-    FILE *fp = fopen("/etc/wirover.d/node_id","r");
+    FILE *fp = fopen(NODE_ID_PATH, "r");
     fgets(node_hash,sizeof(node_hash),fp);
     fclose(fp);
 

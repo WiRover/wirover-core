@@ -62,7 +62,8 @@
 #define USE_BOND_ENSLAVE 1
 
 // Path to file containing cryptographic node ID.
-#define NODE_ID_PATH "/etc/wirover.d/node_id"
+#cmakedefine NODE_ID_PATH "@NODE_ID_PATH@"
+#cmakedefine PUBLIC_KEY_PATH "@PUBLIC_KEY_PATH@"
 
 // Path to files containing policies
 #define EGRESS_POLICY_PATH "/etc/wirover.d/policy_egress.tbl"
@@ -86,6 +87,12 @@
 #define RATE_CONTROL_INTERVAL 20000 // 20ms
 #define RATE_CONTROL_BINS 8
 #define MAX_TX_QUEUE_AGE 100000 // 100ms
+
+// Various file paths that were previously hard-coded.
+#cmakedefine WIROVER_VAR_DIR "@WIROVER_VAR_DIR@"
+#cmakedefine INTERFACE_LIST_FILE "@INTERFACE_LIST_FILE@"
+#cmakedefine FLOW_TABLE_FILE "@FLOW_TABLE_FILE@"
+#cmakedefine SYSTEM_STATE_FILE "@SYSTEM_STATE_FILE@"
 
 #endif //_CONFIG_H_
 

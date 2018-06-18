@@ -49,7 +49,7 @@ int verify_hash(char* hash)
 
 int init_database()
 {
-    FILE *fp = fopen("/etc/wirover.d/node_id","r");
+    FILE *fp = fopen(NODE_ID_PATH, "r");
     fscanf(fp,"%s",cont_hash);
     fclose(fp);
 

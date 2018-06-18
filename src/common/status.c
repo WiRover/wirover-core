@@ -77,12 +77,12 @@ void* status_thread_func(void* arg)
     while(1)
     {
         obtain_read_lock(&interface_list_lock);
-        dump_interfaces_to_file(interface_list, "/var/lib/wirover/ife_list");
+        dump_interfaces_to_file(interface_list, INTERFACE_LIST_FILE);
         release_read_lock(&interface_list_lock);
 
-        dump_flow_table_to_file("/var/lib/wirover/flow_table");
+        dump_flow_table_to_file(WIROVER_VAR_DIR "/flow_table");
 #ifdef GATEWAY
-        FILE *ft_file = fopen("/var/lib/wirover/state", "w");
+        FILE *ft_file = fopen(WIROVER_VAR_DIR "/state", "w");
         fprintf(ft_file, "%d\n", state);
         fclose(ft_file);
         set_led(1, 1);

@@ -409,19 +409,45 @@ unsigned short get_register_bandwidth_port()
 int find_config_file(const char* __restrict__ filename, char* __restrict__ dest, int length)
 {
     int result;
+    const char *parent_dir;
 
     // First check if the file is in the current directory
     snprintf(dest, length, "%s", filename);
+    DEBUG_MSG("Searching for config file: %s", dest);
+    result = access(dest, R_OK);
+    if(result == 0) {
+        return 1;
+    } else {
+    }
+
+    // Check for a system config file
+    snprintf(dest, length, "/etc/%s", filename);
+    DEBUG_MSG("Searching for config file: %s", dest);
     result = access(dest, R_OK);
     if(result == 0) {
         return 1;
     }
 
-    // Check for a system config file
-    snprintf(dest, length, "/etc/%s", filename);
-    result = access(dest, R_OK);
-    if(result == 0) {
-        return 1;
+    // Check snap data directory in case this is running as a snap.
+    parent_dir = getenv("SNAP_DATA");
+    if(parent_dir) {
+        snprintf(dest, length, "%s/%s", parent_dir, filename);
+        DEBUG_MSG("Searching for config file: %s", dest);
+        result = access(dest, R_OK);
+        if(result == 0) {
+            return 1;
+        }
+    }
+
+    // Check snap installation directory in case this is running as a snap.
+    parent_dir = getenv("SNAP");
+    if(parent_dir) {
+        snprintf(dest, length, "%s/etc/%s", parent_dir, filename);
+        DEBUG_MSG("Searching for config file: %s", dest);
+        result = access(dest, R_OK);
+        if(result == 0) {
+            return 1;
+        }
     }
 
     return 0;

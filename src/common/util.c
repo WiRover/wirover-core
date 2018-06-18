@@ -12,6 +12,7 @@
 #include <net/route.h>
 #include <net/if.h>
 
+#include "config.h"
 #include "debug.h"
 #include "tunnel.h"
 #include "util.h"
@@ -151,7 +152,7 @@ int remove_masquerade(char *device){
 
 int read_public_key(char *buffer, int size)
 {
-    FILE *fp = fopen("/home/wirover/.ssh/id_rsa.pub", "r");
+    FILE *fp = fopen(PUBLIC_KEY_PATH, "r");
     if(fp == NULL)
         return FAILURE;
     buffer = fgets(buffer, size, fp);

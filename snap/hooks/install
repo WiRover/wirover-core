@@ -1,0 +1,18 @@
+#!/bin/sh
+#
+# This script does some one-time jobs to complete the gateway installation.
+#
+
+if [ ! -f $SNAP_COMMON/node.key ]; then
+    openssl genrsa -out $SNAP_COMMON/node.key 4096
+    openssl rsa -in $SNAP_COMMON/node.key -pubout -out $SNAP_COMMON/node.pub
+    sha1sum $SNAP_COMMON/node.pub | perl -n -e 'chomp; print $1 if /^([0-9a-f]+)/' >$SNAP_COMMON/node_id
+
+    chmod 400 $SNAP_COMMON/node.key
+    chmod 444 $SNAP_COMMON/node.pub
+    chmod 444 $SNAP_COMMON/node_id
+fi
+
+touch $SNAP_DATA/path_list
+touch $SNAP_DATA/path_pred
+date > $SNAP_DATA/installed

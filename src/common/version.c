@@ -18,13 +18,13 @@ struct wirover_version get_wirover_version()
     {
         char *version_path;
     #ifdef GATEWAY
-        version_path = "/var/lib/wirover/wigateway_version";
+        version_path = WIROVER_VAR_DIR "/wigateway_version";
     #endif
     #ifdef ROOT
-        version_path = "/var/lib/wirover/wiroot_version";
+        version_path = WIROVER_VAR_DIR "/wiroot_version";
     #endif
     #ifdef CONTROLLER
-        version_path = "/var/lib/wirover/wicontroller_version";
+        version_path = WIROVER_VAR_DIR "/wicontroller_version";
     #endif
         char * buffer = 0;
         long length;
