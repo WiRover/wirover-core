@@ -1,6 +1,10 @@
-#!/bin/bash
+#!/bin/sh
 #
-# This script does some one-time jobs to complete the gateway installation.
+# Use this wrapper script to call any of the WiRover modules.  It makes sure
+# certain required files exist before running the command.
+#
+# Example:
+# wirover_wrapper.sh wicontroller
 #
 
 WIROVER_BIN_DIR=/usr/bin
@@ -16,7 +20,7 @@ if [ ! -f /etc/wirover.d/node.key ]; then
     cd /etc/wirover.d
     openssl genrsa -out node.key 2048
     openssl rsa -in node.key -pubout -out node.pub
-    sha1sum node.pub | perl -n -e 'chomp; print $1 if /^([0-9a-f]+)/' >node_id
+    sha1sum node.pub | grep -oE '^([0-9a-f]+)' >node_id
 
     chmod 400 node.key
     chmod 444 node.pub
@@ -25,8 +29,7 @@ fi
 
 touch "$WIROVER_VAR_DIR"/path_list
 touch "$WIROVER_VAR_DIR"/path_pred
-chown -R wirover "$WIROVER_VAR_DIR"
 
 date > $WIROVER_VAR_DIR/installed
 
-
+$@

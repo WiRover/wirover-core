@@ -94,5 +94,8 @@
 #cmakedefine FLOW_TABLE_FILE "@FLOW_TABLE_FILE@"
 #cmakedefine SYSTEM_STATE_FILE "@SYSTEM_STATE_FILE@"
 
+// Defined if our libc has the backtrace function.
+#cmakedefine01 Backtrace_FOUND
+
 #endif //_CONFIG_H_
 

@@ -6,7 +6,6 @@
 #include <gps.h>
 #include <linux/udp.h>
 #include <linux/tcp.h>
-#include <linux/if_ether.h>
 #include <linux/if_packet.h>
 #include <linux/if.h>
 #include <netinet/ip.h>

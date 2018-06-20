@@ -1,0 +1,91 @@
+# This Docker Compose configuration produces a working WiRover server-side
+# setup including the wiroot and wicontroller services as well as a MySQL
+# database.
+#
+# To get started, make sure you have Docker and Docker Compose installed.
+# It is also assumed that your server has an externally-reachable IP address
+# assigned to an interface named "eth0".
+#
+# With the prerequisites satisfied run the following command to start
+# the server.
+#
+#     docker-compose up -d
+#
+
+# Docker Compose file format version.
+version: '2.1'
+
+services:
+  db:
+    image: mysql:5.7
+
+    # Our code expects the default behavior from older MySQL versions, which is
+    # enabled with the NO_ENGINE_SUBSTITUTION mode. Without this, expect to see
+    # errors related to columns not having default values set.
+    command: --sql_mode="NO_ENGINE_SUBSTITUTION"
+
+    environment:
+      # Set some simple passwords. The MySQL server will not be exposed to the
+      # outside.
+      MYSQL_USER: wirover
+      MYSQL_PASSWORD: wirover
+      MYSQL_ROOT_PASSWORD: wirover
+
+    restart: always
+
+    volumes:
+      # Create a persistent volume for the data.
+      - wiroverdb:/var/lib/mysql
+
+      # Mounting the schemas directory from the source repo will cause the
+      # MySQL container to run our initialization files.
+      - ./schemas:/docker-entrypoint-initdb.d:ro
+
+  wiroot:
+    image: wirover/wiroot:latest
+
+    depends_on:
+      - db
+
+    ports:
+      # Expose the root channel port to the outside, so gateways can connect.
+      - "8088:8088"
+
+    # We require privileged mode for ioctl commands.
+    privileged: true
+
+    restart: always
+
+  wicontroller:
+    image: wirover/wicontroller:latest
+
+    depends_on:
+      - db
+      - wiroot
+
+    # wicontroller expects to see interfaces in the host, for example to read
+    # the IP address of the WAN interface. It would be tricky to redesign
+    # around this requirement, so instead use the host network_mode to run
+    # wicontroller.
+    network_mode: host
+
+    # We require privileged mode for ioctl commands.
+    privileged: true
+
+    restart: always
+
+networks:
+  default:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        # Configure the default bridge network to use a specific subnet because
+        # otherwise, Docker prefers to use 172.x.x.x addresses, which my cause
+        # conflicts with WiRover's addressing.
+        - subnet: 192.168.64.0/24
+          gateway: 192.168.64.1
+
+volumes:
+  # Persistent storage for the database.
+  wiroverdb:

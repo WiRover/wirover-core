@@ -1,3 +1,5 @@
+include(FindBacktrace)
+
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -I${CMAKE_SOURCE_DIR}/wicontroller -DCONTROLLER")
 
 add_executable(wicontroller
@@ -36,7 +38,7 @@ add_executable(wicontroller
     ${COMMON}/policy_table.c
 )
 
-target_link_libraries(wicontroller pthread config mysqlclient ssl crypto m json)
+target_link_libraries(wicontroller pthread config mysqlclient ssl crypto m json ${Backtrace_LIBRARIES})
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wicontroller DESTINATION /usr/bin)
 install(FILES wicontroller.conf DESTINATION /etc)

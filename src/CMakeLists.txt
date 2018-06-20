@@ -15,6 +15,8 @@ add_subdirectory(${WIROVER_SOURCE_DIR}/wiroot)
 add_subdirectory(${WIROVER_SOURCE_DIR}/wigateway)
 add_subdirectory(${WIROVER_SOURCE_DIR}/wicontroller)
 
+include(FindBacktrace)
+
 set(NODE_ID_PATH "/etc/wirover.d/node_id" CACHE STRING "Location of node ID file")
 set(PUBLIC_KEY_PATH "/etc/wirover.d/node.pub" CACHE STRING "Location of node public key")
 set(WIROVER_VAR_DIR "/var/lib/wirover" CACHE STRING "Directory containing runtime state files")
@@ -23,4 +25,3 @@ set(FLOW_TABLE_FILE "/var/lib/wirover/flow_table" CACHE STRING "Location of flow
 set(SYSTEM_STATE_FILE "/var/lib/wirover/state" CACHE STRING "Location of system state file")
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${CMAKE_CURRENT_BINARY_DIR}/config.h)
-

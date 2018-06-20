@@ -7,6 +7,7 @@
 #include <execinfo.h>
 #include <signal.h>
 
+#include "config.h"
 #include "debug.h"
 
 /*
@@ -92,6 +93,7 @@ void __print_warning(const char *msg, ...)
 
 void print_backtrace(FILE *out)
 {
+#if Backtrace_FOUND
     void* ptrs[MAX_BACKTRACE_LEN];
     int nptrs = backtrace(ptrs, MAX_BACKTRACE_LEN);
 
@@ -110,6 +112,9 @@ void print_backtrace(FILE *out)
     }
 
     free(symbols);
+#else
+    fprintf(out, "Backtrace not available.\n");
+#endif
 }
 
 void segfault_handler(int signo)
