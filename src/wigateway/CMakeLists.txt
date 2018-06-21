@@ -1,3 +1,5 @@
+include(FindBacktrace)
+
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -I${CMAKE_SOURCE_DIR}/wigateway -DGATEWAY")
 
 add_executable(wigateway
@@ -39,7 +41,7 @@ add_executable(wigateway
     ${COMMON}/policy_table.c
 )
 
-target_link_libraries(wigateway pthread config gps ssl crypto m json)
+target_link_libraries(wigateway pthread config gps ssl crypto m json ${Backtrace_LIBRARIES})
 
 install(PROGRAMS ${CMAKE_CURRENT_BINARY_DIR}/wigateway DESTINATION /usr/bin)
 install(FILES wigateway.conf DESTINATION /etc)

@@ -1,18 +1,20 @@
-#include <linux/ip.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
+// Defining _DEFAULT_SOURCE ensures that tcphdr is defined.
+#define _DEFAULT_SOURCE
+#include <netinet/ip.h>
+#include <netinet/tcp.h>
+#include <netinet/udp.h>
 
 #include "debug.h"
 #include "headers.h"
+
 struct psuedo_ip_hdr {
-    __be32 src;
-    __be32 dst;
-    __u8  zeroes;
-    __u8  protocol;
-    __be16 length;
+    uint32_t src;
+    uint32_t dst;
+    uint8_t  zeroes;
+    uint8_t  protocol;
+    uint16_t length;
 };
+
 /* Compute checksum for count bytes starting at addr, using one's complement of one's complement sum*/
 unsigned short compute_checksum(unsigned short *addr, unsigned int count) {
   register unsigned long sum = 0;
@@ -57,7 +59,7 @@ void compute_transport_checksum(struct packet *pkt)
     }
 }
 
-void compute_tcp_checksum(char *tcp_hdr_body, int length, __be32 src, __be32 dst) {
+void compute_tcp_checksum(char *tcp_hdr_body, int length, uint32_t src, uint32_t dst) {
     char buffer[sizeof(struct psuedo_ip_hdr) + length];
     memset(buffer, 0, sizeof(buffer));
     struct psuedo_ip_hdr *psuedo_hdr = (struct psuedo_ip_hdr *)buffer;
@@ -68,12 +70,12 @@ void compute_tcp_checksum(char *tcp_hdr_body, int length, __be32 src, __be32 dst
     psuedo_hdr->dst = dst;
     psuedo_hdr->protocol = 6;
     psuedo_hdr->length = htons(length);
-    fake_tcp_hdr->check = 0;
+    fake_tcp_hdr->th_sum = 0;
 
-    ((struct tcphdr *)tcp_hdr_body)->check = compute_checksum((unsigned short*)buffer, sizeof(buffer));
+    ((struct tcphdr *)tcp_hdr_body)->th_sum = compute_checksum((unsigned short*)buffer, sizeof(buffer));
 }
 
-void compute_udp_checksum(char *udp_hdr_body, int length, __be32 src, __be32 dst) {
+void compute_udp_checksum(char *udp_hdr_body, int length, uint32_t src, uint32_t dst) {
     char buffer[sizeof(struct psuedo_ip_hdr) + length];
     memset(buffer, 0, sizeof(buffer));
     struct psuedo_ip_hdr *psuedo_hdr = (struct psuedo_ip_hdr *)buffer;
@@ -84,7 +86,7 @@ void compute_udp_checksum(char *udp_hdr_body, int length, __be32 src, __be32 dst
     psuedo_hdr->dst = dst;
     psuedo_hdr->protocol = 17;
     psuedo_hdr->length = htons(length);
-    fake_udp_hdr->check = 0;
+    fake_udp_hdr->uh_sum = 0;
 
-    ((struct udphdr *)udp_hdr_body)->check = compute_checksum((unsigned short*)buffer, sizeof(buffer));
+    ((struct udphdr *)udp_hdr_body)->uh_sum = compute_checksum((unsigned short*)buffer, sizeof(buffer));
 }
