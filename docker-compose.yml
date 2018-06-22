@@ -31,6 +31,10 @@ services:
       MYSQL_PASSWORD: wirover
       MYSQL_ROOT_PASSWORD: wirover
 
+    ports:
+      # Expose the MySQL server to localhost but not to the Internet.
+      - "127.0.0.1:3306:3306"
+
     restart: always
 
     volumes:

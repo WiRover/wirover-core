@@ -33,7 +33,8 @@ RUN mkdir build && \
     make wicontroller
 
 # Modify the configuration file to run in a containerized environment.
-RUN sed "s/mysql-password = .*/mysql-password = \"wirover\"/" -i build/wicontroller/wicontroller.conf
+RUN sed "s/mysql-host = .*/mysql-host = \"127.0.0.1\"/" -i build/wicontroller/wicontroller.conf && \
+    sed "s/mysql-password = .*/mysql-password = \"wirover\"/" -i build/wicontroller/wicontroller.conf
 
 #
 # Stage 1: runtime environment

@@ -32,4 +32,18 @@ touch "$WIROVER_VAR_DIR"/path_pred
 
 date > $WIROVER_VAR_DIR/installed
 
+update_config() {
+    variable=$1
+    value=$2
+    for ftype in wicontroller wigateway wiroot; do
+        if [ -f "/etc/$ftype.conf" ]; then
+            sed "s/$variable = .*/$variable = \"$value\";/" -i /etc/$ftype.conf
+        fi
+    done
+}
+
+if [ -n "$WIROVER_WIROOT_ADDRESS" ]; then
+    update_config "wiroot-address" "$WIROVER_WIROOT_ADDRESS"
+fi
+
 $@
