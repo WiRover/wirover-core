@@ -1,7 +1,23 @@
 #!/bin/sh
 
+CONFIG_OPTIONS="wiroot-address"
+
 if [ ! -f $SNAP_DATA/wigateway.conf ]; then
     cp $SNAP/etc/wigateway.conf $SNAP_DATA/wigateway.conf
 fi
 
+update_string_option() {
+    option="$1"
+    value="$2"
+    if $(grep -q "$option =" $SNAP_DATA/wigateway.conf); then
+        sed "s#^$option = .*#$option = \"$value\";#" -i $SNAP_DATA/wigateway.conf
+    else
+        echo "$option = \"$value\";" >>$SNAP_DATA/wigateway.conf
+    fi
+}
+
 echo "{\"version\": \"$SNAP_VERSION\"}" >$SNAP_DATA/wigateway_version
+
+for option in $CONFIG_OPTIONS; do
+    update_string_option "$option" $(snapctl get $option)
+done

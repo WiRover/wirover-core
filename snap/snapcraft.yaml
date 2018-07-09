@@ -12,10 +12,13 @@ apps:
     daemon: simple
     restart-condition: always
     plugs:
+      - firewall-control
       - network
       - network-bind
       - network-control
       - network-observe
+      - network-setup-control
+      - network-setup-observe
 
 parts:
   wigateway:

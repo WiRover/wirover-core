@@ -74,8 +74,23 @@ If using Ubuntu Core, install the gateway software using:
 snap install wigateway
 ```
 
-Edit the file `/var/snap/wigateway/current/wigateway.conf` to add the address
-of your controller/root server and restart the service:
+Set the address of your controller and root server:
+
+```bash
+snap set wigateway wiroot-address=example.com
+```
+
+Give wigateway permission to modify network settings:
+
+```bash
+snap connect wigateway:firewall-control
+snap connect wigateway:network-control
+snap connect wigateway:network-observe
+snap connect wigateway:network-setup-control
+snap connect wigateway:network-setup-observe
+```
+
+Then restart the service:
 
 ```bash
 snap restart wigateway

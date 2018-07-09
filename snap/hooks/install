@@ -13,6 +13,9 @@ if [ ! -f $SNAP_COMMON/node.key ]; then
     chmod 444 $SNAP_COMMON/node_id
 fi
 
+# Initialize snap configuration variables.
+snapctl set wiroot-address=""
+
 touch $SNAP_DATA/path_list
 touch $SNAP_DATA/path_pred
 date > $SNAP_DATA/installed
