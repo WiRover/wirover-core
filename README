@@ -1,14 +1,31 @@
-1   Introduction
+WiRover Core
 ===================
 
-This is the user-level implementation of WiRover.  The WiRover
-architecture comprises two main components -- the gateway and the
-controller. It also includes a root server that handles mapping
-gateways to controllers.
+WiRover is an advanced networking solution that provides robust,
+high-speed Internet connectivity to vehicles. WiRover was developed as
+a research project at the University of Wisconsin-Madison.
+
+The WiRover system is capable of improving the performance of
+vehicle-to-Internet applications by connecting to multiple different
+wireless network providers simultaneously. This improves the system's
+network performance by both increasing the bandwidth available to the
+system as well as increasing network diversity. Network diversity in turn
+increases the chances that the system will have Internet connectivity
+from at least one network provider when there may not be network coverage
+from other providers.
+
+Introduction
+===================
+
+This is a user-level implementation of WiRover. The WiRover architecture
+comprises two main components --- the gateway and the controller. It also
+includes a root server that handles mapping gateways to controllers in
+the case of large-scale multi-controller deployments.
 
 The mobile platform with one or more managed interfaces is the gateway.
 Typically, the gateway is a mobile WiFi access point with multiple
-cellular interfaces, hence the name gateway.
+cellular interfaces. It is the access point for one ore more devices
+that require an Internet connection, hence the name gateway.
 
 The other component, the controller, is a tunnel endpoint for the
 traffic sent through the gateway.  Tunneling is used to implement
@@ -16,46 +33,58 @@ reliable handover and performance enhancements. Typically, a controller
 will reside in a fixed location with a well-provisioned network and will
 provide service to many gateways.
 
-2   Source Code
+Source Code
 ===================
-    
-	src/policy
-	src/wiroot
+
+    src/wiroot
     src/wigateway
     src/wicontroller
     src/common
 
 The source code is divided into several directories.  The wi*
-subdirectories are specific to their respective components. The 
+subdirectories are specific to their respective components. The
 common subdirectory contains some shared code and header files.
-The policy directory contains code related the vpolicy command
-and its interactions with the core WiRover code.
 
-3   Installation
+Quick Start
 ===================
 
-Use the `install_dependencies.sh` script located in the repository to apt-get all the required development libraries and setup cmake.
+The quickest way to get started is using [docker-compose](https://docs.docker.com/compose/).
 
-To compile the code run "cmake ." in the src directory. This will generate
-the make files for all the components. Running make in the src/ directory
-will compile all components. Alternative make can be run in a subdirectory
-to compile a single component.
+For the controller, all you need is a Linux server with Docker and Docker
+Compose installed and the docker-compose.yml file from this project.
+The controller should have a public IP address that will be reachable by the
+gateways.
 
-The wi* components require a configuration file. A default is located in the
-subdirectory and can be installed to /etc/ on production systems. The controller
-and root server also require a database. These can be installed from our "dbupdate"
-tool.
+```bash
+wget https://raw.githubusercontent.com/WiRover/wirover-core/master/docker-compose.yml
+```
 
-4   Usage
-===================
+Start the controller software using:
 
-For the gateway, it is most important to specify the IP address of the
-root server to which you will be connecting and the interfaces you want
-to allow or disallow. This can be done in the wigateway.conf file.
+```bash
+docker-compose up -d
+```
 
-For the controller, you will also need to specify the root server that
-the controller will connect to.
+For the gateways, we recommend using [Ubuntu Core](https://www.ubuntu.com/core),
+which is a lightweight version of Ubuntu with transactional updates.
 
-Once the configuration is done, it is sufficient to run wigateway or
-wicontroller from the command line as root.  You can also configure the
-system to start either on startup. Included are upstart jobs that can by copied to /etc/init/ on Ubuntu systems as long as the binaries have been moved to /usr/bin/
+If using Ubuntu Core, install the gateway software using:
+
+```bash
+snap install wigateway
+```
+
+Edit the file `/var/snap/wigateway/current/wigateway.conf` to add the address
+of your controller/root server and restart the service:
+
+```bash
+snap restart wigateway
+```
+
+Alternatively, you can also run the gateway using Docker. Fill in the
+WIROVER_WIROOT_ADDRESS environment variable with the address of your
+server.
+
+```bash
+docker run --detach --rm --env "WIROVER_WIROOT_ADDRESS=example.com" --network=host wirover/wigateway
+```
