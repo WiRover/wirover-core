@@ -114,3 +114,15 @@ server.
 ```bash
 docker run --detach --name=wigateway --privileged --rm --env "WIROVER_WIROOT_ADDRESS=192.0.2.1" --network=host wirover/wigateway
 ```
+
+Building
+===================
+
+The following commands are used to build the individual Docker images
+for wicontroller, wigateway, and wiroot:
+
+```bash
+docker build --file src/wicontroller/Dockerfile --tag wirover/wicontroller .
+docker build --file src/wigateway/Dockerfile --tag wirover/wigateway .
+docker build --file src/wiroot/Dockerfile --tag wirover/wiroot .
+```

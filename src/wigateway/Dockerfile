@@ -16,7 +16,7 @@ RUN apk add --no-cache \
         libexecinfo-dev \
         libunwind-dev \
         linux-headers \
-        openssl-dev
+        openssl1.0-dev
 
 # Make a link so that the json-c library appears where we expect it.
 RUN ln -s json-c /usr/include/json && \
@@ -51,8 +51,8 @@ RUN apk add --no-cache \
         libconfig \
         libexecinfo \
         libunwind \
-        openssl \
-        openssl-dev
+        openssl1.0 \
+        openssl1.0-dev
 
 # Copy our files into the runtime environment.
 COPY scripts/wirover_wrapper.sh /usr/bin/wirover_wrapper.sh
