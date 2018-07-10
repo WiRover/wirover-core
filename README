@@ -50,10 +50,10 @@ Quick Start
 
 The quickest way to get started is using [docker-compose](https://docs.docker.com/compose/).
 
-For the controller, all you need is a Linux server with Docker and Docker
-Compose installed and the docker-compose.yml file from this project.
-The controller should have a public IP address that will be reachable by the
-gateways.
+For the controller, all that is required is a Linux server with Docker
+and Docker Compose installed and the docker-compose.yml file from this
+project.  The controller should have a public IP address that will be
+reachable by the gateways.
 
 ```bash
 wget https://raw.githubusercontent.com/WiRover/wirover-core/master/docker-compose.yml
@@ -65,6 +65,14 @@ Start the controller software using:
 docker-compose up -d
 ```
 
+In order for the controller to proxy traffic from the gateways, we
+also need to enable packet forwarding and NAT.
+
+```bash
+sysctl -w net.ipv4.ip_forward=1
+iptables -t nat -A POSTROUTING -o eth0 -s 172.16.0.0/12 -j MASQUERADE
+```
+
 For the gateways, we recommend using [Ubuntu Core](https://www.ubuntu.com/core),
 which is a lightweight version of Ubuntu with transactional updates.
 
@@ -74,11 +82,14 @@ If using Ubuntu Core, install the gateway software using:
 snap install wigateway
 ```
 
-Set the address of your controller and root server:
+Set the address of the controller and root server:
 
 ```bash
-snap set wigateway wiroot-address=example.com
+snap set wigateway wiroot-address=192.0.2.1
 ```
+
+Other configuration settings, such as network interface priorities can
+be found in `/var/snap/wigateway/current/wigateway.conf`.
 
 Give wigateway permission to modify network settings:
 
@@ -101,5 +112,5 @@ WIROVER_WIROOT_ADDRESS environment variable with the address of your
 server.
 
 ```bash
-docker run --detach --rm --env "WIROVER_WIROOT_ADDRESS=example.com" --network=host wirover/wigateway
+docker run --detach --name=wigateway --privileged --rm --env "WIROVER_WIROOT_ADDRESS=192.0.2.1" --network=host wirover/wigateway
 ```
