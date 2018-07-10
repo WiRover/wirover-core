@@ -97,7 +97,7 @@ int fill_gps_payload(struct gps_payload *dest)
         dest->speed = latest_fix.speed;
         dest->climb = latest_fix.climb;
     }
-    
+
     pthread_mutex_unlock(&gps_data_lock);
 
     switch(latest_fix.mode) {
@@ -122,7 +122,7 @@ static int connect_to_gpsd()
 
 #if (GPSD_API_MAJOR_VERSION == 4)
     res = gps_open_r(0, 0, &session);
-#elif (GPSD_API_MAJOR_VERSION == 5)
+#else
     res = gps_open(0, 0, &session);
 #endif
     if(res < 0) {
@@ -187,7 +187,7 @@ void *gps_thread_func(void *arg)
             disconnect_from_gpsd();
             continue;
         }
-#elif (GPSD_API_MAJOR_VERSION == 5)
+#else
         if(!gps_waiting(&session, GPS_DATA_TIMEOUT * SECS_TO_USECS)) {
             disconnect_from_gpsd();
             continue;
