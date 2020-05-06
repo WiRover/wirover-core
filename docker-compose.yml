@@ -30,10 +30,12 @@ services:
       MYSQL_USER: wirover
       MYSQL_PASSWORD: wirover
       MYSQL_ROOT_PASSWORD: wirover
+      TZ: America/Chicago
 
     ports:
       # Expose the MySQL server to localhost but not to the Internet.
       - "127.0.0.1:3306:3306"
+      - "172.17.0.1:3306:3306"
 
     restart: always
 
@@ -77,6 +79,9 @@ services:
     privileged: true
 
     restart: always
+
+    volumes:
+      - ./src/wicontroller/wicontroller.conf:/etc/wicontroller.conf
 
 networks:
   default:
